@@ -37,13 +37,19 @@ fn get_app_data_dir() -> PathBuf {
     home.join(".szhimatar")
 }
 
+fn get_presets_dir() -> PathBuf {
+    get_app_data_dir().join("presets")
+}
+
 fn ensure_app_dirs() -> Result<(), String> {
     let app_dir = get_app_data_dir();
     let logs_dir = app_dir.join("logs");
     let stats_dir = app_dir.join("stats");
+    let presets_dir = get_presets_dir();
     
     fs::create_dir_all(&logs_dir).map_err(|e| e.to_string())?;
     fs::create_dir_all(&stats_dir).map_err(|e| e.to_string())?;
+    fs::create_dir_all(&presets_dir).map_err(|e| e.to_string())?;
     
     Ok(())
 }
@@ -412,6 +418,76 @@ fn set_ffmpeg_paths(ffmpeg_path: String, ffprobe_path: String) -> Result<FfmpegS
     check_ffmpeg_status()
 }
 
+// Preset management commands
+
+#[tauri::command]
+fn list_presets() -> Result<Vec<String>, String> {
+    let presets_dir = get_presets_dir();
+    
+    if !presets_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut preset_names = Vec::new();
+    
+    for entry in fs::read_dir(&presets_dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        
+        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("json") {
+            if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
+                preset_names.push(name.to_string());
+            }
+        }
+    }
+    
+    preset_names.sort();
+    Ok(preset_names)
+}
+
+#[tauri::command]
+fn save_preset(name: String, content: String) -> Result<(), String> {
+    let presets_dir = get_presets_dir();
+    let preset_path = presets_dir.join(format!("{}.json", name));
+    
+    // Validate JSON before saving
+    serde_json::from_str::<serde_json::Value>(&content)
+        .map_err(|e| format!("Invalid JSON: {}", e))?;
+    
+    fs::write(&preset_path, content)
+        .map_err(|e| format!("Failed to save preset: {}", e))?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+fn load_preset(name: String) -> Result<String, String> {
+    let presets_dir = get_presets_dir();
+    let preset_path = presets_dir.join(format!("{}.json", name));
+    
+    if !preset_path.exists() {
+        return Err(format!("Preset '{}' not found", name));
+    }
+    
+    fs::read_to_string(&preset_path)
+        .map_err(|e| format!("Failed to load preset: {}", e))
+}
+
+#[tauri::command]
+fn delete_preset(name: String) -> Result<(), String> {
+    let presets_dir = get_presets_dir();
+    let preset_path = presets_dir.join(format!("{}.json", name));
+    
+    if !preset_path.exists() {
+        return Err(format!("Preset '{}' not found", name));
+    }
+    
+    fs::remove_file(&preset_path)
+        .map_err(|e| format!("Failed to delete preset: {}", e))?;
+    
+    Ok(())
+}
+
 fn main() {
     // Ensure app directories exist
     if let Err(e) = ensure_app_dirs() {
@@ -427,6 +503,10 @@ fn main() {
             search_ffmpeg_fast,
             search_ffmpeg_deep,
             set_ffmpeg_paths,
+            list_presets,
+            save_preset,
+            load_preset,
+            delete_preset,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

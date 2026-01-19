@@ -7,6 +7,7 @@
     "selectFiles": "Select Files",
     "selectFolder": "Select Folder",
     "outputFolder": "Output Folder",
+    "saveInSourceDirectory": "Save in source file directory",
     "queue": "Queue",
     "start": "Start",
     "pause": "Pause",
@@ -99,6 +100,72 @@
     "sampleRate": "Sample Rate",
     "volume": "Volume",
     "equalizer": "Equalizer"
+  },
+  "audioSettings": {
+    "autoSelect": "Auto-Select from metadata",
+    "autoSelectHint": "Automatically detect and apply codec, bitrate, sample rate, and channels from file metadata",
+    "bitrateUnit": "kbps",
+    "volume": "Volume",
+    "gain": "Gain",
+    "normalization": "Normalization",
+    "normalizationHint": "Ensure consistent loudness across audio. Analyzes and adjusts volume to prevent clipping",
+    "pitch": "Pitch (Transpose)",
+    "pitchLabel": {
+      "normal": "Normal pitch",
+      "higher": "higher",
+      "lower": "lower",
+      "semitones": "semitones"
+    },
+    "noiseReduction": "Noise Reduction",
+    "noiseReductionHint": "Reduce background noise and hum from the audio. Use lower values for subtle noise removal (0–30%), higher for aggressive reduction (60–100%)",
+    "equalizer": "5-Band Equalizer",
+    "resetEQ": "Reset EQ",
+    "effects": "Effects & Filters",
+    "effectsDisabledNotice": "(disabled for codec copy)",
+    "effectsHint": "Select audio effects to enhance or modify the sound. Combine multiple effects as needed. Note: codec copy does not support effects",
+    "codecs": {
+      "aac": "AAC — Most Compatible",
+      "mp3": "MP3 — Wide Support",
+      "opus": "Opus — Modern & Efficient",
+      "vorbis": "Vorbis — Open Source",
+      "flac": "FLAC — Lossless",
+      "copy": "Copy Stream (no processing)"
+    },
+    "channels": {
+      "mono": "Mono",
+      "stereo": "Stereo"
+    },
+    "effectNames": {
+      "reverb": "Reverb (Echo Effect)",
+      "chorus": "Chorus (Overlay Effect)",
+      "compressor": "Compressor (Compresses Dynamic Range)"
+    }
+  },
+  "presets": {
+    "label": "Presets",
+    "selectPreset": "Select a preset",
+    "apply": "Apply",
+    "save": "Save current",
+    "delete": "Delete",
+    "saveDialogTitle": "Save Preset",
+    "deleteDialogTitle": "Delete Preset",
+    "namePlaceholder": "Preset name",
+    "descriptionPlaceholder": "Optional description",
+    "saveButton": "Save",
+    "deleteButton": "Delete",
+    "cancel": "Cancel",
+    "saved": "Preset saved",
+    "applied": "Preset applied",
+    "deleted": "Preset deleted",
+    "makeDefault": "Make default",
+    "defaultSet": "Default preset updated",
+    "errorSaving": "Failed to save preset",
+    "errorLoading": "Failed to load preset",
+    "errorDeleting": "Failed to delete preset",
+    "errorEmptyName": "Enter a preset name",
+    "errorInvalidName": "Only letters, numbers, spaces, _ and - are allowed",
+    "deleteConfirmation": "Delete preset \"{name}\"?",
+    "notificationSaved": "Preset saved"
   },
   "settings": {
     "title": "Settings",

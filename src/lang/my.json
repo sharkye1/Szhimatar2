@@ -1,0 +1,206 @@
+{
+  "app": {
+    "title": "Szhimatar",
+    "version": "Verzija"
+  },
+  "main": {
+    "selectFiles": "Izbrati fajly",
+    "selectFolder": "Izbrati folder",
+    "outputFolder": "Izhodny folder",
+    "saveInSourceDirectory": "Sahraniti v izhodnom direktoriju",
+    "queue": "Čered",
+    "start": "Začati",
+    "pause": "Pauza",
+    "stop": "Stop",
+    "progress": "Progres",
+    "preview": "Predogled"
+  },
+  "video": {
+    "title": "Nastavenja videa",
+    "codec": "Kodek",
+    "bitrate": "Bitova brzina (Mbps)",
+    "fps": "Kadry v sekundě",
+    "resolution": "Rezolucija",
+    "crf": "CRF (kvalita)",
+    "aspectRatio": "Otnosěnije stran",
+    "preset": "Prednastavenje"
+  },
+  "videoSettings": {
+    "fps": "Kadry v sekundě",
+    "autoFps": "Avtomatičny FPS",
+    "detecting": "Detektovanje...",
+    "fpsShort": "k/s",
+    "resolution": "Rezolucija",
+    "aspectRatio": "Otnosěnije stran",
+    "crf": "CRF",
+    "crfHint": "CRF kontroluje kvalitu za postojannoje koděranje. Nižše vrednosti - vyšša kvalita i větše fajly (napr. 18-20 jako dobro), vyšše vrednosti - větše stiskanje (napr. 28-35 viděna izguba, no obče čerty, napr. Fortnite igranje, ostanut).",
+    "preset": "Prednastavenje",
+    "presetHint": "Prednastavenja menjajut brzinu koděranja za efektivnost stiskanja (pomalše = lěpše stiskanje).",
+    "speed": "Brzina přehrávky",
+    "speedLabel": {
+      "normal": "Normalno",
+      "slowMotion": "Spomaljeno",
+      "fastForward": "Ubrzano"
+    },
+    "rotation": "Rotacija",
+    "rotationOptions": {
+      "none": "Bez rotacije",
+      "deg90": "Okrenuti 90°",
+      "deg180": "Okrenuti 180°",
+      "deg270": "Okrenuti 270°"
+    },
+    "flip": "Obratiti",
+    "flipOptions": {
+      "none": "Ne obratiti",
+      "horizontal": "Obratiti horizontálně",
+      "vertical": "Obratiti vertikálně"
+    },
+    "filters": "Filtry",
+    "filterNames": {
+      "deinterlace": "Deinterlacing (ubiraje moguče migotanje)",
+      "denoise": "Ubiranje šuma (ubiraje zrnitost)",
+      "sharpen": "Ostrenje"
+    },
+    "codecs": {
+      "h264": "H.264 (x264) — Najboljša kompatibilnost",
+      "h265": "H.265 (x265/HEVC) — Lěpša kvalita",
+      "vp9": "VP9 — Otvoreny kodek",
+      "av1": "AV1 — Najboljše stiskanje (Ne podpira vsě uredjenja)"
+    },
+    "resolutionOptions": {
+      "144pPotato": "144p (Kompič)",
+      "240pPotatoPlus": "240p (Kompič+)",
+      "360pMobile": "360p (Mobilno)",
+      "480pSD": "480p (SD)",
+      "720pHD": "720p (HD)",
+      "1080pFullHD": "1080p (Puno HD)",
+      "1440p2K": "1440p (2K)",
+      "2160p4KUHD": "2160p (4K UHD)",
+      "4kDci": "4K DCI",
+      "ultrawide": "Ultrаširoky"
+    },
+    "aspectRatios": {
+      "16_9": "16:9 (Široky ekran)",
+      "4_3": "4:3 (Tradicionálny)",
+      "21_9": "21:9 (Kino)",
+      "1_1": "1:1 (Kvadrat)",
+      "9_16": "9:16 (Vertikálny)"
+    }
+  },
+  "ffmpeg": {
+    "configurationLabel": "FFmpeg konfiguracija",
+    "toggleConfigure": "Konfigurovati FFmpeg",
+    "toggleHide": "Skriti FFmpeg nastavenja"
+  },
+  "audio": {
+    "title": "Nastavenja audio",
+    "codec": "Kodek",
+    "bitrate": "Bitova brzina (kbps)",
+    "channels": "Kanali",
+    "sampleRate": "Frekvencija vzorkovanja",
+    "volume": "Glasnost",
+    "equalizer": "Ekvalajzer"
+  },
+  "audioSettings": {
+    "autoSelect": "Avtomatično izbrati iz metadatov",
+    "autoSelectHint": "Avtomatično detektovati i primeniti kodek, bitovu brzinu, frekvenciju vzorkovanja i kanali iz metadatov fajla",
+    "bitrateUnit": "kbps",
+    "volume": "Glasnost",
+    "gain": "Pojačanje",
+    "normalization": "Normalizacija",
+    "normalizationHint": "Oběspečiti postojannu glasnost audio. Analizira i koriguje glasnost za prevenciju prekoračenja",
+    "pitch": "Visina tona (Transpozicija)",
+    "pitchLabel": {
+      "normal": "Normalna visina",
+      "higher": "vyšši",
+      "lower": "nižši",
+      "semitones": "polutonov"
+    },
+    "noiseReduction": "Redukcija šuma",
+    "noiseReductionHint": "Umanjiti fonovy šum i brujanje iz audio. Koristiti nizke vrednosti za subtilno ubiranje šuma (0–30%), visoke za agresivnu redukciju (60–100%)",
+    "equalizer": "5-pojasovy ekvalajzer",
+    "resetEQ": "Resetovati EQ",
+    "effects": "Efekty i filtry",
+    "effectsDisabledNotice": "(isključeno za kopiju toka)",
+    "effectsHint": "Izbrati audio efekty za poboljšanje ili modifikaciju zvuka. Kombinovati mnogo efektov po potrebě. Napomena: kopija toka ne podpira efekty",
+    "codecs": {
+      "aac": "AAC — Najboljša kompatibilnost",
+      "mp3": "MP3 — Široka podpora",
+      "opus": "Opus — Moderny i efektivny",
+      "vorbis": "Vorbis — Otvoreny kodek",
+      "flac": "FLAC — Bez gubitka",
+      "copy": "Kopirovati tok (bez obrabotky)"
+    },
+    "channels": {
+      "mono": "Mono",
+      "stereo": "Stereo"
+    },
+    "effectNames": {
+      "reverb": "Reverberacija (eho efekt)",
+      "chorus": "Hor (efekt prekrivanja)",
+      "compressor": "Kompresor (stiskaje dinamičny razpon)"
+    }
+  },
+  "presets": {
+    "label": "Prednastavenja",
+    "selectPreset": "Izbrati prednastavenje",
+    "apply": "Primeniti",
+    "save": "Sahraniti tekuče",
+    "delete": "Izbrisati",
+    "saveDialogTitle": "Sahraniti prednastavenje",
+    "deleteDialogTitle": "Izbrisati prednastavenje",
+    "namePlaceholder": "Nazva prednastavenja",
+    "descriptionPlaceholder": "Neobavezno opis",
+    "saveButton": "Sahraniti",
+    "deleteButton": "Izbrisati",
+    "cancel": "Otkazati",
+    "saved": "Prednastavenje sahranjeno",
+    "applied": "Prednastavenje primenjeno",
+    "deleted": "Prednastavenje izbrisano",
+    "makeDefault": "Sdělat podrazumevanym",
+    "defaultSet": "Podrazumevano prednastavenje obnovjeno",
+    "errorSaving": "Neuspešno sahranjenje prednastavenja",
+    "errorLoading": "Neuspešno učitavanje prednastavenja",
+    "errorDeleting": "Neuspešno brisanje prednastavenja",
+    "errorEmptyName": "Vnesti nazvu prednastavenja",
+    "errorInvalidName": "Samo bukvy, cifry, proběly, _ i - sut dozvoljene",
+    "deleteConfirmation": "Izbrisati prednastavenje \"{name}\"?",
+    "notificationSaved": "Prednastavenje sahranjeno"
+  },
+  "settings": {
+    "title": "Nastavenja",
+    "theme": "Tema",
+    "language": "Jazyk",
+    "ffmpegPath": "FFmpeg put",
+    "ffprobePath": "FFprobe put",
+    "outputSuffix": "Sufiks izhodnyh fajlov",
+    "checkUpdates": "Proveriti obnovy",
+    "save": "Sahraniti",
+    "cancel": "Otkazati"
+  },
+  "watermark": {
+    "title": "Nastavenja vodoznaka",
+    "selectImage": "Izbrati obraz",
+    "position": "Pozicija",
+    "opacity": "Prozračnost",
+    "positions": {
+      "topLeft": "Věrhu lěvo",
+      "topRight": "Věrhu pravo",
+      "bottomLeft": "Dolu lěvo",
+      "bottomRight": "Dolu pravo",
+      "center": "Centr"
+    }
+  },
+  "buttons": {
+    "apply": "Primeniti",
+    "reset": "Resetovati",
+    "close": "Zaključiti",
+    "browse": "Pregledati",
+    "back": "Nazad"
+  },
+  "messages": {
+    "filesAdded": "Fajly dodane",
+    "processingComplete": "Obrabotka zaversena",
+    "error": "Greška"
+  }
+}

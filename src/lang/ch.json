@@ -1,0 +1,206 @@
+{
+  "app": {
+    "title": "Szhimatar",
+    "version": "版本"
+  },
+  "main": {
+    "selectFiles": "选择文件",
+    "selectFolder": "选择文件夹",
+    "outputFolder": "输出文件夹",
+    "saveInSourceDirectory": "保存在源文件目录",
+    "queue": "队列",
+    "start": "开始",
+    "pause": "暂停",
+    "stop": "停止",
+    "progress": "进度",
+    "preview": "预览"
+  },
+  "video": {
+    "title": "视频设置",
+    "codec": "编解码器",
+    "bitrate": "比特率 (Mbps)",
+    "fps": "帧率",
+    "resolution": "分辨率",
+    "crf": "CRF (质量)",
+    "aspectRatio": "宽高比",
+    "preset": "预设"
+  },
+  "videoSettings": {
+    "fps": "帧率",
+    "autoFps": "自动帧率",
+    "detecting": "检测中...",
+    "fpsShort": "帧/秒",
+    "resolution": "分辨率",
+    "aspectRatio": "宽高比",
+    "crf": "CRF",
+    "crfHint": "CRF控制恒定速率因子编码的质量。较低的值意味着更高的质量和更大的文件（例如，18-20非常高），较高的值意味着更高的压缩率（例如，28-35有明显损失，但一般特征，例如Fortnite游戏画面，会保留）。",
+    "preset": "预设",
+    "presetHint": "预设以编码速度换取压缩效率（越慢=压缩越好）。",
+    "speed": "播放速度",
+    "speedLabel": {
+      "normal": "正常",
+      "slowMotion": "慢动作",
+      "fastForward": "快进"
+    },
+    "rotation": "旋转",
+    "rotationOptions": {
+      "none": "不旋转",
+      "deg90": "旋转90°",
+      "deg180": "旋转180°",
+      "deg270": "旋转270°"
+    },
+    "flip": "翻转",
+    "flipOptions": {
+      "none": "不翻转",
+      "horizontal": "水平翻转",
+      "vertical": "垂直翻转"
+    },
+    "filters": "滤镜",
+    "filterNames": {
+      "deinterlace": "去隔行扫描（消除可能的闪烁）",
+      "denoise": "降噪（消除颗粒感）",
+      "sharpen": "锐化"
+    },
+    "codecs": {
+      "h264": "H.264 (x264) — 兼容性最佳",
+      "h265": "H.265 (x265/HEVC) — 质量更好",
+      "vp9": "VP9 — 开源",
+      "av1": "AV1 — 最佳压缩（并非所有设备都支持）"
+    },
+    "resolutionOptions": {
+      "144pPotato": "144p (极低)",
+      "240pPotatoPlus": "240p (很低)",
+      "360pMobile": "360p (移动设备)",
+      "480pSD": "480p (标清)",
+      "720pHD": "720p (高清)",
+      "1080pFullHD": "1080p (全高清)",
+      "1440p2K": "1440p (2K)",
+      "2160p4KUHD": "2160p (4K UHD)",
+      "4kDci": "4K DCI",
+      "ultrawide": "超宽屏"
+    },
+    "aspectRatios": {
+      "16_9": "16:9 (宽屏)",
+      "4_3": "4:3 (传统)",
+      "21_9": "21:9 (影院)",
+      "1_1": "1:1 (正方形)",
+      "9_16": "9:16 (垂直)"
+    }
+  },
+  "ffmpeg": {
+    "configurationLabel": "FFmpeg配置",
+    "toggleConfigure": "配置FFmpeg",
+    "toggleHide": "隐藏FFmpeg设置"
+  },
+  "audio": {
+    "title": "音频设置",
+    "codec": "编解码器",
+    "bitrate": "比特率 (kbps)",
+    "channels": "声道",
+    "sampleRate": "采样率",
+    "volume": "音量",
+    "equalizer": "均衡器"
+  },
+  "audioSettings": {
+    "autoSelect": "从元数据自动选择",
+    "autoSelectHint": "自动从文件元数据检测并应用编解码器、比特率、采样率和声道",
+    "bitrateUnit": "千比特/秒",
+    "volume": "音量",
+    "gain": "增益",
+    "normalization": "标准化",
+    "normalizationHint": "确保音频音量一致。分析并调整音量以防止削波",
+    "pitch": "音高 (移调)",
+    "pitchLabel": {
+      "normal": "正常音高",
+      "higher": "更高",
+      "lower": "更低",
+      "semitones": "半音"
+    },
+    "noiseReduction": "降噪",
+    "noiseReductionHint": "减少音频中的背景噪音和嗡鸣声。使用较低值进行轻微降噪（0–30%），较高值进行强力降噪（60–100%）",
+    "equalizer": "5段均衡器",
+    "resetEQ": "重置均衡器",
+    "effects": "效果和滤镜",
+    "effectsDisabledNotice": "（流复制时禁用）",
+    "effectsHint": "选择音频效果以增强或修改声音。根据需要组合多种效果。注意：流复制不支持效果",
+    "codecs": {
+      "aac": "AAC — 兼容性最佳",
+      "mp3": "MP3 — 广泛支持",
+      "opus": "Opus — 现代高效",
+      "vorbis": "Vorbis — 开源",
+      "flac": "FLAC — 无损",
+      "copy": "复制流（不处理）"
+    },
+    "channels": {
+      "mono": "单声道",
+      "stereo": "立体声"
+    },
+    "effectNames": {
+      "reverb": "混响（回声效果）",
+      "chorus": "合唱（叠加效果）",
+      "compressor": "压缩器（压缩动态范围）"
+    }
+  },
+  "presets": {
+    "label": "预设",
+    "selectPreset": "选择一个预设",
+    "apply": "应用",
+    "save": "保存当前",
+    "delete": "删除",
+    "saveDialogTitle": "保存预设",
+    "deleteDialogTitle": "删除预设",
+    "namePlaceholder": "预设名称",
+    "descriptionPlaceholder": "可选描述",
+    "saveButton": "保存",
+    "deleteButton": "删除",
+    "cancel": "取消",
+    "saved": "预设已保存",
+    "applied": "预设已应用",
+    "deleted": "预设已删除",
+    "makeDefault": "设为默认",
+    "defaultSet": "默认预设已更新",
+    "errorSaving": "保存预设失败",
+    "errorLoading": "加载预设失败",
+    "errorDeleting": "删除预设失败",
+    "errorEmptyName": "请输入预设名称",
+    "errorInvalidName": "只允许字母、数字、空格、_和-",
+    "deleteConfirmation": "删除预设\"{name}\"?",
+    "notificationSaved": "预设已保存"
+  },
+  "settings": {
+    "title": "设置",
+    "theme": "主题",
+    "language": "语言",
+    "ffmpegPath": "FFmpeg路径",
+    "ffprobePath": "FFprobe路径",
+    "outputSuffix": "输出文件后缀",
+    "checkUpdates": "检查更新",
+    "save": "保存",
+    "cancel": "取消"
+  },
+  "watermark": {
+    "title": "水印设置",
+    "selectImage": "选择图片",
+    "position": "位置",
+    "opacity": "不透明度",
+    "positions": {
+      "topLeft": "左上",
+      "topRight": "右上",
+      "bottomLeft": "左下",
+      "bottomRight": "右下",
+      "center": "居中"
+    }
+  },
+  "buttons": {
+    "apply": "应用",
+    "reset": "重置",
+    "close": "关闭",
+    "browse": "浏览",
+    "back": "返回"
+  },
+  "messages": {
+    "filesAdded": "文件已添加",
+    "processingComplete": "处理完成",
+    "error": "错误"
+  }
+}

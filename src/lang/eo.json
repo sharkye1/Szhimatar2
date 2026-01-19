@@ -1,0 +1,206 @@
+{
+  "app": {
+    "title": "Szhimatar",
+    "version": "Versio"
+  },
+  "main": {
+    "selectFiles": "Elekti dosierojn",
+    "selectFolder": "Elekti dosierujon",
+    "outputFolder": "Eliga dosierujo",
+    "saveInSourceDirectory": "Konservi en fonta dosieruja adresaro",
+    "queue": "Atendovico",
+    "start": "Komenci",
+    "pause": "Paŭzi",
+    "stop": "Halti",
+    "progress": "Progreso",
+    "preview": "Antaŭrigardo"
+  },
+  "video": {
+    "title": "Video-agordoj",
+    "codec": "Kodeko",
+    "bitrate": "Bitrapido (Mbps)",
+    "fps": "FPS",
+    "resolution": "Rezolucio",
+    "crf": "CRF (kvalito)",
+    "aspectRatio": "Bildproporcio",
+    "preset": "Antaŭagordo"
+  },
+  "videoSettings": {
+    "fps": "Kadroj por sekundo",
+    "autoFps": "Aŭtomata FPS",
+    "detecting": "Detektado...",
+    "fpsShort": "fps",
+    "resolution": "Rezolucio",
+    "aspectRatio": "Bildproporcio",
+    "crf": "CRF",
+    "crfHint": "CRF regas kvaliton por konstanta faktora kodigo. Malaltaj valoroj signifas pli bonan kvaliton kaj pli grandajn dosierojn (ekz., 18-20 tre alta), altaj valoroj signifas pli da kunpremo (ekz., 28-35 rimarkinda perdo, tamen ĝeneralaj trajtoj, ekz., Fortnite-ludado, konserviĝas).",
+    "preset": "Antaŭagordo",
+    "presetHint": "Antaŭagordoj interŝanĝas kodadan rapidon kun kunprema efikeco (malpli rapida = pli bona kunpremo).",
+    "speed": "Ludrapido",
+    "speedLabel": {
+      "normal": "Normala",
+      "slowMotion": "Malrapida movo",
+      "fastForward": "Rapida antaŭeniro"
+    },
+    "rotation": "Rotacio",
+    "rotationOptions": {
+      "none": "Sen rotacio",
+      "deg90": "Rotacii 90°",
+      "deg180": "Rotacii 180°",
+      "deg270": "Rotacii 270°"
+    },
+    "flip": "Renversi",
+    "flipOptions": {
+      "none": "Ne renversi",
+      "horizontal": "Renversi horizontale",
+      "vertical": "Renversi vertikale"
+    },
+    "filters": "Filtriloj",
+    "filterNames": {
+      "deinterlace": "Malinterliniigi (forigas eblajn tremojn)",
+      "denoise": "Malbruigi (forigas grajnecon)",
+      "sharpen": "Akrigi"
+    },
+    "codecs": {
+      "h264": "H.264 (x264) — Plej Kongrua",
+      "h265": "H.265 (x265/HEVC) — Pli Bona Kvalito",
+      "vp9": "VP9 — Malfermitkoda",
+      "av1": "AV1 — Plej Bona Kunpremo (Ne subtenata de ĉiuj aparatoj)"
+    },
+    "resolutionOptions": {
+      "144pPotato": "144p (Tre malalta)",
+      "240pPotatoPlus": "240p (Tre malalta+)",
+      "360pMobile": "360p (Poŝtelefona)",
+      "480pSD": "480p (SD)",
+      "720pHD": "720p (HD)",
+      "1080pFullHD": "1080p (Plena HD)",
+      "1440p2K": "1440p (2K)",
+      "2160p4KUHD": "2160p (4K UHD)",
+      "4kDci": "4K DCI",
+      "ultrawide": "Tre larĝa"
+    },
+    "aspectRatios": {
+      "16_9": "16:9 (Larĝekrana)",
+      "4_3": "4:3 (Tradicia)",
+      "21_9": "21:9 (Kineja)",
+      "1_1": "1:1 (Kvadrata)",
+      "9_16": "9:16 (Vertikala)"
+    }
+  },
+  "ffmpeg": {
+    "configurationLabel": "FFmpeg-agordo",
+    "toggleConfigure": "Agordi FFmpeg",
+    "toggleHide": "Kaŝi FFmpeg-agordon"
+  },
+  "audio": {
+    "title": "Aŭdaj agordoj",
+    "codec": "Kodeko",
+    "bitrate": "Bitrapido (kbps)",
+    "channels": "Kanaloj",
+    "sampleRate": "Samplado-ofteco",
+    "volume": "Laŭteco",
+    "equalizer": "Egaligilo"
+  },
+  "audioSettings": {
+    "autoSelect": "Aŭtomate elekti el metadatenoj",
+    "autoSelectHint": "Aŭtomate detekti kaj apliki kodekon, bitrapidon, samplado-oftecon kaj kanalojn el dosieraj metadatenoj",
+    "bitrateUnit": "kbps",
+    "volume": "Laŭteco",
+    "gain": "Gajno",
+    "normalization": "Normaligo",
+    "normalizationHint": "Certigi unuforman laŭtecon tra la aŭdio. Analizas kaj ĝustigas laŭtecon por malhelpi tranĉiĝon",
+    "pitch": "Tonalto (Transponi)",
+    "pitchLabel": {
+      "normal": "Normala tonalto",
+      "higher": "pli alta",
+      "lower": "pli malalta",
+      "semitones": "duontonoj"
+    },
+    "noiseReduction": "Bru-redukto",
+    "noiseReductionHint": "Redukti fonan bruon kaj zumadon el la aŭdio. Uzu malaltajn valorojn por subtila bru-forigo (0–30%), altajn por agresema redukto (60–100%)",
+    "equalizer": "5-banda egaligilo",
+    "resetEQ": "Restarigi egaligilon",
+    "effects": "Efektoj kaj filtriloj",
+    "effectsDisabledNotice": "(malŝaltita por kodeka kopio)",
+    "effectsHint": "Elekti aŭdajn efektojn por plibonigi aŭ modifi la sonon. Kombini plurajn efektojn laŭbezone. Notu: kodeka kopio ne subtenas efektojn",
+    "codecs": {
+      "aac": "AAC — Plej Kongrua",
+      "mp3": "MP3 — Vasta subteno",
+      "opus": "Opus — Moderna kaj Efika",
+      "vorbis": "Vorbis — Malfermitkoda",
+      "flac": "FLAC — Senperda",
+      "copy": "Kopii fluon (sen prilaborado)"
+    },
+    "channels": {
+      "mono": "Monaŭra",
+      "stereo": "Sterea"
+    },
+    "effectNames": {
+      "reverb": "Reverbero (eĥa efekto)",
+      "chorus": "Ĥoro (supermetita efekto)",
+      "compressor": "Kompresoro (kunpremas dinamikan intervalon)"
+    }
+  },
+  "presets": {
+    "label": "Antaŭagordoj",
+    "selectPreset": "Elekti antaŭagordon",
+    "apply": "Apliki",
+    "save": "Konservi nunan",
+    "delete": "Forigi",
+    "saveDialogTitle": "Konservi antaŭagordon",
+    "deleteDialogTitle": "Forigi antaŭagordon",
+    "namePlaceholder": "Nomo de antaŭagordo",
+    "descriptionPlaceholder": "Malnepra priskribo",
+    "saveButton": "Konservi",
+    "deleteButton": "Forigi",
+    "cancel": "Nuligi",
+    "saved": "Antaŭagordo konservita",
+    "applied": "Antaŭagordo aplikita",
+    "deleted": "Antaŭagordo forigita",
+    "makeDefault": "Fari defaŭlta",
+    "defaultSet": "Defaŭlta antaŭagordo ĝisdatigita",
+    "errorSaving": "Malsukcesis konservi antaŭagordon",
+    "errorLoading": "Malsukcesis ŝargi antaŭagordon",
+    "errorDeleting": "Malsukcesis forigi antaŭagordon",
+    "errorEmptyName": "Enigu nomon de antaŭagordo",
+    "errorInvalidName": "Nur literoj, ciferoj, spacoj, _ kaj - estas permesataj",
+    "deleteConfirmation": "Ĉu forigi antaŭagordon \"{name}\"?",
+    "notificationSaved": "Antaŭagordo konservita"
+  },
+  "settings": {
+    "title": "Agordoj",
+    "theme": "Etoso",
+    "language": "Lingvo",
+    "ffmpegPath": "FFmpeg-vojo",
+    "ffprobePath": "FFprobe-vojo",
+    "outputSuffix": "Sufikso de eligaj dosieroj",
+    "checkUpdates": "Kontroli ĝisdatigojn",
+    "save": "Konservi",
+    "cancel": "Nuligi"
+  },
+  "watermark": {
+    "title": "Agordoj de akvomarko",
+    "selectImage": "Elekti bildon",
+    "position": "Pozicio",
+    "opacity": "Travidebleco",
+    "positions": {
+      "topLeft": "Supre maldekstre",
+      "topRight": "Supre dekstre",
+      "bottomLeft": "Malsupre maldekstre",
+      "bottomRight": "Malsupre dekstre",
+      "center": "Centro"
+    }
+  },
+  "buttons": {
+    "apply": "Apliki",
+    "reset": "Restarigi",
+    "close": "Fermi",
+    "browse": "Foliumi",
+    "back": "Reen"
+  },
+  "messages": {
+    "filesAdded": "Dosieroj aldonitaj",
+    "processingComplete": "Prilaborado kompletigita",
+    "error": "Eraro"
+  }
+}

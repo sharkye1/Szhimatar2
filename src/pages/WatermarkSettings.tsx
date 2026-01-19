@@ -1,20 +1,19 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { open } from '@tauri-apps/api/dialog';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { WatermarkSettings as WatermarkSettingsType } from '../types';
 import '../styles/SettingsWindow.css';
 
 interface WatermarkSettingsProps {
   onBack: () => void;
+  settings: WatermarkSettingsType;
+  setSettings: React.Dispatch<React.SetStateAction<WatermarkSettingsType>>;
 }
 
-const WatermarkSettings: React.FC<WatermarkSettingsProps> = ({ onBack }) => {
+const WatermarkSettings: React.FC<WatermarkSettingsProps> = ({ onBack, settings, setSettings }) => {
   const { t } = useLanguage();
   const { theme } = useTheme();
-  
-  const [imagePath, setImagePath] = useState('');
-  const [position, setPosition] = useState('bottomRight');
-  const [opacity, setOpacity] = useState('100');
 
   const handleSelectImage = async () => {
     try {
@@ -27,7 +26,7 @@ const WatermarkSettings: React.FC<WatermarkSettingsProps> = ({ onBack }) => {
       });
 
       if (selected && typeof selected === 'string') {
-        setImagePath(selected);
+        setSettings(prev => ({ ...prev, imagePath: selected }));
       }
     } catch (error) {
       console.error('Failed to select image:', error);
@@ -50,9 +49,9 @@ const WatermarkSettings: React.FC<WatermarkSettingsProps> = ({ onBack }) => {
             <button onClick={handleSelectImage} style={{ background: theme.colors.primary, color: '#fff', padding: '8px 16px', borderRadius: '6px' }}>
               {t('buttons.browse')}
             </button>
-            {imagePath && (
+            {settings.imagePath && (
               <span style={{ color: theme.colors.textSecondary, fontSize: '14px', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {imagePath}
+                {settings.imagePath}
               </span>
             )}
           </div>
@@ -60,7 +59,7 @@ const WatermarkSettings: React.FC<WatermarkSettingsProps> = ({ onBack }) => {
 
         <div className="setting-group">
           <label>{t('watermark.position')}</label>
-          <select value={position} onChange={(e) => setPosition(e.target.value)}
+          <select value={settings.position} onChange={(e) => setSettings(prev => ({ ...prev, position: e.target.value as WatermarkSettingsType['position'] }))}
                   style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}>
             <option value="topLeft">{t('watermark.positions.topLeft')}</option>
             <option value="topRight">{t('watermark.positions.topRight')}</option>
@@ -72,12 +71,12 @@ const WatermarkSettings: React.FC<WatermarkSettingsProps> = ({ onBack }) => {
 
         <div className="setting-group">
           <label>{t('watermark.opacity')} (%)</label>
-          <input type="range" value={opacity} onChange={(e) => setOpacity(e.target.value)} 
+          <input type="range" value={settings.opacity} onChange={(e) => setSettings(prev => ({ ...prev, opacity: Number(e.target.value) }))} 
                  min="0" max="100" />
-          <span style={{ color: theme.colors.textSecondary }}>{opacity}%</span>
+          <span style={{ color: theme.colors.textSecondary }}>{settings.opacity}%</span>
         </div>
 
-        {imagePath && (
+        {settings.imagePath && (
           <div className="setting-group">
             <label>Preview</label>
             <div style={{ 
@@ -89,12 +88,12 @@ const WatermarkSettings: React.FC<WatermarkSettingsProps> = ({ onBack }) => {
               textAlign: 'center'
             }}>
               <img 
-                src={`file://${imagePath}`} 
+                src={`file://${settings.imagePath}`} 
                 alt="Watermark preview" 
                 style={{ 
                   maxWidth: '100%', 
                   maxHeight: '200px',
-                  opacity: parseInt(opacity) / 100
+                  opacity: settings.opacity / 100
                 }} 
               />
             </div>

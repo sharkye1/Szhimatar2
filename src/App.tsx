@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
+import { invoke } from '@tauri-apps/api/tauri';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import MainWindow from './pages/MainWindow';
@@ -8,11 +9,27 @@ import AudioSettings from './pages/AudioSettings';
 import GeneralSettings from './pages/GeneralSettings';
 import WatermarkSettings from './pages/WatermarkSettings';
 import MotionScreen from './components/MotionScreen';
+import {
+  VideoSettings as VideoSettingsType,
+  AudioSettings as AudioSettingsType,
+  MainScreenSettings,
+  WatermarkSettings as WatermarkSettingsType,
+  AppPreset,
+  DEFAULT_VIDEO_SETTINGS,
+  DEFAULT_AUDIO_SETTINGS,
+  DEFAULT_MAIN_SCREEN_SETTINGS,
+  DEFAULT_WATERMARK_SETTINGS,
+} from './types';
 
 type Screen = 'main' | 'video' | 'audio' | 'general' | 'watermark';
 
 function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('main');
+  const [videoSettings, setVideoSettings] = useState<VideoSettingsType>(DEFAULT_VIDEO_SETTINGS);
+  const [audioSettings, setAudioSettings] = useState<AudioSettingsType>(DEFAULT_AUDIO_SETTINGS);
+  const [mainScreenSettings, setMainScreenSettings] = useState<MainScreenSettings>(DEFAULT_MAIN_SCREEN_SETTINGS);
+  const [watermarkSettings, setWatermarkSettings] = useState<WatermarkSettingsType>(DEFAULT_WATERMARK_SETTINGS);
+  const [selectedPresetName, setSelectedPresetName] = useState<string>('');
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -25,6 +42,43 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentScreen]);
 
+  // Apply default preset on startup (if exists)
+  useEffect(() => {
+    const applyDefaultPreset = async () => {
+      try {
+        const presetNames = await invoke<string[]>('list_presets');
+        const presets = await Promise.all(
+          presetNames.map(async (name) => {
+            try {
+              const content = await invoke<string>('load_preset', { name });
+              const parsed = JSON.parse(content) as AppPreset;
+              return { name, preset: parsed };
+            } catch (error) {
+              console.error('Failed to load preset', name, error);
+              return null;
+            }
+          })
+        );
+
+        const defaultPreset = presets.find((p) => p?.preset.isDefault === true);
+        if (defaultPreset?.preset) {
+          const p = defaultPreset.preset;
+          setVideoSettings(p.video);
+          setAudioSettings(p.audio);
+          setMainScreenSettings(p.mainScreen);
+          if (p.watermark) {
+            setWatermarkSettings(p.watermark);
+          }
+          setSelectedPresetName(defaultPreset.name);
+        }
+      } catch (error) {
+        console.error('Failed to apply default preset:', error);
+      }
+    };
+
+    applyDefaultPreset();
+  }, []);
+
   const navigateTo = (screen: Screen) => setCurrentScreen(screen);
   const goBack = () => setCurrentScreen('main');
 
@@ -36,17 +90,37 @@ function App() {
           <AnimatePresence mode="wait" initial={false}>
             {currentScreen === 'main' && (
               <MotionScreen key="screen-main">
-                <MainWindow onNavigate={navigateTo} />
+                <MainWindow
+                  onNavigate={navigateTo}
+                  videoSettings={videoSettings}
+                  setVideoSettings={setVideoSettings}
+                  audioSettings={audioSettings}
+                  setAudioSettings={setAudioSettings}
+                  mainScreenSettings={mainScreenSettings}
+                  setMainScreenSettings={setMainScreenSettings}
+                  watermarkSettings={watermarkSettings}
+                  setWatermarkSettings={setWatermarkSettings}
+                  selectedPresetName={selectedPresetName}
+                  setSelectedPresetName={setSelectedPresetName}
+                />
               </MotionScreen>
             )}
             {currentScreen === 'video' && (
               <MotionScreen key="screen-video">
-                <VideoSettings onBack={goBack} />
+                <VideoSettings
+                  onBack={goBack}
+                  settings={videoSettings}
+                  setSettings={setVideoSettings}
+                />
               </MotionScreen>
             )}
             {currentScreen === 'audio' && (
               <MotionScreen key="screen-audio">
-                <AudioSettings onBack={goBack} />
+                <AudioSettings
+                  onBack={goBack}
+                  settings={audioSettings}
+                  setSettings={setAudioSettings}
+                />
               </MotionScreen>
             )}
             {currentScreen === 'general' && (
@@ -56,7 +130,11 @@ function App() {
             )}
             {currentScreen === 'watermark' && (
               <MotionScreen key="screen-watermark">
-                <WatermarkSettings onBack={goBack} />
+                <WatermarkSettings
+                  onBack={goBack}
+                  settings={watermarkSettings}
+                  setSettings={setWatermarkSettings}
+                />
               </MotionScreen>
             )}
           </AnimatePresence>

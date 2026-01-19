@@ -1,0 +1,16 @@
+{
+    "name": "dark-blue",
+    "colors": {
+        "background": "#0d1b2a",
+        "surface": "#1b263b",
+        "primary": "#4fc3f7",
+        "secondary": "#415a77",
+        "text": "#e0f7fa",
+        "textSecondary": "#b0bec5",
+        "border": "#264653",
+        "success": "#26a69a",
+        "warning": "#ffa726",
+        "error": "#ef5350",
+        "hover": "#2a4153"
+    }
+}

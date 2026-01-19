@@ -1,19 +1,19 @@
 import React, { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { VideoSettings as VideoSettingsType, DEFAULT_VIDEO_SETTINGS } from '../types/index';
+import { VideoSettings as VideoSettingsType } from '../types/index';
 import { getVideoMetadata } from '../utils/ffmpeg';
 import '../styles/VideoSettings.css';
 
 interface VideoSettingsProps {
   onBack: () => void;
+  settings: VideoSettingsType;
+  setSettings: React.Dispatch<React.SetStateAction<VideoSettingsType>>;
 }
 
-const VideoSettings: React.FC<VideoSettingsProps> = ({ onBack }) => {
+const VideoSettings: React.FC<VideoSettingsProps> = ({ onBack, settings, setSettings }) => {
   const { t } = useLanguage();
   const { theme } = useTheme();
-  
-  const [settings, setSettings] = useState<VideoSettingsType>(DEFAULT_VIDEO_SETTINGS);
   const [expandedSection, setExpandedSection] = useState<'crf' | null>(null);
   const [detectedFps, setDetectedFps] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);

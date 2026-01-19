@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import lightTheme from '../themes/light.json';
 import darkRedTheme from '../themes/dark-red.json';
+import blueOceanTheme from '../themes/blue-ocean.json';
+import darkBlueTheme from '../themes/dark-blue.json';
 
 interface Theme {
   name: string;
@@ -30,6 +32,8 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 const themes: Record<string, Theme> = {
   light: lightTheme,
   'dark-red': darkRedTheme,
+  'blue-ocean': blueOceanTheme,
+  'dark-blue': darkBlueTheme,
 };
 
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {

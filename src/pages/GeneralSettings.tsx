@@ -73,6 +73,8 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
                   style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}>
             <option value="light">Light</option>
             <option value="dark-red">Dark Red</option>
+            <option value="blue-ocean">Blue Ocean</option>
+            <option value="dark-blue">Dark Blue</option>
           </select>
         </div>
 
@@ -82,6 +84,9 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
                   style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}>
             <option value="ru">Русский</option>
             <option value="en">English</option>
+            <option value="ch">中文</option>
+            <option value="eo">Esperanto</option>
+            <option value="my">Medžuslovjansky</option>
           </select>
         </div>
 

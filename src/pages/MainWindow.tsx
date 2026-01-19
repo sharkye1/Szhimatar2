@@ -3,7 +3,17 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { open } from '@tauri-apps/api/dialog';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
+import PresetManager from '../components/PresetManager';
+import type {
+  AppPreset,
+  VideoSettings,
+  AudioSettings,
+  MainScreenSettings,
+  WatermarkSettings,
+} from '../types';
 import '../styles/MainWindow.css';
+console.log("Импорты завершены")
+
 
 interface QueueItem {
   id: number;
@@ -17,13 +27,35 @@ type Screen = 'main' | 'video' | 'audio' | 'general' | 'watermark';
 
 interface MainWindowProps {
   onNavigate: (screen: Screen) => void;
+  videoSettings: VideoSettings;
+  setVideoSettings: React.Dispatch<React.SetStateAction<VideoSettings>>;
+  audioSettings: AudioSettings;
+  setAudioSettings: React.Dispatch<React.SetStateAction<AudioSettings>>;
+  mainScreenSettings: MainScreenSettings;
+  setMainScreenSettings: React.Dispatch<React.SetStateAction<MainScreenSettings>>;
+  watermarkSettings: WatermarkSettings;
+  setWatermarkSettings: React.Dispatch<React.SetStateAction<WatermarkSettings>>;
+  selectedPresetName: string;
+  setSelectedPresetName: React.Dispatch<React.SetStateAction<string>>;
 }
-
-const MainWindow: React.FC<MainWindowProps> = ({ onNavigate }) => {
+const MainWindow: React.FC<MainWindowProps> = ({
+  onNavigate,
+  videoSettings,
+  setVideoSettings,
+  audioSettings,
+  setAudioSettings,
+  mainScreenSettings,
+  setMainScreenSettings,
+  watermarkSettings,
+  setWatermarkSettings,
+  selectedPresetName,
+  setSelectedPresetName,
+}) => {
+  console.log('MainWindow render');
+  
   const { t } = useLanguage();
   const { theme } = useTheme();
   const [queue, setQueue] = useState<QueueItem[]>([]);
-  const [outputFolder, setOutputFolder] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
 
@@ -62,7 +94,10 @@ const MainWindow: React.FC<MainWindowProps> = ({ onNavigate }) => {
       });
 
       if (selected && typeof selected === 'string') {
-        setOutputFolder(selected);
+        setMainScreenSettings({
+          ...mainScreenSettings,
+          customOutputPath: selected,
+        });
         await invoke('write_log', { message: `Set output folder: ${selected}` });
       }
     } catch (error) {
@@ -90,7 +125,18 @@ const MainWindow: React.FC<MainWindowProps> = ({ onNavigate }) => {
     // TODO: Implement stop logic (kill ffmpeg process)
   };
 
-  return (
+  const handleApplyPreset = (preset: AppPreset) => {
+    setVideoSettings(preset.video);
+    setAudioSettings(preset.audio);
+    setMainScreenSettings(preset.mainScreen);
+    if (preset.watermark) {
+      setWatermarkSettings(preset.watermark);
+    }
+    setSelectedPresetName(preset.name || '');
+    invoke('write_log', { message: `Applied preset: ${preset.name}` });
+  };
+
+  return ( 
     <div className="main-window fade-in" style={{ background: theme.colors.background, color: theme.colors.text }}>
       <header className="header" style={{ background: theme.colors.surface, borderColor: theme.colors.border }}>
         <h1>{t('app.title')}</h1>
@@ -111,18 +157,47 @@ const MainWindow: React.FC<MainWindowProps> = ({ onNavigate }) => {
       </header>
 
       <div className="content">
+                {/* Preset Manager */}
+                <PresetManager
+                  currentVideoSettings={videoSettings}
+                  currentAudioSettings={audioSettings}
+                  currentMainScreenSettings={mainScreenSettings}
+                  currentWatermarkSettings={watermarkSettings}
+                  onApplyPreset={handleApplyPreset}
+                  selectedPresetName={selectedPresetName}
+                  setSelectedPresetName={setSelectedPresetName}
+                />
+
         <div className="file-selection">
           <button onClick={handleSelectFiles} style={{ background: theme.colors.primary, color: '#fff' }}>
             📁 {t('main.selectFiles')}
           </button>
+
           <button onClick={handleSelectOutputFolder} style={{ background: theme.colors.primary, color: '#fff' }}>
             💾 {t('main.outputFolder')}
           </button>
-          {outputFolder && (
+          {mainScreenSettings.customOutputPath && (
             <div className="output-path" style={{ color: theme.colors.textSecondary }}>
-              {outputFolder}
+              {mainScreenSettings.customOutputPath}
             </div>
           )}
+
+          {/* Save in source directory checkbox */}
+          <div className="save-location-option" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 0' }}>
+            <input
+              type="checkbox"
+              id="saveInSource"
+              checked={mainScreenSettings.saveInSourceDirectory}
+              onChange={(e) => setMainScreenSettings({
+                ...mainScreenSettings,
+                saveInSourceDirectory: e.target.checked,
+              })}
+            />
+            <label htmlFor="saveInSource" style={{ color: theme.colors.text, cursor: 'pointer' }}>
+              {t('main.saveInSourceDirectory')}
+            </label>
+          </div>
+          
         </div>
 
         <div className="queue-section">

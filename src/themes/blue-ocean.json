@@ -1,0 +1,16 @@
+{
+    "name": "blue-ocean",
+    "colors": {
+        "background": "#e3f2fd",
+        "surface": "#bbdefb",
+        "primary": "#0288d1",
+        "secondary": "#81d4fa",
+        "text": "#01579b",
+        "textSecondary": "#0277bd",
+        "border": "#90caf9",
+        "success": "#26a69a",
+        "warning": "#ffa726",
+        "error": "#ef5350",
+        "hover": "#b3e5fc"
+    }
+}
