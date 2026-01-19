@@ -1,0 +1,72 @@
+{
+  "app": {
+    "title": "Szhimatar",
+    "version": "Version"
+  },
+  "main": {
+    "selectFiles": "Select Files",
+    "selectFolder": "Select Folder",
+    "outputFolder": "Output Folder",
+    "queue": "Queue",
+    "start": "Start",
+    "pause": "Pause",
+    "stop": "Stop",
+    "progress": "Progress",
+    "preview": "Preview"
+  },
+  "video": {
+    "title": "Video Settings",
+    "codec": "Codec",
+    "bitrate": "Bitrate (Mbps)",
+    "fps": "FPS",
+    "resolution": "Resolution",
+    "crf": "CRF (quality)",
+    "aspectRatio": "Aspect Ratio",
+    "preset": "Preset"
+  },
+  "audio": {
+    "title": "Audio Settings",
+    "codec": "Codec",
+    "bitrate": "Bitrate (kbps)",
+    "channels": "Channels",
+    "sampleRate": "Sample Rate",
+    "volume": "Volume",
+    "equalizer": "Equalizer"
+  },
+  "settings": {
+    "title": "Settings",
+    "theme": "Theme",
+    "language": "Language",
+    "ffmpegPath": "FFmpeg Path",
+    "ffprobePath": "FFprobe Path",
+    "outputSuffix": "Output File Suffix",
+    "checkUpdates": "Check for Updates",
+    "save": "Save",
+    "cancel": "Cancel"
+  },
+  "watermark": {
+    "title": "Watermark Settings",
+    "selectImage": "Select Image",
+    "position": "Position",
+    "opacity": "Opacity",
+    "positions": {
+      "topLeft": "Top Left",
+      "topRight": "Top Right",
+      "bottomLeft": "Bottom Left",
+      "bottomRight": "Bottom Right",
+      "center": "Center"
+    }
+  },
+  "buttons": {
+    "apply": "Apply",
+    "reset": "Reset",
+    "close": "Close",
+    "browse": "Browse",
+    "back": "Back"
+  },
+  "messages": {
+    "filesAdded": "Files added",
+    "processingComplete": "Processing complete",
+    "error": "Error"
+  }
+}

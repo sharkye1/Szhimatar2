@@ -1,0 +1,16 @@
+{
+  "name": "light",
+  "colors": {
+    "background": "#ffffff",
+    "surface": "#f5f5f5",
+    "primary": "#2196f3",
+    "secondary": "#757575",
+    "text": "#000000",
+    "textSecondary": "#616161",
+    "border": "#e0e0e0",
+    "success": "#4caf50",
+    "warning": "#ff9800",
+    "error": "#f44336",
+    "hover": "#e3f2fd"
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "app": {
+    "title": "Szhimatar",
+    "version": "Версия"
+  },
+  "main": {
+    "selectFiles": "Выбрать файлы",
+    "selectFolder": "Выбрать папку",
+    "outputFolder": "Папка сохранения",
+    "queue": "Очередь",
+    "start": "Начать",
+    "pause": "Пауза",
+    "stop": "Стоп",
+    "progress": "Прогресс",
+    "preview": "Предпросмотр"
+  },
+  "video": {
+    "title": "Настройки видео",
+    "codec": "Кодек",
+    "bitrate": "Битрейт (Mbps)",
+    "fps": "FPS",
+    "resolution": "Разрешение",
+    "crf": "CRF (качество)",
+    "aspectRatio": "Соотношение сторон",
+    "preset": "Пресет"
+  },
+  "audio": {
+    "title": "Настройки аудио",
+    "codec": "Кодек",
+    "bitrate": "Битрейт (kbps)",
+    "channels": "Каналы",
+    "sampleRate": "Частота дискретизации",
+    "volume": "Громкость",
+    "equalizer": "Эквалайзер"
+  },
+  "settings": {
+    "title": "Настройки",
+    "theme": "Тема",
+    "language": "Язык",
+    "ffmpegPath": "Путь к FFmpeg",
+    "ffprobePath": "Путь к FFprobe",
+    "outputSuffix": "Суффикс выходных файлов",
+    "checkUpdates": "Проверить обновления",
+    "save": "Сохранить",
+    "cancel": "Отмена"
+  },
+  "watermark": {
+    "title": "Настройки водяного знака",
+    "selectImage": "Выбрать изображение",
+    "position": "Позиция",
+    "opacity": "Прозрачность",
+    "positions": {
+      "topLeft": "Верхний левый",
+      "topRight": "Верхний правый",
+      "bottomLeft": "Нижний левый",
+      "bottomRight": "Нижний правый",
+      "center": "Центр"
+    }
+  },
+  "buttons": {
+    "apply": "Применить",
+    "reset": "Сбросить",
+    "close": "Закрыть",
+    "browse": "Обзор",
+    "back": "Назад"
+  },
+  "messages": {
+    "filesAdded": "Файлов добавлено",
+    "processingComplete": "Обработка завершена",
+    "error": "Ошибка"
+  }
+}

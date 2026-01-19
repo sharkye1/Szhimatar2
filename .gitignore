@@ -1,0 +1,118 @@
+# ============================================================================
+# SZHIMATAR - COMPREHENSIVE GITIGNORE
+# ============================================================================
+
+# --- Node/React (Vite) ---
+node_modules/
+dist/
+coverage/
+.eslintcache
+*.tsbuildinfo
+.vite/
+
+# Package manager logs
+npm-debug.log*
+npm-error.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.pem
+
+# --- Rust/Tauri ---
+target/
+src-tauri/target/
+src-tauri/.cargo/
+Cargo.lock
+src-tauri/Cargo.lock
+
+# Compiled binaries and libraries
+*.exe
+*.exe.stackdump
+*.dll
+*.dylib
+*.so
+*.so.*
+*.msi
+*.msix
+*.app
+*.pdb
+*.idb
+*.ilk
+*.rlib
+*.rmeta
+
+# Tauri build and app outputs
+src-tauri/tauri.bundle/
+src-tauri/tauri.macOS.app/
+*.AppImage
+*.apk
+*.deb
+
+# --- IDE and Editor settings ---
+.vscode/
+.vscode-test/
+.idea/
+.sublime-workspace
+.sublime-project
+*.swp
+*.swo
+*~
+
+# --- Environment files ---
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# --- OS artifacts ---
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+desktop.ini
+.Spotlight-V100
+.Trashes
+._*
+.AppleDouble
+.LSOverride
+Icon
+
+# --- Temporary and cache files ---
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+.cache/
+.parcel-cache/
+.next
+.nuxt
+out/
+
+# --- macOS specific ---
+.DS_Store
+.fseventsd
+.TemporaryItems
+.VolumeIcon.icns
+
+# --- Windows specific ---
+$RECYCLE.BIN/
+
+# --- Testing ---
+.nyc_output/
+*.lcov
+.mocha-timeout
+
+# --- Production artifacts ---
+*.log
+logs/
+*.stat
+
+# --- My .md files ---
+ARCHITECTURE.md
+CHECKLIST.md
+DEVELOPMENT.md
+FIRST_RUN.md
+VERSION_MANAGEMENT.md
+QUICKSTART.md
+spec.md
