@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { FfmpegManager } from '../components/FfmpegManager';
+import { APP_VERSION } from '../version';
 import '../styles/SettingsWindow.css';
 
 interface GeneralSettingsProps {
@@ -14,9 +16,8 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
   
   const [themeName, setThemeName] = useState('light');
   const [language, setLanguage] = useState('ru');
-  const [ffmpegPath, setFfmpegPath] = useState('ffmpeg');
-  const [ffprobePath, setFfprobePath] = useState('ffprobe');
   const [outputSuffix, setOutputSuffix] = useState('_szhatoe');
+  const [showFfmpegManager, setShowFfmpegManager] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -27,8 +28,6 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
       const settings = await invoke<any>('load_settings');
       setThemeName(settings.theme);
       setLanguage(settings.language);
-      setFfmpegPath(settings.ffmpeg_path);
-      setFfprobePath(settings.ffprobe_path);
       setOutputSuffix(settings.output_suffix);
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -37,15 +36,13 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
 
   const saveSettings = async () => {
     try {
+      const settings = await invoke<any>('load_settings');
       await invoke('save_settings', {
         settings: {
+          ...settings,
           theme: themeName,
           language,
-          ffmpeg_path: ffmpegPath,
-          ffprobe_path: ffprobePath,
           output_suffix: outputSuffix,
-          default_video_codec: 'h264',
-          default_audio_codec: 'aac'
         }
       });
       
@@ -53,7 +50,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
       setAppLanguage(language);
       
       await invoke('write_log', { message: 'Settings saved' });
-      alert('Settings saved! Restart may be required.');
+      alert('Settings saved!');
     } catch (error) {
       console.error('Failed to save settings:', error);
       alert('Failed to save settings');
@@ -89,20 +86,6 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
         </div>
 
         <div className="setting-group">
-          <label>{t('settings.ffmpegPath')}</label>
-          <input type="text" value={ffmpegPath} onChange={(e) => setFfmpegPath(e.target.value)}
-                 style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
-                 placeholder="ffmpeg" />
-        </div>
-
-        <div className="setting-group">
-          <label>{t('settings.ffprobePath')}</label>
-          <input type="text" value={ffprobePath} onChange={(e) => setFfprobePath(e.target.value)}
-                 style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
-                 placeholder="ffprobe" />
-        </div>
-
-        <div className="setting-group">
           <label>{t('settings.outputSuffix')}</label>
           <input type="text" value={outputSuffix} onChange={(e) => setOutputSuffix(e.target.value)}
                  style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
@@ -110,10 +93,25 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
         </div>
 
         <div className="setting-group">
-          <label>{t('app.version')}</label>
-          <div style={{ color: theme.colors.textSecondary }}>0.1.0</div>
+          <label>{t('ffmpeg.configurationLabel')}</label>
+          <button 
+            onClick={() => setShowFfmpegManager(!showFfmpegManager)}
+            style={{ background: theme.colors.primary, color: '#fff', padding: '8px 16px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+          >
+            {showFfmpegManager ? t('ffmpeg.toggleHide') : t('ffmpeg.toggleConfigure')}
+          </button>
         </div>
-      </div>
+
+        {showFfmpegManager && (
+          <div className="setting-group" style={{ marginTop: '20px' }}>
+            <FfmpegManager />
+          </div>
+        )}
+
+        <div className="setting-group">
+          <label>{t('app.version')}</label>
+          <div style={{ color: theme.colors.textSecondary }}>v{APP_VERSION}</div>
+        </div>
 
       <div className="settings-footer" style={{ borderColor: theme.colors.border }}>
         <button onClick={saveSettings} style={{ background: theme.colors.success, color: '#fff' }}>
@@ -124,7 +122,8 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
         </button>
       </div>
     </div>
-  );
+    </div>
+);
+    
 };
-
 export default GeneralSettings;

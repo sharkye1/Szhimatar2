@@ -1,0 +1,323 @@
+/* Video Settings Extended Styles */
+
+.video-settings-extended {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 800px;
+    padding: 20px;
+}
+
+/* Setting Rows (for side-by-side layouts) */
+.setting-row {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+}
+
+.setting-row .setting-group {
+    flex: 1;
+}
+
+.setting-row .flex-1 {
+    flex: 1;
+}
+
+/* Checkbox Group (for FPS Auto) */
+.checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+    justify-content: flex-end;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+}
+
+.checkbox-label input[type="checkbox"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.loading-text {
+    font-size: 11px;
+    opacity: 0.7;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.detected-text {
+    font-size: 11px;
+    font-weight: 600;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 0.7;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
+/* CRF Help Section */
+.help-section {
+    padding: 12px 16px;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    margin: 12px 0;
+    font-size: 12px;
+    animation: slideDown 0.3s ease-out;
+}
+
+.help-section h4 {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.help-section ul {
+    margin: 0;
+    padding-left: 20px;
+    list-style: disc;
+}
+
+.help-section li {
+    margin: 4px 0;
+    line-height: 1.4;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Help Button */
+.help-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 4px;
+    margin-left: 8px;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+
+.help-btn:hover {
+    opacity: 1;
+}
+
+.setting-label-with-help {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.setting-label-with-help label {
+    margin: 0;
+}
+
+/* Slider with Label */
+.slider-with-label {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.slider-with-label input[type="range"] {
+    flex: 1;
+    cursor: pointer;
+}
+
+/* Filters Section */
+.filters-section {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.filters-section h3 {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    font-weight: 600;
+    opacity: 0.9;
+}
+
+.filters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+.filter-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.filter-checkbox:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.filter-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.filter-checkbox input[type="checkbox"]:checked {
+    accent-color: var(--color-primary, #00d4ff);
+}
+
+.filter-checkbox span {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* Responsive Layout */
+@media (max-width: 768px) {
+    .setting-row {
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .setting-row .setting-group {
+        width: 100%;
+    }
+
+    .filters-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .checkbox-group {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .slider-with-label {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .slider-with-label span {
+        width: 100%;
+        margin-left: 0;
+    }
+}
+
+/* Dark/Light theme support */
+.video-settings-extended input[type="range"] {
+    accent-color: var(--color-primary, #00d4ff);
+}
+
+.video-settings-extended input[type="range"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.video-settings-extended select:disabled,
+.video-settings-extended input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Animation for new filters appearing */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.filter-checkbox {
+    animation: fadeIn 0.2s ease-out;
+}
+
+/* Preset description text (future enhancement) */
+.preset-description {
+    font-size: 11px;
+    opacity: 0.7;
+    margin-top: 4px;
+    font-style: italic;
+}
+
+/* Setting group base styles (ensure compatibility) */
+.setting-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.setting-group label {
+    font-size: 13px;
+    font-weight: 500;
+    opacity: 0.9;
+    margin: 0;
+}
+
+.setting-group input[type="text"],
+.setting-group input[type="number"],
+.setting-group select {
+    padding: 8px 10px;
+    border-radius: 4px;
+    border: 1px solid currentColor;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.2s ease;
+}
+
+.setting-group input[type="range"] {
+    padding: 0;
+    min-height: 6px;
+}
+
+.setting-group input[type="text"]:focus,
+.setting-group input[type="number"]:focus,
+.setting-group select:focus {
+    outline: none;
+    opacity: 1;
+}
+
+/* Ensure text contrast in all states */
+.setting-group>div {
+    font-size: 12px;
+    margin-top: 4px;
+    opacity: 0.8;
+}

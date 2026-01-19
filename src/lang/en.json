@@ -24,6 +24,73 @@
     "aspectRatio": "Aspect Ratio",
     "preset": "Preset"
   },
+  "videoSettings": {
+    "fps": "FPS",
+    "autoFps": "Auto FPS",
+    "detecting": "Detecting...",
+    "fpsShort": "fps",
+    "resolution": "Resolution",
+    "aspectRatio": "Aspect Ratio",
+    "crf": "CRF",
+    "crfHint": "CRF controls quality for constant rate factor encoding. Lower values mean higher quality and larger files (e.g., 18-20 very high), higher values mean more compression (e.g., 28-35 noticeable loss, however general features, e.g., Fortnite gameplay, are preserved).",
+    "preset": "Preset",
+    "presetHint": "Presets trade encoding speed for compression efficiency (slower = better compression).",
+    "speed": "Playback Speed",
+    "speedLabel": {
+      "normal": "Normal",
+      "slowMotion": "Slow motion",
+      "fastForward": "Fast forward"
+    },
+    "rotation": "Rotation",
+    "rotationOptions": {
+      "none": "No Rotation",
+      "deg90": "Rotate 90°",
+      "deg180": "Rotate 180°",
+      "deg270": "Rotate 270°"
+    },
+    "flip": "Flip",
+    "flipOptions": {
+      "none": "No Flip",
+      "horizontal": "Flip Horizontally",
+      "vertical": "Flip Vertically"
+    },
+    "filters": "Filters",
+    "filterNames": {
+      "deinterlace": "Deinterlace (removes possible flickering)",
+      "denoise": "Denoise (removes graininess)",
+      "sharpen": "Sharpen"
+    },
+    "codecs": {
+      "h264": "H.264 (x264) — Most Compatible",
+      "h265": "H.265 (x265/HEVC) — Better Quality",
+      "vp9": "VP9 — Open Source",
+      "av1": "AV1 — Best Compression (Not supported by all devices)"
+    },
+    "resolutionOptions": {
+      "144pPotato": "144p (Potato)",
+      "240pPotatoPlus": "240p (Potato+)",
+      "360pMobile": "360p (Mobile)",
+      "480pSD": "480p (SD)",
+      "720pHD": "720p (HD)",
+      "1080pFullHD": "1080p (Full HD)",
+      "1440p2K": "1440p (2K)",
+      "2160p4KUHD": "2160p (4K UHD)",
+      "4kDci": "4K DCI",
+      "ultrawide": "Ultrawide"
+    },
+    "aspectRatios": {
+      "16_9": "16:9 (Widescreen)",
+      "4_3": "4:3 (Legacy)",
+      "21_9": "21:9 (Cinema)",
+      "1_1": "1:1 (Square)",
+      "9_16": "9:16 (Vertical)"
+    }
+  },
+  "ffmpeg": {
+    "configurationLabel": "FFmpeg Configuration",
+    "toggleConfigure": "Configure FFmpeg",
+    "toggleHide": "Hide FFmpeg Setup"
+  },
   "audio": {
     "title": "Audio Settings",
     "codec": "Codec",

@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
-import '../styles/SettingsWindow.css';
+import { VideoSettings as VideoSettingsType, DEFAULT_VIDEO_SETTINGS } from '../types/index';
+import { getVideoMetadata } from '../utils/ffmpeg';
+import '../styles/VideoSettings.css';
 
 interface VideoSettingsProps {
   onBack: () => void;
@@ -11,12 +13,91 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({ onBack }) => {
   const { t } = useLanguage();
   const { theme } = useTheme();
   
-  const [codec, setCodec] = useState('h264');
-  const [bitrate, setBitrate] = useState('5');
-  const [fps, setFps] = useState('30');
-  const [resolution, setResolution] = useState('1920x1080');
-  const [crf, setCrf] = useState('23');
-  const [preset, setPreset] = useState('medium');
+  const [settings, setSettings] = useState<VideoSettingsType>(DEFAULT_VIDEO_SETTINGS);
+  const [expandedSection, setExpandedSection] = useState<'crf' | null>(null);
+  const [detectedFps, setDetectedFps] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Resolution presets
+  const resolutions = [
+    { label: t('videoSettings.resolutionOptions.144pPotato'), value: '256x144' },
+    { label: t('videoSettings.resolutionOptions.240pPotatoPlus'), value: '426x240' },
+    { label: t('videoSettings.resolutionOptions.360pMobile'), value: '640x360' },
+    { label: t('videoSettings.resolutionOptions.480pSD'), value: '854x480' },
+    { label: t('videoSettings.resolutionOptions.720pHD'), value: '1280x720' },
+    { label: t('videoSettings.resolutionOptions.1080pFullHD'), value: '1920x1080' },
+    { label: t('videoSettings.resolutionOptions.1440p2K'), value: '2560x1440' },
+    { label: t('videoSettings.resolutionOptions.2160p4KUHD'), value: '3840x2160' },
+    { label: t('videoSettings.resolutionOptions.4kDci'), value: '4096x2160' },
+    { label: t('videoSettings.resolutionOptions.ultrawide'), value: '3440x1440' },
+  ];
+
+  const aspectRatios = [
+    { label: t('videoSettings.aspectRatios.16_9'), value: '16:9' },
+    { label: t('videoSettings.aspectRatios.4_3'), value: '4:3' },
+    { label: t('videoSettings.aspectRatios.21_9'), value: '21:9' },
+    { label: t('videoSettings.aspectRatios.1_1'), value: '1:1' },
+    { label: t('videoSettings.aspectRatios.9_16'), value: '9:16' },
+    { label: '5:11', value: '5:11' },
+    { label: '22:1', value: '22:1' },
+  ];
+
+  const fps_options = [
+    { label: '3', value: '3' },
+    { label: '11', value: '11' },
+    { label: '24', value: '24' },
+    { label: '25', value: '25' },
+    { label: '30', value: '30' },
+    { label: '48', value: '48' },
+    { label: '50', value: '50' },
+    { label: '60', value: '60' },
+    { label: '90', value: '90' },
+    { label: '120', value: '120' },
+  ];
+
+  const presetDescriptions = {
+    ultrafast: 'Fastest encoding, worst compression',
+    superfast: 'Very fast, poor compression',
+    veryfast: 'Fast, moderate compression',
+    faster: 'Balanced speed',
+    fast: 'Balanced',
+    medium: 'Default (recommended)',
+    slow: 'Slower encoding, better compression',
+    slower: 'Very slow, best compression',
+    veryslow: 'Extremely slow, best compression',
+  };
+
+  const handleFpsAutoChange = async (enabled: boolean) => {
+    setSettings({ ...settings, fpsAuto: enabled });
+    if (enabled) {
+      setLoading(true);
+      try {
+        const metadata = await getVideoMetadata('/path/to/video.mp4');
+        setDetectedFps(Math.round(metadata.fps));
+        setSettings(prev => ({ ...prev, fps: String(Math.round(metadata.fps)) }));
+      } catch (error) {
+        console.error('Failed to detect FPS:', error);
+        setDetectedFps(null);
+      }
+      setLoading(false);
+    }
+  };
+
+  const handleFilterToggle = (filterName: string) => {
+    setSettings(prev => ({
+      ...prev,
+      filters: prev.filters.map(f =>
+        f.name === filterName ? { ...f, enabled: !f.enabled } : f
+      )
+    }));
+  };
+
+  const getSpeedLabel = (speed: number): string => {
+    const percent = `${(speed * 100).toFixed(0)}%`;
+    if (speed < 1) return `${percent} (${t('videoSettings.speedLabel.slowMotion')})`;
+    if (speed === 1) return `${percent} (${t('videoSettings.speedLabel.normal')})`;
+    return `${percent} (${t('videoSettings.speedLabel.fastForward')})`;
+  };
 
   return (
     <div className="settings-window fade-in" style={{ background: theme.colors.background, color: theme.colors.text }}>
@@ -26,80 +107,218 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({ onBack }) => {
         </button>
         <h1>{t('video.title')}</h1>
       </header>
-      
-      <div className="settings-content">
+
+      <div className="settings-content video-settings-extended">
+        {/* Codec */}
         <div className="setting-group">
           <label>{t('video.codec')}</label>
-          <select value={codec} onChange={(e) => setCodec(e.target.value)} 
-                  style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}>
-            <option value="h264">H.264 (x264)</option>
-            <option value="h265">H.265 (x265/HEVC)</option>
-            <option value="vp9">VP9</option>
-            <option value="av1">AV1</option>
+          <select
+            value={settings.codec}
+            onChange={(e) => setSettings({ ...settings, codec: e.target.value })}
+            style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
+          >
+            <option value="h264">{t('videoSettings.codecs.h264')}</option>
+            <option value="h265">{t('videoSettings.codecs.h265')}</option>
+            <option value="vp9">{t('videoSettings.codecs.vp9')}</option>
+            <option value="av1">{t('videoSettings.codecs.av1')}</option>
           </select>
         </div>
 
+        {/* Bitrate */}
         <div className="setting-group">
           <label>{t('video.bitrate')}</label>
-          <input type="number" value={bitrate} onChange={(e) => setBitrate(e.target.value)} 
-                 style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
-                 min="1" max="50" step="0.5" />
+          <input
+            type="number"
+            value={settings.bitrate}
+            onChange={(e) => setSettings({ ...settings, bitrate: e.target.value })}
+            style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
+            min="0.5"
+            max="100"
+            step="0.5"
+          />
         </div>
 
-        <div className="setting-group">
-          <label>{t('video.fps')}</label>
-          <select value={fps} onChange={(e) => setFps(e.target.value)}
-                  style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}>
-            <option value="24">24</option>
-            <option value="30">30</option>
-            <option value="60">60</option>
-            <option value="120">120</option>
-          </select>
+        {/* FPS with Auto */}
+        <div className="setting-row">
+          <div className="setting-group flex-1">
+            <label>{t('videoSettings.fps')}</label>
+            <select
+              value={settings.fps}
+              onChange={(e) => setSettings({ ...settings, fps: e.target.value })}
+              style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
+              disabled={settings.fpsAuto && loading}
+            >
+              {fps_options.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label} {t('videoSettings.fpsShort')}</option>
+              ))}
+            </select>
+          </div>
+          <div className="setting-group checkbox-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={settings.fpsAuto}
+                onChange={(e) => handleFpsAutoChange(e.target.checked)}
+                disabled={loading}
+              />
+              <span>{t('videoSettings.autoFps')}</span>
+            </label>
+            {loading && <span className="loading-text">{t('videoSettings.detecting')}</span>}
+            {detectedFps && (
+              <span className="detected-text" style={{ color: theme.colors.success }}>
+                ✓ {detectedFps} {t('videoSettings.fpsShort')}
+              </span>
+            )}
+          </div>
         </div>
 
-        <div className="setting-group">
-          <label>{t('video.resolution')}</label>
-          <select value={resolution} onChange={(e) => setResolution(e.target.value)}
-                  style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}>
-            <option value="original">Original</option>
-            <option value="3840x2160">4K (3840x2160)</option>
-            <option value="2560x1440">2K (2560x1440)</option>
-            <option value="1920x1080">Full HD (1920x1080)</option>
-            <option value="1280x720">HD (1280x720)</option>
-            <option value="854x480">SD (854x480)</option>
-          </select>
+        {/* Resolution & Aspect Ratio */}
+        <div className="setting-row">
+          <div className="setting-group flex-1">
+            <label>{t('videoSettings.resolution')}</label>
+            <select
+              value={settings.resolution}
+              onChange={(e) => setSettings({ ...settings, resolution: e.target.value })}
+              style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
+            >
+              {resolutions.map(res => (
+                <option key={res.value} value={res.value}>{res.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="setting-group flex-1">
+            <label>{t('videoSettings.aspectRatio')}</label>
+            <select
+              value={settings.aspectRatio}
+              onChange={(e) => setSettings({ ...settings, aspectRatio: e.target.value })}
+              style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
+            >
+              {aspectRatios.map(ar => (
+                <option key={ar.value} value={ar.value}>{ar.label}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <div className="setting-group">
-          <label>{t('video.crf')} (0-51)</label>
-          <input type="range" value={crf} onChange={(e) => setCrf(e.target.value)} 
-                 min="0" max="51" />
-          <span style={{ color: theme.colors.textSecondary }}>{crf}</span>
+        {/* CRF & Preset */}
+        <div className="setting-row">
+          <div className="setting-group flex-1">
+            <div className="setting-label-with-help">
+              <label>{t('videoSettings.crf')}</label>
+              <button
+                className="help-btn"
+                onClick={() => setExpandedSection(expandedSection === 'crf' ? null : 'crf')}
+                style={{ color: theme.colors.primary }}
+              >
+                ℹ️
+              </button>
+            </div>
+            <input
+              type="range"
+              value={settings.crf}
+              onChange={(e) => setSettings({ ...settings, crf: e.target.value })}
+              min="0"
+              max="51"
+              step="1"
+              style={{ width: '100%', cursor: 'pointer' }}
+            />
+            <div style={{ fontSize: '12px', color: theme.colors.textSecondary, marginTop: '4px' }}>
+              CRF {settings.crf}
+            </div>
+          </div>
+
+          <div className="setting-group flex-1">
+            <label>{t('videoSettings.preset')}</label>
+            <select
+              value={settings.preset}
+              onChange={(e) => setSettings({ ...settings, preset: e.target.value })}
+              style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
+            >
+              {Object.entries(presetDescriptions).map(([key, _desc]) => (
+                <option key={key} value={key}>{key}</option>
+              ))}
+            </select>
+            <div className="preset-description">{t('videoSettings.presetHint')}</div>
+          </div>
         </div>
 
+        {/* CRF Help */}
+        {expandedSection === 'crf' && (
+          <div className="help-section" style={{ background: theme.colors.surface, borderColor: theme.colors.border }}>
+            <p>{t('videoSettings.crfHint')}</p>
+          </div>
+        )}
+
+        {/* Speed Slider */}
         <div className="setting-group">
-          <label>{t('video.preset')}</label>
-          <select value={preset} onChange={(e) => setPreset(e.target.value)}
-                  style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}>
-            <option value="ultrafast">Ultrafast</option>
-            <option value="superfast">Superfast</option>
-            <option value="veryfast">Veryfast</option>
-            <option value="faster">Faster</option>
-            <option value="fast">Fast</option>
-            <option value="medium">Medium</option>
-            <option value="slow">Slow</option>
-            <option value="slower">Slower</option>
-            <option value="veryslow">Veryslow</option>
-          </select>
+          <label>{t('videoSettings.speed')}</label>
+          <div className="slider-with-label">
+            <input
+              type="range"
+              value={settings.speed}
+              onChange={(e) => setSettings({ ...settings, speed: parseFloat(e.target.value) })}
+              min="0.25"
+              max="2"
+              step="0.25"
+              style={{ flex: 1 }}
+            />
+            <span style={{ marginLeft: '12px', minWidth: '120px', color: theme.colors.textSecondary }}>
+              {getSpeedLabel(settings.speed)}
+            </span>
+          </div>
+        </div>
+
+        {/* Transform Controls */}
+        <div className="setting-row">
+          <div className="setting-group flex-1">
+            <label>{t('videoSettings.rotation')}</label>
+            <select
+              value={settings.rotation}
+              onChange={(e) => setSettings({ ...settings, rotation: e.target.value as any })}
+              style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
+            >
+              <option value="none">{t('videoSettings.rotationOptions.none')}</option>
+              <option value="90">{t('videoSettings.rotationOptions.deg90')}</option>
+              <option value="180">{t('videoSettings.rotationOptions.deg180')}</option>
+              <option value="270">{t('videoSettings.rotationOptions.deg270')}</option>
+            </select>
+          </div>
+
+          <div className="setting-group flex-1">
+            <label>{t('videoSettings.flip')}</label>
+            <select
+              value={settings.flip}
+              onChange={(e) => setSettings({ ...settings, flip: e.target.value as any })}
+              style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
+            >
+              <option value="none">{t('videoSettings.flipOptions.none')}</option>
+              <option value="horizontal">{t('videoSettings.flipOptions.horizontal')}</option>
+              <option value="vertical">{t('videoSettings.flipOptions.vertical')}</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="filters-section">
+          <h3>{t('videoSettings.filters')}</h3>
+          <div className="filters-grid">
+            {settings.filters.map(filter => (
+              <label key={filter.name} className="filter-checkbox">
+                <input
+                  type="checkbox"
+                  checked={filter.enabled}
+                  onChange={() => handleFilterToggle(filter.name)}
+                />
+                <span>{t(`videoSettings.filterNames.${filter.name}`)}</span>
+              </label>
+            ))}
+          </div>
         </div>
       </div>
 
       <div className="settings-footer" style={{ borderColor: theme.colors.border }}>
-        <button style={{ background: theme.colors.primary, color: '#fff' }}>
-          {t('buttons.apply')}
-        </button>
-        <button style={{ background: theme.colors.secondary, color: '#fff' }}>
-          {t('buttons.reset')}
+        <button onClick={onBack} style={{ background: theme.colors.secondary, color: '#fff' }}>
+          {t('buttons.close')}
         </button>
       </div>
     </div>

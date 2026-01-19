@@ -12,11 +12,41 @@ export interface VideoSettings {
   codec: string;
   bitrate: string;
   fps: string;
+  fpsAuto: boolean;           // Auto-detect FPS from metadata
   resolution: string;
+  aspectRatio: string;        // 16:9, 4:3, 21:9, etc.
   crf: string;
-  aspectRatio: string;
   preset: string;
+  speed: number;              // 0.25 to 2.0 (slow to fast)
+  rotation: 'none' | '90' | '180' | '270';
+  flip: 'none' | 'horizontal' | 'vertical';
+  filters: VideoFilter[];     // Array of enabled filters
 }
+
+export interface VideoFilter {
+  name: string;
+  enabled: boolean;
+  // Future: parameters for each filter
+}
+
+export const DEFAULT_VIDEO_SETTINGS: VideoSettings = {
+  codec: 'h264',
+  bitrate: '5',
+  fps: '30',
+  fpsAuto: false,
+  resolution: '1920x1080',
+  aspectRatio: '16:9',
+  crf: '23',
+  preset: 'medium',
+  speed: 1.0,
+  rotation: 'none',
+  flip: 'none',
+  filters: [
+    { name: 'deinterlace', enabled: false },
+    { name: 'denoise', enabled: false },
+    { name: 'sharpen', enabled: false },
+  ],
+};
 
 export interface AudioSettings {
   codec: string;
