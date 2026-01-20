@@ -46,7 +46,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
   selectedPresetName,
   setSelectedPresetName,
 }) => {
-  console.log('MainWindow render');
+  // console.log('MainWindow render');
   
   const { t } = useLanguage();
   const { theme } = useTheme();
@@ -69,9 +69,19 @@ const MainWindow: React.FC<MainWindowProps> = ({
     stop,
     // stopJob - available for individual job control if needed
     updateSettings,
+    renderMode,
+    gpuAvailable,
+    setRenderMode,
   } = useRenderQueue();
 
   const [showStats, setShowStats] = useState(false);
+
+  // Simple CPU/GPU toggle handler - switches between cpu and gpu modes
+  const handleToggleRenderMode = useCallback(() => {
+    if (!gpuAvailable) return; // Can't switch if GPU not available
+    const newMode = renderMode === 'gpu' ? 'cpu' : 'gpu';
+    setRenderMode(newMode);
+  }, [renderMode, gpuAvailable, setRenderMode]);
 
   const closeStats = useCallback(() => setShowStats(false), []);
 
@@ -163,21 +173,18 @@ const MainWindow: React.FC<MainWindowProps> = ({
     clearCompleted();
   };
 
-  // Get status display text and color
+  // Get status display text, color and icon
   const getStatusDisplay = (job: RenderJob) => {
-    const statusColors: Record<string, string> = {
-      pending: theme.colors.textSecondary,
-      processing: theme.colors.primary,
-      completed: theme.colors.success,
-      error: theme.colors.error,
-      paused: theme.colors.warning,
-      stopped: theme.colors.textSecondary,
+    const statusConfig: Record<string, { text: string; color: string; icon: string }> = {
+      pending: { text: 'Ожидание', color: theme.colors.textSecondary, icon: '⏳' },
+      processing: { text: 'Рендеринг', color: theme.colors.primary, icon: '🔄' },
+      completed: { text: 'Готово', color: theme.colors.success, icon: '✓' },
+      error: { text: 'Ошибка', color: theme.colors.error, icon: '✗' },
+      paused: { text: 'Пауза', color: theme.colors.warning, icon: '⏸' },
+      stopped: { text: 'Остановлено', color: theme.colors.warning, icon: '■' },
     };
     
-    return {
-      text: job.status,
-      color: statusColors[job.status] || theme.colors.textSecondary,
-    };
+    return statusConfig[job.status] || statusConfig.pending;
   };
 
   const handleApplyPreset = (preset: AppPreset) => {
@@ -254,6 +261,50 @@ const MainWindow: React.FC<MainWindowProps> = ({
             <label htmlFor="saveInSource" style={{ color: theme.colors.text, cursor: 'pointer' }}>
               {t('main.saveInSourceDirectory')}
             </label>
+
+            {/* CPU/GPU Toggle - single segmented button */}
+            <div style={{ 
+              display: 'flex', 
+              border: `1px solid ${theme.colors.border}`,
+              borderRadius: '4px',
+              overflow: 'hidden',
+              marginLeft: '16px'
+            }}>
+              <button
+                onClick={handleToggleRenderMode}
+                style={{
+                  background: renderMode === 'cpu' || renderMode === 'duo' ? theme.colors.primary : theme.colors.surface,
+                  color: renderMode === 'cpu' || renderMode === 'duo' ? '#fff' : theme.colors.text,
+                  border: 'none',
+                  padding: '4px 10px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  fontWeight: renderMode === 'cpu' ? 'bold' : 'normal',
+                  fontSize: '0.85rem'
+                }}
+              >
+                CPU
+              </button>
+              <button
+                onClick={handleToggleRenderMode}
+                disabled={!gpuAvailable}
+                title={!gpuAvailable ? 'GPU недоступен — проверьте совместимость в настройках' : ''}
+                style={{
+                  background: renderMode === 'gpu' ? theme.colors.primary : theme.colors.surface,
+                  color: renderMode === 'gpu' ? '#fff' : theme.colors.text,
+                  border: 'none',
+                  borderLeft: `1px solid ${theme.colors.border}`,
+                  padding: '4px 10px',
+                  cursor: gpuAvailable ? 'pointer' : 'not-allowed',
+                  opacity: gpuAvailable ? 1 : 0.5,
+                  transition: 'all 0.2s',
+                  fontWeight: renderMode === 'gpu' ? 'bold' : 'normal',
+                  fontSize: '0.85rem'
+                }}
+              >
+                GPU
+              </button>
+            </div>
           </div>
           
         </div>
@@ -296,29 +347,83 @@ const MainWindow: React.FC<MainWindowProps> = ({
                   <div key={item.id} className="queue-item" style={{ borderColor: theme.colors.border }}>
                     <div className="item-info">
                       <div className="item-main-info" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span className="item-name" title={item.inputPath}>{item.fileName}</span>
-                        <div className="item-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                          {/* Status badge with icon */}
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            fontSize: '0.75rem',
+                            fontWeight: 'bold',
+                            background: `${statusDisplay.color}20`,
+                            color: statusDisplay.color,
+                            whiteSpace: 'nowrap'
+                          }}>
+                            <span>{statusDisplay.icon}</span>
+                            <span>{statusDisplay.text}</span>
+                          </span>
+                          {/* CPU/GPU slot badge */}
+                          {item.assignedSlot && item.status !== 'pending' && (
+                            <span style={{
+                              background: item.assignedSlot === 'gpu' ? theme.colors.success : theme.colors.primary,
+                              color: '#fff',
+                              padding: '3px 6px',
+                              borderRadius: '4px',
+                              fontSize: '0.7rem',
+                              fontWeight: 'bold'
+                            }}>
+                              {item.assignedSlot.toUpperCase()}
+                            </span>
+                          )}
+                          {/* File name */}
+                          <span className="item-name" title={item.inputPath} style={{ 
+                            overflow: 'hidden', 
+                            textOverflow: 'ellipsis', 
+                            whiteSpace: 'nowrap',
+                            flex: 1
+                          }}>
+                            {item.fileName}
+                          </span>
+                        </div>
+                        <div className="item-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center', marginLeft: '8px' }}>
+                          {/* FPS and speed for processing */}
                           {item.status === 'processing' && (
-                            <span className="item-details" style={{ fontSize: '0.8rem', color: theme.colors.textSecondary }}>
+                            <span style={{ fontSize: '0.8rem', color: theme.colors.textSecondary, whiteSpace: 'nowrap' }}>
                               {item.fps > 0 && `${item.fps.toFixed(1)} fps`}
                               {item.speed > 0 && ` • ${item.speed.toFixed(2)}x`}
                             </span>
                           )}
-                          <span className="item-status" style={{ color: statusDisplay.color }}>
-                            {statusDisplay.text}
-                          </span>
-                          {(item.status === 'pending' || item.status === 'completed' || item.status === 'error') && (
+  
+                          {/* Delete button - larger and more visible */}
+                          {(item.status === 'pending' || item.status === 'completed' || item.status === 'error' || item.status === 'stopped') && (
                             <button
                               onClick={() => handleRemoveJob(item.id)}
                               style={{
-                                background: 'transparent',
-                                border: 'none',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '28px',
+                                height: '28px',
+                                background: `${theme.colors.error}15`,
+                                border: `1px solid ${theme.colors.error}40`,
+                                borderRadius: '6px',
                                 color: theme.colors.error,
                                 cursor: 'pointer',
-                                padding: '2px 6px',
-                                fontSize: '1rem'
+                                fontSize: '1.2rem',
+                                fontWeight: 'bold',
+                                transition: 'all 0.15s ease'
                               }}
-                              title="Remove from queue"
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = `${theme.colors.error}30`;
+                                e.currentTarget.style.borderColor = theme.colors.error;
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = `${theme.colors.error}15`;
+                                e.currentTarget.style.borderColor = `${theme.colors.error}40`;
+                              }}
+                              title="Удалить из очереди"
                             >
                               ×
                             </button>
@@ -329,7 +434,10 @@ const MainWindow: React.FC<MainWindowProps> = ({
                         <div className="item-error" style={{ 
                           fontSize: '0.8rem', 
                           color: theme.colors.error,
-                          marginTop: '4px'
+                          marginTop: '4px',
+                          padding: '4px 8px',
+                          background: `${theme.colors.error}10`,
+                          borderRadius: '4px'
                         }}>
                           {item.error}
                         </div>
@@ -357,17 +465,27 @@ const MainWindow: React.FC<MainWindowProps> = ({
                           marginTop: '4px'
                         }}>
                           <span>{item.progress.toFixed(1)}%</span>
-                          <span>ETA: {item.etaFormatted}</span>
+                          <div style={{ display: 'flex', gap: '12px' }}>
+                            {item.outputSizeBytes > 0 && (
+                              <span style={{ fontFamily: 'monospace' }}>{item.outputSize}</span>
+                            )}
+                            <span>ETA: {item.etaFormatted}</span>
+                          </div>
                         </div>
                       </div>
                     )}
-                    {item.status === 'completed' && (
+                    {item.status === 'completed' && item.outputSizeBytes > 0 && (
                       <div className="completed-info" style={{ 
                         fontSize: '0.8rem', 
                         color: theme.colors.success,
-                        marginTop: '4px'
+                        marginTop: '4px',
+                        display: 'flex',
+                        gap: '8px'
                       }}>
-                        ✓ Completed
+                        <span>✓ Готово</span>
+                        <span style={{ color: theme.colors.textSecondary, fontFamily: 'monospace' }}>
+                          ({item.outputSize})
+                        </span>
                       </div>
                     )}
                   </div>

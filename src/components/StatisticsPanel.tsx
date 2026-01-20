@@ -29,7 +29,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
   } = useStatistics();
 
   const [showConfirmClear, setShowConfirmClear] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'completed' | 'error' | 'rendering'>('all');
+  const [filter, setFilter] = useState<'all' | 'completed' | 'error' | 'rendering' | 'stopped'>('all');
 
   // Filter renders
   const filteredRenders = renders.filter(r => {
@@ -45,6 +45,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
       completed: { text: t('stats.completed') || 'Completed', color: theme.colors.success, icon: '✓' },
       error: { text: t('stats.error') || 'Error', color: theme.colors.error, icon: '✗' },
       cancelled: { text: t('stats.cancelled') || 'Cancelled', color: theme.colors.textSecondary, icon: '⊘' },
+      stopped: { text: t('stats.stopped') || 'Stopped', color: theme.colors.warning, icon: '■' },
     };
     return statusMap[record.status] || statusMap.pending;
   };
@@ -124,6 +125,14 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
           </span>
         </div>
         <div className="stat-card">
+          <span className="stat-value" style={{ color: theme.colors.warning }}>
+            {aggregateStats.stopped}
+          </span>
+          <span className="stat-label" style={{ color: theme.colors.textSecondary }}>
+            {t('stats.stopped') || 'Stopped'}
+          </span>
+        </div>
+        <div className="stat-card">
           <span className="stat-value">
             {aggregateStats.successRate.toFixed(0)}%
           </span>
@@ -191,7 +200,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
       {/* Toolbar */}
       <div className="stats-toolbar" style={{ borderColor: theme.colors.border }}>
         <div className="filter-buttons">
-          {(['all', 'completed', 'error', 'rendering'] as const).map(f => (
+          {(['all', 'completed', 'error', 'rendering', 'stopped'] as const).map(f => (
             <button
               key={f}
               onClick={() => setFilter(f)}

@@ -17,6 +17,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
   const [themeName, setThemeName] = useState('light');
   const [language, setLanguage] = useState('ru');
   const [outputSuffix, setOutputSuffix] = useState('_szhatoe');
+  const [gpuAvailable, setGpuAvailable] = useState<boolean>(false);
   const [showFfmpegManager, setShowFfmpegManager] = useState(false);
 
   useEffect(() => {
@@ -29,6 +30,16 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
       setThemeName(settings.theme);
       setLanguage(settings.language);
       setOutputSuffix(settings.output_suffix);
+      setGpuAvailable(!!settings.gpuAvailable);
+      // First run GPU check if key missing
+      if (settings.gpuAvailable === undefined) {
+        try {
+          const available = await invoke<boolean>('check_gpu_compatibility');
+          setGpuAvailable(!!available);
+        } catch (e) {
+          console.warn('GPU check failed:', e);
+        }
+      }
     } catch (error) {
       console.error('Failed to load settings:', error);
     }
@@ -113,6 +124,31 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
             <FfmpegManager />
           </div>
         )}
+
+        <div className="setting-group">
+          <label>GPU (NVENC)</label>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              onClick={async () => {
+                try {
+                  const available = await invoke<boolean>('check_gpu_compatibility');
+                  setGpuAvailable(!!available);
+                  await invoke('write_log', { message: `GPU NVENC available: ${available}` });
+                  alert(available ? 'GPU совместим (NVENC найден)' : 'GPU не найден или NVENC недоступен');
+                } catch (e) {
+                  console.error('GPU check error', e);
+                  alert('Ошибка проверки GPU');
+                }
+              }}
+              style={{ background: theme.colors.primary, color: '#fff', padding: '8px 16px', border: 'none', borderRadius: 4 }}
+            >
+              Проверить совместимость GPU
+            </button>
+            <span style={{ color: gpuAvailable ? theme.colors.success : theme.colors.error }}>
+              {gpuAvailable ? 'Доступен (NVENC)' : 'Недоступен'}
+            </span>
+          </div>
+        </div>
 
         <div className="setting-group">
           <label>{t('app.version')}</label>

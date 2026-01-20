@@ -40,7 +40,7 @@ export const FFmpegManagerTest: React.FC = () => {
 
     // Subscribe to events
     const handleEvent = (event: FFmpegEvent) => {
-      addLog(`[${event.type.toUpperCase()}] Job: ${event.jobId}`);
+      // addLog(`[${event.type.toUpperCase()}] Job: ${event.jobId}`);
 
       setState(prev => {
         const newState = { ...prev };
@@ -68,23 +68,23 @@ export const FFmpegManagerTest: React.FC = () => {
             newState.isRunning = false;
             newState.progress = 100;
             newState.currentJobId = null;
-            addLog('✅ Job completed successfully');
+            // addLog('✅ Job completed successfully');
             break;
 
           case 'error':
             newState.isRunning = false;
             newState.currentJobId = null;
-            addLog(`❌ Error: ${event.error}`);
+            // addLog(`❌ Error: ${event.error}`);
             break;
 
           case 'pause':
             newState.isPaused = true;
-            addLog('⏸ Job paused');
+            // addLog('⏸ Job paused');
             break;
 
           case 'resume':
             newState.isPaused = false;
-            addLog('▶ Job resumed');
+            // addLog('▶ Job resumed');
             break;
         }
 

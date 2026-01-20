@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import MainWindow from './pages/MainWindow';
+import RenderService from './services/RenderService';
 import VideoSettings from './pages/VideoSettings';
 import AudioSettings from './pages/AudioSettings';
 import GeneralSettings from './pages/GeneralSettings';
@@ -41,6 +42,38 @@ function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentScreen]);
+
+  // Load GPU availability and render mode on startup
+  useEffect(() => {
+    const loadGpuSettings = async () => {
+      try {
+        const settings = await invoke<any>('load_settings');
+        
+        // Set GPU availability in RenderService
+        if (settings.gpuAvailable !== undefined) {
+          RenderService.setGpuAvailability(!!settings.gpuAvailable);
+        } else {
+          // First run: check GPU compatibility
+          try {
+            const available = await invoke<boolean>('check_gpu_compatibility');
+            RenderService.setGpuAvailability(!!available);
+          } catch (e) {
+            console.warn('GPU check failed:', e);
+            RenderService.setGpuAvailability(false);
+          }
+        }
+        
+        // Set render mode in RenderService
+        if (settings.renderMode) {
+          RenderService.setRenderMode(settings.renderMode as 'cpu' | 'gpu' | 'duo');
+        }
+      } catch (error) {
+        console.error('Failed to load GPU settings:', error);
+      }
+    };
+
+    loadGpuSettings();
+  }, []);
 
   // Apply default preset on startup (if exists)
   useEffect(() => {

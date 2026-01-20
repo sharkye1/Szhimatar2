@@ -18,6 +18,7 @@ import type {
   MainScreenSettings,
 } from '../types';
 import StatisticsService from './StatisticsService';
+import RenderScheduler, { RenderMode, RenderSlot } from './RenderScheduler';
 
 // ============================================================================
 // Types
@@ -43,6 +44,9 @@ export interface RenderJob {
   speed: number;
   bitrate: string;
   frame: number;
+  outputSize: string; // Current output file size (e.g., "12.5 MB")
+  outputSizeBytes: number; // Size in bytes for calculations
+  assignedSlot?: 'cpu' | 'gpu'; // Which slot was used for this render
 }
 
 export interface RenderProgress {
@@ -69,8 +73,8 @@ export interface RenderQueueState {
   isProcessing: boolean;
   isPaused: boolean;
   currentJobId: string | null;
-  parallelMode: boolean;
-  maxParallelJobs: number;
+  renderMode: RenderMode;
+  gpuAvailable: boolean;
 }
 
 export type RenderEventCallback = (jobs: RenderJob[]) => void;
@@ -83,15 +87,18 @@ export class FFmpegCommandBuilder {
   private videoSettings: VideoSettings;
   private audioSettings: AudioSettings;
   private watermarkSettings?: WatermarkSettings;
+  private preferGpu: boolean;
 
   constructor(
     videoSettings: VideoSettings,
     audioSettings: AudioSettings,
-    watermarkSettings?: WatermarkSettings
+    watermarkSettings?: WatermarkSettings,
+    preferGpu: boolean = false
   ) {
     this.videoSettings = videoSettings;
     this.audioSettings = audioSettings;
     this.watermarkSettings = watermarkSettings;
+    this.preferGpu = preferGpu;
   }
 
   /**
@@ -108,7 +115,7 @@ export class FFmpegCommandBuilder {
     if (this.videoSettings.codec === 'copy') {
       args.push('-c:v', 'copy');
     } else {
-      // Map codec names to FFmpeg encoders
+      // Map codec names to FFmpeg encoders (CPU)
       const codecMap: Record<string, string> = {
         'h264': 'libx264',
         'h265': 'libx265',
@@ -119,8 +126,22 @@ export class FFmpegCommandBuilder {
         'mpeg4': 'mpeg4',
         'prores': 'prores_ks',
       };
-      
-      const encoder = codecMap[this.videoSettings.codec] || this.videoSettings.codec;
+
+      // GPU (NVENC) encoders for supported codecs
+      const gpuCodecMap: Record<string, string> = {
+        'h264': 'h264_nvenc',
+        'h265': 'hevc_nvenc',
+        'hevc': 'hevc_nvenc',
+      };
+
+      const encoder = this.preferGpu
+        ? (gpuCodecMap[this.videoSettings.codec] || '')
+        : (codecMap[this.videoSettings.codec] || this.videoSettings.codec);
+
+      if (this.preferGpu && !encoder) {
+        throw new Error(`GPU mode is not supported for codec ${this.videoSettings.codec}`);
+      }
+
       args.push('-c:v', encoder);
 
       // Bitrate (clamp to valid range 0.1 - 100 Mbps)
@@ -459,17 +480,18 @@ export class FFmpegCommandBuilder {
 
 class RenderServiceImpl {
   private jobs: Map<string, RenderJob> = new Map();
-  private queue: string[] = []; // Job IDs in order
   private isProcessing: boolean = false;
   private isPaused: boolean = false;
   private currentJobId: string | null = null;
-  private parallelMode: boolean = false;
-  private maxParallelJobs: number = 1;
+  private scheduler: RenderScheduler = new RenderScheduler();
+  private renderMode: RenderMode = 'cpu';
+  private gpuAvailable: boolean = false;
   private activeJobs: Set<string> = new Set();
   private listeners: Set<RenderEventCallback> = new Set();
   private unlistenProgress: UnlistenFn | null = null;
   private unlistenComplete: UnlistenFn | null = null;
   private unlistenError: UnlistenFn | null = null;
+  private unlistenStopped: UnlistenFn | null = null;
 
   // Current settings
   private videoSettings: VideoSettings | null = null;
@@ -502,6 +524,14 @@ class RenderServiceImpl {
       this.unlistenError = await listen<{ job_id: string; error: string }>('render-error', (event) => {
         this.handleJobError(event.payload.job_id, event.payload.error);
       });
+
+      // Listen for stop events (new)
+      const unlistenStop = await listen<{ job_id: string; stopped_by: string }>('render-stopped', (event) => {
+        this.handleJobStopped(event.payload.job_id, event.payload.stopped_by);
+      });
+      
+      // Store for cleanup
+      this.unlistenStopped = unlistenStop;
     } catch (error) {
       console.error('[RenderService] Failed to setup event listeners:', error);
     }
@@ -519,6 +549,9 @@ class RenderServiceImpl {
     }
     if (this.unlistenError) {
       this.unlistenError();
+    }
+    if (this.unlistenStopped) {
+      this.unlistenStopped();
     }
   }
 
@@ -551,11 +584,55 @@ class RenderServiceImpl {
   }
 
   /**
-   * Set parallel processing mode
+   * Set render mode (cpu | gpu | duo)
+   * This is the single source of truth for render mode.
+   * Atomically updates state, scheduler, persists to settings, and notifies UI.
    */
-  public setParallelMode(enabled: boolean, maxJobs: number = 2): void {
-    this.parallelMode = enabled;
-    this.maxParallelJobs = maxJobs;
+  public setRenderMode(mode: RenderMode): void {
+    // If GPU requested but unavailable, fallback to CPU
+    const wantsGpu = mode !== 'cpu';
+    const effectiveMode: RenderMode = wantsGpu && !this.gpuAvailable ? 'cpu' : mode;
+    
+    // Only update if actually changed
+    if (this.renderMode === effectiveMode) return;
+    
+    this.renderMode = effectiveMode;
+    this.scheduler.setMode(effectiveMode);
+    
+    console.log('[RenderService] Render mode set to:', effectiveMode, '(requested:', mode, ', gpuAvailable:', this.gpuAvailable, ')');
+    
+    // Notify UI subscribers immediately
+    this.notifyListeners();
+    
+    // Save to settings (async, don't block)
+    invoke('save_render_mode', { mode: effectiveMode }).catch(err => {
+      console.error('[RenderService] Failed to save render mode:', err);
+    });
+  }
+
+  /**
+   * Update GPU availability (from settings check)
+   * Atomically updates state, scheduler, and notifies UI.
+   * If GPU becomes unavailable, forces CPU mode.
+   */
+  public setGpuAvailability(available: boolean): void {
+    // Only update if actually changed
+    if (this.gpuAvailable === available) return;
+    
+    this.gpuAvailable = available;
+    this.scheduler.setGpuAvailable(available);
+    
+    console.log('[RenderService] GPU availability set to:', available);
+    
+    // If GPU just became unavailable and we're in GPU/duo mode, force CPU
+    if (!available && this.renderMode !== 'cpu') {
+      this.renderMode = 'cpu';
+      this.scheduler.setMode('cpu');
+      console.log('[RenderService] GPU unavailable, forced CPU mode');
+    }
+    
+    // Notify UI subscribers immediately
+    this.notifyListeners();
   }
 
   /**
@@ -632,10 +709,12 @@ class RenderServiceImpl {
         speed: 0,
         bitrate: '',
         frame: 0,
+        outputSize: '—',
+        outputSizeBytes: 0,
       };
 
       this.jobs.set(jobId, job);
-      this.queue.push(jobId);
+      this.scheduler.enqueue(jobId);
       newJobs.push(job);
     }
 
@@ -656,7 +735,7 @@ class RenderServiceImpl {
     }
 
     this.jobs.delete(jobId);
-    this.queue = this.queue.filter(id => id !== jobId);
+    this.scheduler.remove(jobId);
     this.notifyListeners();
     return true;
   }
@@ -675,7 +754,7 @@ class RenderServiceImpl {
 
     toRemove.forEach(id => {
       this.jobs.delete(id);
-      this.queue = this.queue.filter(qid => qid !== id);
+      this.scheduler.remove(id);
     });
 
     this.notifyListeners();
@@ -697,51 +776,50 @@ class RenderServiceImpl {
     this.isProcessing = true;
     this.isPaused = false;
     this.notifyListeners();
-
-    await this.processNextJob();
+    this.dispatch();
   }
 
   /**
-   * Process next job in queue
+   * Dispatch jobs to free slots deterministically (FIFO)
    */
-  private async processNextJob(): Promise<void> {
-    if (this.isPaused || !this.isProcessing) {
-      return;
-    }
+  private dispatch(): void {
+    if (this.isPaused || !this.isProcessing) return;
 
-    // Find next pending job
-    const nextJobId = this.queue.find(id => {
-      const job = this.jobs.get(id);
-      return job && job.status === 'pending';
+    const planned = this.scheduler.planNext((jobId) => {
+      const job = this.jobs.get(jobId);
+      return !!job && job.status === 'pending';
     });
 
-    if (!nextJobId) {
-      // No more jobs
-      this.isProcessing = false;
-      this.currentJobId = null;
-      console.log('[RenderService] Queue completed');
-      this.notifyListeners();
-      return;
+    for (const target of planned) {
+      this.scheduler.occupy(target.jobId, target.slot);
+      void this.startJob(target.jobId, target.slot);
     }
 
-    // Check parallel limit
-    if (this.parallelMode && this.activeJobs.size >= this.maxParallelJobs) {
-      return;
+    // If nothing planned and no active jobs, mark processing complete
+    if (planned.length === 0 && this.activeJobs.size === 0) {
+      const pendingExists = this.scheduler.getQueue().some(id => {
+        const job = this.jobs.get(id);
+        return job && job.status === 'pending';
+      });
+      if (!pendingExists) {
+        this.isProcessing = false;
+        this.currentJobId = null;
+        this.notifyListeners();
+      }
     }
-
-    await this.startJob(nextJobId);
   }
 
   /**
    * Start a specific job
    */
-  private async startJob(jobId: string): Promise<void> {
+  private async startJob(jobId: string, slot: RenderSlot): Promise<void> {
     const job = this.jobs.get(jobId);
     if (!job) return;
 
     // Update job status
     job.status = 'processing';
     job.startTime = Date.now();
+    job.assignedSlot = slot; // Save which slot is used
     this.currentJobId = jobId;
     this.activeJobs.add(jobId);
     this.notifyListeners();
@@ -776,10 +854,12 @@ class RenderServiceImpl {
 
     try {
       // Build FFmpeg arguments
+      const preferGpu = slot === 'gpu' && this.gpuAvailable;
       const builder = new FFmpegCommandBuilder(
         this.videoSettings!,
         this.audioSettings!,
-        this.watermarkSettings
+        this.watermarkSettings,
+        preferGpu
       );
 
       // Validate settings
@@ -847,8 +927,56 @@ class RenderServiceImpl {
     job.speed = progress.speed;
     job.bitrate = progress.bitrate;
     job.frame = progress.frame;
+    
+    // Parse output file size from FFmpeg (e.g., "1024kB", "512KiB", "1.5MB")
+    if (progress.total_size) {
+      const parsed = this.parseFileSize(progress.total_size);
+      job.outputSizeBytes = parsed.bytes;
+      job.outputSize = parsed.formatted;
+    }
 
     this.notifyListeners();
+  }
+
+  /**
+   * Parse FFmpeg size string to bytes and formatted MB string
+   */
+  private parseFileSize(sizeStr: string): { bytes: number; formatted: string } {
+    const str = sizeStr.trim().toLowerCase();
+    let bytes = 0;
+    
+    // Match patterns like "1024kB", "512KiB", "1.5MB", "256mib"
+    const match = str.match(/^([\d.]+)\s*(kib|kb|mib|mb|gib|gb|b)?$/i);
+    if (match) {
+      const value = parseFloat(match[1]);
+      const unit = (match[2] || 'b').toLowerCase();
+      
+      switch (unit) {
+        case 'b':
+          bytes = value;
+          break;
+        case 'kb':
+        case 'kib':
+          bytes = value * 1024;
+          break;
+        case 'mb':
+        case 'mib':
+          bytes = value * 1024 * 1024;
+          break;
+        case 'gb':
+        case 'gib':
+          bytes = value * 1024 * 1024 * 1024;
+          break;
+      }
+    }
+    
+    // Format to MB with 1 decimal
+    const mb = bytes / (1024 * 1024);
+    const formatted = mb >= 1000 
+      ? `${(mb / 1024).toFixed(2)} GB` 
+      : `${mb.toFixed(1)} MB`;
+    
+    return { bytes, formatted };
   }
 
   /**
@@ -864,6 +992,11 @@ class RenderServiceImpl {
     job.etaFormatted = '00:00:00';
     job.endTime = Date.now();
     this.activeJobs.delete(jobId);
+    this.scheduler.release(jobId);
+
+    if (this.activeJobs.size === 0) {
+      this.currentJobId = null;
+    }
 
     console.log('[RenderService] Job completed:', jobId);
 
@@ -872,42 +1005,82 @@ class RenderServiceImpl {
       jobId,
       message: `Render completed successfully. Duration: ${((job.endTime! - job.startTime!) / 1000).toFixed(1)}s`
     });
-
     this.notifyListeners();
+    
 
-    // Process next job
+    // Process next job(s)
     if (this.isProcessing && !this.isPaused) {
-      this.processNextJob();
+      this.dispatch();
     }
-  }
+    }
+    
+    /**
+     * Handle job stopped by user
+     */
+    private handleJobStopped(jobId: string, stoppedBy: string): void {
+      const job = this.jobs.get(jobId);
+      if (!job) return;
+
+      // Only update if still processing
+      if (job.status === 'processing') {
+        job.status = 'stopped';
+        job.endTime = Date.now();
+        this.activeJobs.delete(jobId);
+        this.scheduler.release(jobId);
+        this.currentJobId = null;
+        this.isProcessing = false; // stop queue advancement
+
+        console.log('[RenderService] Job stopped:', jobId, `by ${stoppedBy}`);
+
+        // Log stop
+        invoke('write_render_log', {
+          jobId,
+          message: `Render stopped by ${stoppedBy}. Duration: ${((job.endTime! - job.startTime!) / 1000).toFixed(1)}s`
+        });
+
+        // Update statistics - mark as stopped, NOT as error
+        StatisticsService.markRenderStopped(jobId);
+
+        this.notifyListeners();
+
+        // DO NOT continue queue - wait for manual start
+        console.log('[RenderService] Queue paused after stop');
+      }
+    }
+  
 
   /**
    * Handle job error
    */
-  private handleJobError(jobId: string, error: string): void {
-    const job = this.jobs.get(jobId);
-    if (!job) return;
+    private handleJobError(jobId: string, error: string): void {
+        const job = this.jobs.get(jobId);
+        if (!job) return;
 
-    job.status = 'error';
-    job.error = error;
-    job.endTime = Date.now();
-    this.activeJobs.delete(jobId);
+        job.status = 'error';
+        job.error = error;
+        job.endTime = Date.now();
+        this.activeJobs.delete(jobId);
+        this.scheduler.release(jobId);
 
-    console.error('[RenderService] Job error:', jobId, error);
+        if (this.activeJobs.size === 0) {
+          this.currentJobId = null;
+        }
 
-    // Log error
-    invoke('write_render_log', {
-      jobId,
-      message: `Render failed: ${error}`
-    });
+        console.error('[RenderService] Job error:', jobId, error);
 
+        // Log error
+        invoke('write_render_log', {
+        jobId,
+        message: `Render failed: ${error}`
+        });
+    
     this.notifyListeners();
-
+    
     // Continue with next job (don't stop queue on error)
     if (this.isProcessing && !this.isPaused) {
-      this.processNextJob();
+      this.dispatch();
     }
-  }
+    }
 
   /**
    * Format FFmpeg error messages for user display
@@ -1031,7 +1204,7 @@ class RenderServiceImpl {
     console.log('[RenderService] Resumed');
 
     // Continue processing
-    await this.processNextJob();
+    this.dispatch();
   }
 
   /**
@@ -1040,6 +1213,7 @@ class RenderServiceImpl {
   public async stop(): Promise<void> {
     this.isProcessing = false;
     this.isPaused = false;
+    this.scheduler.resetSlots();
 
     // Stop all active jobs
     try {
@@ -1063,7 +1237,7 @@ class RenderServiceImpl {
   }
 
   /**
-   * Stop specific job
+   * Stop specific job (current render)
    */
   public async stopJob(jobId: string): Promise<boolean> {
     const job = this.jobs.get(jobId);
@@ -1072,8 +1246,14 @@ class RenderServiceImpl {
     if (job.status === 'processing') {
       try {
         await invoke('stop_ffmpeg_render', { jobId });
+
+        // Local state updates; render-stopped event will also adjust
         job.status = 'stopped';
         this.activeJobs.delete(jobId);
+        this.scheduler.release(jobId);
+        this.currentJobId = null;
+        this.isProcessing = false;
+
         this.notifyListeners();
         return true;
       } catch (error) {
@@ -1084,6 +1264,9 @@ class RenderServiceImpl {
 
     return false;
   }
+
+
+
 
   /**
    * Format ETA in HH:MM:SS
@@ -1105,23 +1288,60 @@ class RenderServiceImpl {
    */
   public getState(): RenderQueueState {
     return {
-      jobs: Array.from(this.jobs.values()),
+      jobs: this.getJobs(),
       isProcessing: this.isProcessing,
       isPaused: this.isPaused,
       currentJobId: this.currentJobId,
-      parallelMode: this.parallelMode,
-      maxParallelJobs: this.maxParallelJobs,
+      renderMode: this.renderMode,
+      gpuAvailable: this.gpuAvailable,
     };
   }
 
   /**
-   * Get all jobs
+   * Get current render mode
+   */
+  public getRenderMode(): RenderMode {
+    return this.renderMode;
+  }
+
+  /**
+   * Get GPU availability
+   */
+  public getGpuAvailable(): boolean {
+    return this.gpuAvailable;
+  }
+
+  /**
+   * Get all jobs (from the jobs Map, not just the queue)
+   * Returns all jobs in a consistent order: processing first, then pending (queue order), then completed/error
    */
   public getJobs(): RenderJob[] {
-    // Return in queue order
-    return this.queue
-      .map(id => this.jobs.get(id))
-      .filter((job): job is RenderJob => job !== undefined);
+    const allJobs = Array.from(this.jobs.values());
+    
+    // Sort: processing jobs first, then pending in queue order, then completed/error
+    const processing: RenderJob[] = [];
+    const pending: RenderJob[] = [];
+    const finished: RenderJob[] = [];
+    
+    for (const job of allJobs) {
+      if (job.status === 'processing' || job.status === 'paused') {
+        processing.push(job);
+      } else if (job.status === 'pending') {
+        pending.push(job);
+      } else {
+        finished.push(job);
+      }
+    }
+    
+    // Sort pending by queue order
+    const queueOrder = this.scheduler.getQueue();
+    pending.sort((a, b) => {
+      const aIdx = queueOrder.indexOf(a.id);
+      const bIdx = queueOrder.indexOf(b.id);
+      return aIdx - bIdx;
+    });
+    
+    return [...processing, ...pending, ...finished];
   }
 }
 

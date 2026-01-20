@@ -16,7 +16,7 @@ import type { RenderProgress } from './RenderService';
 // Types
 // ============================================================================
 
-export type RenderStatus = 'pending' | 'rendering' | 'completed' | 'error' | 'cancelled';
+export type RenderStatus = 'pending' | 'rendering' | 'completed' | 'error' | 'cancelled' | 'stopped';
 
 export interface VideoStatsSettings {
   codec: string;
@@ -62,6 +62,7 @@ export interface Statistics {
   totalRenders: number;
   totalSuccessful: number;
   totalFailed: number;
+  totalStopped: number;
   totalRenderTime: number;  // Total seconds spent rendering
   lastUpdated: string;      // ISO timestamp
 }
@@ -78,6 +79,7 @@ class StatisticsServiceImpl {
     totalRenders: 0,
     totalSuccessful: 0,
     totalFailed: 0,
+    totalStopped: 0,
     totalRenderTime: 0,
     lastUpdated: new Date().toISOString(),
   };
@@ -86,6 +88,7 @@ class StatisticsServiceImpl {
   private unlistenProgress: UnlistenFn | null = null;
   private unlistenComplete: UnlistenFn | null = null;
   private unlistenError: UnlistenFn | null = null;
+  private unlistenStopped: UnlistenFn | null = null;
   private saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
@@ -117,6 +120,11 @@ class StatisticsServiceImpl {
       this.unlistenError = await listen<{ job_id: string; error: string }>('render-error', (event) => {
         this.markRenderError(event.payload.job_id, event.payload.error);
       });
+
+      // Listen for stopped renders
+      this.unlistenStopped = await listen<{ job_id: string; stopped_by: string }>('render-stopped', (event) => {
+        this.markRenderStopped(event.payload.job_id);
+      });
     } catch (error) {
       console.error('[StatisticsService] Failed to setup event listeners:', error);
     }
@@ -129,6 +137,7 @@ class StatisticsServiceImpl {
     if (this.unlistenProgress) this.unlistenProgress();
     if (this.unlistenComplete) this.unlistenComplete();
     if (this.unlistenError) this.unlistenError();
+    if (this.unlistenStopped) this.unlistenStopped();
     
     // Save before cleanup
     await this.save();
@@ -156,6 +165,10 @@ class StatisticsServiceImpl {
     try {
       const jsonStr = await invoke<string>('load_statistics');
       this.stats = JSON.parse(jsonStr);
+      // Backfill new fields for older data
+      if (typeof (this.stats as any).totalStopped === 'undefined') {
+        (this.stats as any).totalStopped = 0;
+      }
       this.loaded = true;
       console.log('[StatisticsService] Loaded statistics:', this.stats.renders.length, 'renders');
       this.notifyListeners();
@@ -168,6 +181,7 @@ class StatisticsServiceImpl {
         totalRenders: 0,
         totalSuccessful: 0,
         totalFailed: 0,
+        totalStopped: 0,
         totalRenderTime: 0,
         lastUpdated: new Date().toISOString(),
       };
@@ -370,6 +384,30 @@ class StatisticsServiceImpl {
   }
 
   /**
+   * Mark render as stopped (user interrupted)
+   */
+  public markRenderStopped(id: string): void {
+    const record = this.stats.renders.find(r => r.id === id);
+    if (!record) return;
+
+    record.status = 'stopped';
+    record.completedAt = new Date().toISOString();
+
+    const startTime = new Date(record.createdAt).getTime();
+    record.renderTime = (Date.now() - startTime) / 1000;
+
+    // Keep last known progress/eta; ensure eta is zeroed for final state
+    record.eta = 0;
+    record.etaFormatted = '--:--:--';
+
+    // Increment stopped counter (do not affect failed/successful)
+    this.stats.totalStopped++;
+
+    this.notifyListeners();
+    this.save();
+  }
+
+  /**
    * Format ETA as HH:MM:SS
    */
   private formatETA(seconds: number): string {
@@ -431,6 +469,7 @@ class StatisticsServiceImpl {
     total: number;
     successful: number;
     failed: number;
+    stopped: number;
     successRate: number;
     avgRenderTime: number;
     avgSpeed: number;
@@ -452,6 +491,7 @@ class StatisticsServiceImpl {
       total,
       successful,
       failed: this.stats.totalFailed,
+      stopped: this.stats.totalStopped,
       successRate: total > 0 ? (successful / total) * 100 : 0,
       avgRenderTime,
       avgSpeed,
@@ -470,6 +510,7 @@ class StatisticsServiceImpl {
         totalRenders: 0,
         totalSuccessful: 0,
         totalFailed: 0,
+        totalStopped: 0,
         totalRenderTime: 0,
         lastUpdated: new Date().toISOString(),
       };

@@ -33,6 +33,7 @@ export interface UseStatisticsReturn {
     total: number;
     successful: number;
     failed: number;
+    stopped: number;
     successRate: number;
     avgRenderTime: number;
     avgSpeed: number;

@@ -2,56 +2,15 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::sync::{Arc, Mutex};
 use walkdir::WalkDir;
 
-// Global process manager for FFmpeg processes
-lazy_static::lazy_static! {
-    static ref PROCESS_MANAGER: Arc<Mutex<ProcessManager>> = Arc::new(Mutex::new(ProcessManager::new()));
-}
-
-struct ProcessManager {
-    processes: HashMap<String, std::process::Child>,
-}
-
-impl ProcessManager {
-    fn new() -> Self {
-        Self {
-            processes: HashMap::new(),
-        }
-    }
-
-    #[allow(dead_code)]
-    fn add_process(&mut self, job_id: String, process: std::process::Child) {
-        self.processes.insert(job_id, process);
-    }
-
-    #[allow(dead_code)]
-    fn remove_process(&mut self, job_id: &str) -> Option<std::process::Child> {
-        self.processes.remove(job_id)
-    }
-
-    fn kill_process(&mut self, job_id: &str) -> bool {
-        if let Some(mut process) = self.processes.remove(job_id) {
-            let _ = process.kill();
-            let _ = process.wait();
-            return true;
-        }
-        false
-    }
-
-    fn kill_all(&mut self) {
-        for (_, mut process) in self.processes.drain() {
-            let _ = process.kill();
-            let _ = process.wait();
-        }
-    }
-}
+// Process manager module
+mod process_manager;
+use process_manager::PROCESS_MANAGER;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Settings {
@@ -62,6 +21,10 @@ struct Settings {
     output_suffix: String,
     default_video_codec: String,
     default_audio_codec: String,
+    #[serde(rename = "gpuAvailable")]
+    gpu_available: bool,
+    #[serde(rename = "renderMode")]
+    render_mode: String,
 }
 
 impl Default for Settings {
@@ -74,6 +37,8 @@ impl Default for Settings {
             output_suffix: "_szhatoe".to_string(),
             default_video_codec: "h264".to_string(),
             default_audio_codec: "aac".to_string(),
+            gpu_available: false,
+            render_mode: "cpu".to_string(),
         }
     }
 }
@@ -120,6 +85,51 @@ fn save_settings(settings: Settings) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     
     fs::write(&settings_path, content).map_err(|e| e.to_string())
+}
+
+/// Check GPU (NVENC) compatibility and persist result in settings.json
+#[tauri::command]
+fn check_gpu_compatibility() -> Result<bool, String> {
+    let config = load_ffmpeg_config();
+    if config.ffmpeg_path.trim().is_empty() {
+        return Err("FFmpeg path not configured".to_string());
+    }
+
+    // Run `ffmpeg -hide_banner -encoders` and search for nvenc encoders
+    #[cfg(target_os = "windows")]
+    let output = {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        Command::new(&config.ffmpeg_path)
+            .creation_flags(CREATE_NO_WINDOW)
+            .args(["-hide_banner", "-encoders"])
+            .output()
+            .map_err(|e| format!("Failed to run ffmpeg: {}", e))?
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    let output = Command::new(&config.ffmpeg_path)
+        .args(["-hide_banner", "-encoders"])
+        .output()
+        .map_err(|e| format!("Failed to run ffmpeg: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_lowercase();
+    let gpu_available = stdout.contains("nvenc");
+
+    // Persist in settings
+    let mut settings = load_settings().unwrap_or_default();
+    settings.gpu_available = gpu_available;
+    let _ = save_settings(settings);
+
+    Ok(gpu_available)
+}
+
+/// Save render mode to settings
+#[tauri::command]
+fn save_render_mode(mode: String) -> Result<(), String> {
+    let mut settings = load_settings().unwrap_or_default();
+    settings.render_mode = mode;
+    save_settings(settings)
 }
 
 #[tauri::command]
@@ -721,35 +731,22 @@ async fn run_ffmpeg_render(
     );
     let _ = write_log(log_message);
 
-    // Build command with CREATE_NO_WINDOW flag on Windows
-    #[cfg(target_os = "windows")]
-    let mut cmd = {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        let mut cmd = Command::new(&config.ffmpeg_path);
-        cmd.creation_flags(CREATE_NO_WINDOW);
-        cmd
+    // Register process with ProcessManager and get owned child handle
+    let mut child = {
+        let mut manager = PROCESS_MANAGER.lock()
+            .map_err(|e| format!("Failed to lock ProcessManager: {}", e))?;
+
+        let (child, pid) = manager.spawn_render(
+            job.job_id.clone(),
+            config.ffmpeg_path.clone(),
+            job.input_path.clone(),
+            job.output_path.clone(),
+            job.ffmpeg_args.clone(),
+        ).map_err(|e| format!("Failed to spawn render: {}", e))?;
+
+        // eprintln!("📡 [run_ffmpeg_render] Process registered - Job: {}, PID: {}", job.job_id, pid);
+        child
     };
-
-    #[cfg(not(target_os = "windows"))]
-    let mut cmd = Command::new(&config.ffmpeg_path);
-
-    // Add arguments
-    cmd.arg("-y") // Overwrite output
-        .arg("-i")
-        .arg(&job.input_path)
-        .args(&job.ffmpeg_args)
-        .arg("-progress")
-        .arg("pipe:1")
-        .arg("-stats_period")
-        .arg("0.5")
-        .arg(&job.output_path)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-
-    // Start process
-    let mut child = cmd.spawn().map_err(|e| format!("Failed to start FFmpeg: {}", e))?;
 
     // Read stderr in a separate thread for progress
     let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
@@ -757,6 +754,7 @@ async fn run_ffmpeg_render(
     
     let job_id_stdout = job.job_id.clone();
     let job_id_stderr = job.job_id.clone();
+    let job_id_final = job.job_id.clone();
     let duration = job.duration_seconds;
     let window_stdout = window.clone();
     let window_stderr = window.clone();
@@ -877,9 +875,24 @@ async fn run_ffmpeg_render(
     // Wait for process to complete
     let status = child.wait().map_err(|e| format!("FFmpeg process error: {}", e))?;
 
+    // Check if this job was stopped by user
+    let was_stopped = {
+        let mut manager = PROCESS_MANAGER.lock()
+            .map_err(|e| format!("Failed to lock ProcessManager: {}", e))?;
+        manager.take_stopped(&job_id_final)
+    };
+
     // Wait for threads
     let _ = stdout_handle.join();
     let errors = stderr_handle.join().unwrap_or_default();
+
+    // Clean up process from manager
+    {
+        let mut manager = PROCESS_MANAGER.lock()
+            .map_err(|e| format!("Failed to lock ProcessManager: {}", e))?;
+        manager.remove_process(&job_id_final);
+        // eprintln!("🧹 [run_ffmpeg_render] Process cleaned up - Job: {}", job_id_final);
+    }
 
     // Log completion
     let log_message = format!(
@@ -889,7 +902,19 @@ async fn run_ffmpeg_render(
     );
     let _ = write_log(log_message);
 
-    if status.success() {
+    if was_stopped {
+        let _ = window_final.emit("render-stopped", &serde_json::json!({
+            "job_id": job.job_id,
+            "stopped_by": "user"
+        }));
+
+        Ok(RenderResult {
+            job_id: job.job_id,
+            success: false,
+            error: Some("stopped".to_string()),
+            output_path: job.output_path,
+        })
+    } else if status.success() {
         // Emit complete event
         let _ = window_final.emit("render-complete", &job.job_id);
         
@@ -921,18 +946,103 @@ async fn run_ffmpeg_render(
     }
 }
 
+/// Request to stop a rendering job
+#[derive(Debug, Deserialize)]
+struct StopRenderRequest {
+    #[serde(rename = "jobId")]
+    job_id: String,
+}
+
 /// Stop a running FFmpeg render job
 #[tauri::command]
-fn stop_ffmpeg_render(job_id: String) -> Result<bool, String> {
-    let mut manager = PROCESS_MANAGER.lock().map_err(|e| e.to_string())?;
-    Ok(manager.kill_process(&job_id))
+fn stop_ffmpeg_render(window: tauri::Window, request: StopRenderRequest) -> Result<bool, String> {
+    let job_id = request.job_id;
+    
+    // Mark as stopped in ProcessManager
+    let pid = {
+        let mut manager = PROCESS_MANAGER.lock().map_err(|e| e.to_string())?;
+        let marked = manager.stop_render(&job_id);
+        
+        if !marked {
+            eprintln!("❌ [Tauri] stop_ffmpeg_render: Process not found - Job: {}", job_id);
+            manager.diagnose();
+            return Ok(false);
+        }
+        
+        // Get PID for killing
+        manager.get_pid(&job_id)
+    };
+
+    // Kill the process by PID if we found it
+    if let Some(pid) = pid {
+        #[cfg(target_os = "windows")]
+        {
+            // On Windows, use taskkill command
+            let _ = Command::new("taskkill")
+                .arg("/PID")
+                .arg(pid.to_string())
+                .arg("/F")  // Force kill
+                .output();
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            // On Unix/Linux, use kill command
+            let _ = Command::new("kill")
+                .arg("-9")
+                .arg(pid.to_string())
+                .output();
+        }
+
+        // eprintln!("✅ [Tauri] stop_ffmpeg_render killed process - Job: {}, PID: {}", job_id, pid);
+    }
+
+    // Emit event that render was stopped
+    let _ = window.emit("render-stopped", &serde_json::json!({
+        "job_id": job_id,
+        "stopped_by": "user"
+    }));
+
+    Ok(true)
 }
 
 /// Stop all running FFmpeg processes
 #[tauri::command]
-fn stop_all_renders() -> Result<(), String> {
-    let mut manager = PROCESS_MANAGER.lock().map_err(|e| e.to_string())?;
-    manager.kill_all();
+fn stop_all_renders(window: tauri::Window) -> Result<(), String> {
+    let pids = {
+        let mut manager = PROCESS_MANAGER.lock().map_err(|e| e.to_string())?;
+        let active_jobs = manager.active_jobs();
+        let pids = manager.active_pids();
+        manager.stop_all_renders();
+        // eprintln!("✅ [Tauri] stop_all_renders executed for {} jobs", active_jobs.len());
+        pids
+    };
+
+    // Kill all processes by PID
+    for (job_id, pid) in pids {
+        #[cfg(target_os = "windows")]
+        {
+            let _ = Command::new("taskkill")
+                .arg("/PID")
+                .arg(pid.to_string())
+                .arg("/F")
+                .output();
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = Command::new("kill")
+                .arg("-9")
+                .arg(pid.to_string())
+                .output();
+        }
+
+        let _ = window.emit("render-stopped", &serde_json::json!({
+            "job_id": job_id,
+            "stopped_by": "user"
+        }));
+    }
+    
     Ok(())
 }
 
@@ -1096,6 +1206,7 @@ fn get_default_statistics() -> serde_json::Value {
         "totalRenders": 0,
         "totalSuccessful": 0,
         "totalFailed": 0,
+        "totalStopped": 0,
         "totalRenderTime": 0,
         "lastUpdated": chrono::Local::now().to_rfc3339()
     })
@@ -1191,6 +1302,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             load_settings,
             save_settings,
+            check_gpu_compatibility,
+            save_render_mode,
             write_log,
             // FFmpeg commands
             check_ffmpeg_status,

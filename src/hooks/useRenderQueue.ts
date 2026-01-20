@@ -28,6 +28,8 @@ export interface UseRenderQueueReturn {
   isProcessing: boolean;
   isPaused: boolean;
   currentJobId: string | null;
+  renderMode: 'cpu' | 'gpu' | 'duo';
+  gpuAvailable: boolean;
   
   // Statistics
   totalJobs: number;
@@ -54,7 +56,8 @@ export interface UseRenderQueueReturn {
     outputSuffix?: string,
     presetName?: string,
   ) => void;
-  setParallelMode: (enabled: boolean, maxJobs?: number) => void;
+  setRenderMode: (mode: 'cpu' | 'gpu' | 'duo') => void;
+  setGpuAvailability: (available: boolean) => void;
 }
 
 export function useRenderQueue(): UseRenderQueueReturn {
@@ -127,8 +130,12 @@ export function useRenderQueue(): UseRenderQueueReturn {
     RenderService.updateSettings(video, audio, watermark, mainScreen, outputSuffix, presetName);
   }, []);
 
-  const setParallelMode = useCallback((enabled: boolean, maxJobs?: number): void => {
-    RenderService.setParallelMode(enabled, maxJobs);
+  const setRenderMode = useCallback((mode: 'cpu' | 'gpu' | 'duo'): void => {
+    (RenderService as any).setRenderMode(mode);
+  }, []);
+
+  const setGpuAvailability = useCallback((available: boolean): void => {
+    (RenderService as any).setGpuAvailability(available);
   }, []);
 
   return {
@@ -137,6 +144,8 @@ export function useRenderQueue(): UseRenderQueueReturn {
     isProcessing: state.isProcessing,
     isPaused: state.isPaused,
     currentJobId: state.currentJobId,
+    renderMode: state.renderMode,
+    gpuAvailable: state.gpuAvailable,
     
     // Statistics
     totalJobs,
@@ -156,7 +165,8 @@ export function useRenderQueue(): UseRenderQueueReturn {
     
     // Settings
     updateSettings,
-    setParallelMode,
+    setRenderMode,
+    setGpuAvailability,
   };
 }
 
