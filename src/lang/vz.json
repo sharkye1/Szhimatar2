@@ -1,29 +1,29 @@
 {
   "app": {
-    "title": "Szhimatar",
-    "version": "Версия"
+    "title": "Vzrimatar",
+    "version": "Версия взрыва"
   },
   "main": {
-    "selectFiles": "Выбрать файлы",
-    "selectFolder": "Выбрать папку",
-    "outputFolder": "Папка сохранения",
-    "saveInSourceDirectory": "Сохранять в директории исходного файла",
-    "queue": "Очередь",
-    "start": "Начать",
-    "pause": "Пауза",
-    "stop": "Стоп",
-    "progress": "Прогресс",
-    "preview": "Предпросмотр"
+    "selectFiles": "Взорвать файлы",
+    "selectFolder": "Взорвать папку",
+    "outputFolder": "Папка сохранения взрыва",
+    "saveInSourceDirectory": "Взрыванать в директории исходного взрыва",
+    "queue": "Очередь взрывов",
+    "start": "Взорвать",
+    "pause": "Потушить",
+    "stop": "Ликвидировать",
+    "progress": "Прогресс взрыва",
+    "preview": "Предпросмотр взрыва"
   },
   "video": {
-    "title": "Настройки видео",
-    "codec": "Кодек",
-    "bitrate": "Битрейт (Mbps)",
-    "fps": "FPS",
-    "resolution": "Разрешение",
-    "crf": "CRF (качество)",
-    "aspectRatio": "Соотношение сторон",
-    "preset": "Пресет"
+    "title": "Настройки взрыва",
+    "codec": "Кодек взрыва",
+    "bitrate": "Битрейт (Мбит/с) взрыва",
+    "fps": "FPS взрыва",
+    "resolution": "Разрешение взрыва",
+    "crf": "CRF (качество) взрыва",
+    "aspectRatio": "Соотношение сторон взрыва",
+    "preset": "Пресет взрыва"
   },
   "videoSettings": {
     "fps": "ФПС",
@@ -55,7 +55,7 @@
       "horizontal": "Отразить по горизонтали",
       "vertical": "Отразить по вертикали"
     },
-    "filters": "Фильтры",
+    "filters": "Бабахи",
     "filterNames": {
       "deinterlace": "Деинтерлейс (убирает возможные мерцания)",
       "denoise": "Шумоподавление (убирает зернистость)",
@@ -68,14 +68,14 @@
       "av1": "AV1 — Лучшее сжатие (Поддерживается не всеми устройствами)"
     },
     "resolutionOptions": {
-      "144pPotato": "144p (Картофель)",
-      "240pPotatoPlus": "240p (Картофель+)",
-      "360pMobile": "360p (Мобильное)",
-      "480pSD": "480p (SD)",
-      "720pHD": "720p (HD)",
-      "1080pFullHD": "1080p (Full HD)",
+      "144pPotato": "144p (корсар)",
+      "240pPotatoPlus": "240p (бомба)",
+      "360pMobile": "360p (детонатор)",
+      "480pSD": "480p (СД)",
+      "720pHD": "720p (ХД)",
+      "1080pFullHD": "1080p (Фулл ХД)",
       "1440p2K": "1440p (2K)",
-      "2160p4KUHD": "2160p (4K UHD)",
+      "2160p4KUHD": "2160p (4K ЮХД)",
       "4kDci": "4K DCI",
       "ultrawide": "Ультраширокий"
     },
@@ -88,9 +88,9 @@
     }
   },
   "ffmpeg": {
-    "configurationLabel": "Конфигурация FFmpeg",
-    "toggleConfigure": "Настроить FFmpeg",
-    "toggleHide": "Скрыть настройку FFmpeg"
+    "configurationLabel": "Конфигурация ФФмпег",
+    "toggleConfigure": "Настроить ФФмпег",
+    "toggleHide": "Скрыть настройку ФФмпег"
   },
   "audio": {
     "title": "Настройки аудио",
@@ -143,10 +143,10 @@
   },
   "presets": {
     "label": "Пресеты",
-    "selectPreset": "Выберите пресет",
-    "apply": "Применить",
+    "selectPreset": "Выберите взрывосет",
+    "apply": "Аплай",
     "save": "Сохранить текущий",
-    "delete": "Удалить",
+    "delete": "Уничтожнеие",
     "saveDialogTitle": "Сохранить пресет",
     "deleteDialogTitle": "Удалить пресет",
     "namePlaceholder": "Название пресета",
@@ -204,31 +204,31 @@
     "error": "Ошибка"
   },
   "stats": {
-    "title": "Статистика рендеров",
-    "loading": "Загрузка статистики...",
-    "totalRenders": "Всего рендеров",
-    "successful": "Успешных",
-    "failed": "Ошибок",
-    "successRate": "Успешность %",
-    "avgTime": "Среднее время",
-    "totalTime": "Общее время",
-    "activeRenders": "Активные рендеры",
-    "noRenders": "Нет рендеров в истории",
-    "export": "Экспорт JSON",
-    "clear": "Очистить историю",
-    "delete": "Удалить",
-    "confirmClear": "Очистить историю?",
-    "confirmClearText": "Это навсегда удалит всю историю рендеров.",
-    "pending": "В ожидании",
-    "rendering": "Рендерится",
-    "completed": "Завершено",
-    "error": "Ошибка",
-    "cancelled": "Отменено",
+    "title": "Render Statistics",
+    "loading": "Loading statistics...",
+    "totalRenders": "Total Renders",
+    "successful": "Successful",
+    "failed": "Failed",
+    "successRate": "Success Rate %",
+    "avgTime": "Average Time",
+    "totalTime": "Total Time",
+    "activeRenders": "Active Renders",
+    "noRenders": "No renders in history",
+    "export": "Export JSON",
+    "clear": "Clear History",
+    "delete": "Delete",
+    "confirmClear": "Clear History?",
+    "confirmClearText": "This will permanently delete all render history.",
+    "pending": "Pending",
+    "rendering": "Rendering",
+    "completed": "Completed",
+    "error": "Error",
+    "cancelled": "Cancelled",
     "filter": {
-      "all": "Все",
-      "completed": "Завершённые",
-      "error": "С ошибками",
-      "rendering": "Рендерятся"
+      "all": "All",
+      "completed": "Completed",
+      "error": "Errors",
+      "rendering": "Rendering"
     }
   }
 }

@@ -8,14 +8,33 @@
     },
     "package": {
         "productName": "Szhimatar",
-        "version": "0.1.2"
+        "version": "0.2.0"
     },
     "tauri": {
         "allowlist": {
             "all": false,
             "shell": {
                 "all": false,
-                "open": false
+                "open": false,
+                "execute": true,
+                "sidecar": false,
+                "scope": [
+                    {
+                        "name": "ffprobe",
+                        "cmd": "",
+                        "args": [
+                            "-v",
+                            "quiet",
+                            "-print_format",
+                            "json",
+                            "-show_format",
+                            "-show_streams",
+                            {
+                                "validator": "\\S+"
+                            }
+                        ]
+                    }
+                ]
             },
             "dialog": {
                 "all": true,

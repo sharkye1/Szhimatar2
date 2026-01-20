@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/api/dialog';
+import { ffmpegFinder } from '../services/FFmpegFinder';
 import '../styles/FfmpegManager.css';
 
 interface FfmpegStatus {
@@ -51,8 +52,15 @@ export function FfmpegManager() {
 
   const checkStatus = async () => {
     try {
-      const result = await invoke<FfmpegStatus>('check_ffmpeg_status');
-      setStatus(result);
+      const result = await ffmpegFinder.findFFmpeg(false);
+      setStatus({
+        ffmpeg_found: !!result.ffmpeg?.isValid,
+        ffprobe_found: !!result.ffprobe?.isValid,
+        ffmpeg_path: result.ffmpeg?.path || '',
+        ffprobe_path: result.ffprobe?.path || '',
+        ffmpeg_version: result.ffmpeg?.version || '',
+        ffprobe_version: result.ffprobe?.version || ''
+      });
     } catch (err) {
       console.error('Failed to check FFmpeg status:', err);
       setError(String(err));
@@ -61,16 +69,26 @@ export function FfmpegManager() {
 
   const handleFastSearch = async () => {
     setSearchStage('searching');
-    setSearchMessage('Starting fast search...');
+    setSearchMessage('Searching for FFmpeg...');
     setError('');
     setFilesChecked(0);
 
     try {
-      const result = await invoke<FfmpegStatus>('search_ffmpeg_fast');
-      setStatus(result);
+      // Clear cache to force fresh search
+      ffmpegFinder.clearCache();
+      const result = await ffmpegFinder.findFFmpeg(true);
+      
+      setStatus({
+        ffmpeg_found: !!result.ffmpeg?.isValid,
+        ffprobe_found: !!result.ffprobe?.isValid,
+        ffmpeg_path: result.ffmpeg?.path || '',
+        ffprobe_path: result.ffprobe?.path || '',
+        ffmpeg_version: result.ffmpeg?.version || '',
+        ffprobe_version: result.ffprobe?.version || ''
+      });
       setSearchStage('complete');
       
-      if (!result.ffmpeg_found || !result.ffprobe_found) {
+      if (!result.ffmpeg?.isValid || !result.ffprobe?.isValid) {
         setSearchStage('deep-search-warning');
       }
     } catch (err) {
@@ -134,11 +152,19 @@ export function FfmpegManager() {
     }
 
     try {
-      const result = await invoke<FfmpegStatus>('set_ffmpeg_paths', {
-        ffmpegPath: customFfmpegPath || status?.ffmpeg_path || '',
-        ffprobePath: customFfprobePath || status?.ffprobe_path || ''
+      const result = await ffmpegFinder.setManualPaths(
+        customFfmpegPath || status?.ffmpeg_path || '',
+        customFfprobePath || status?.ffprobe_path || ''
+      );
+      
+      setStatus({
+        ffmpeg_found: !!result.ffmpeg?.isValid,
+        ffprobe_found: !!result.ffprobe?.isValid,
+        ffmpeg_path: result.ffmpeg?.path || '',
+        ffprobe_path: result.ffprobe?.path || '',
+        ffmpeg_version: result.ffmpeg?.version || '',
+        ffprobe_version: result.ffprobe?.version || ''
       });
-      setStatus(result);
       setCustomFfmpegPath('');
       setCustomFfprobePath('');
       setError('');
@@ -164,8 +190,15 @@ export function FfmpegManager() {
             {status.ffmpeg_found ? (
               <>
                 <span className="status-found">Found</span>
-                <div className="status-path">{status.ffmpeg_path}</div>
-                <div className="status-version">{status.ffmpeg_version}</div>
+                {/* Always show absolute path */}
+                {status.ffmpeg_path && (
+                  <div className="status-path" title={status.ffmpeg_path}>
+                    {status.ffmpeg_path}
+                  </div>
+                )}
+                {status.ffmpeg_version && (
+                  <div className="status-version">{status.ffmpeg_version}</div>
+                )}
               </>
             ) : (
               <span className="status-missing">Not found</span>
@@ -182,8 +215,15 @@ export function FfmpegManager() {
             {status.ffprobe_found ? (
               <>
                 <span className="status-found">Found</span>
-                <div className="status-path">{status.ffprobe_path}</div>
-                <div className="status-version">{status.ffprobe_version}</div>
+                {/* Always show absolute path */}
+                {status.ffprobe_path && (
+                  <div className="status-path" title={status.ffprobe_path}>
+                    {status.ffprobe_path}
+                  </div>
+                )}
+                {status.ffprobe_version && (
+                  <div className="status-version">{status.ffprobe_version}</div>
+                )}
               </>
             ) : (
               <span className="status-missing">Not found</span>

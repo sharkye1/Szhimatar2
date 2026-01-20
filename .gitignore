@@ -110,10 +110,19 @@ logs/
 
 # --- My .md files ---
 ARCHITECTURE.md
-CHECKLIST.md
+*CHECKLIST.md
+*REPORT*.md
 DEVELOPMENT.md
+*STAT*.md
 FIRST_RUN.md
 VERSION_MANAGEMENT.md
 QUICKSTART.md
 spec.md
-FFMPEG_INTEGRATION.md
+FFMPEG*.md
+FFPROBE*.md
+
+# --- Other scripts ---
+update_lang.py
+test_version_manager.py
+update_version.py
+sync-version.js

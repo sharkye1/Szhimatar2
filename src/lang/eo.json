@@ -202,5 +202,33 @@
     "filesAdded": "Dosieroj aldonitaj",
     "processingComplete": "Prilaborado kompletigita",
     "error": "Eraro"
+  },
+  "stats": {
+    "title": "Render Statistics",
+    "loading": "Loading statistics...",
+    "totalRenders": "Total Renders",
+    "successful": "Successful",
+    "failed": "Failed",
+    "successRate": "Success Rate %",
+    "avgTime": "Average Time",
+    "totalTime": "Total Time",
+    "activeRenders": "Active Renders",
+    "noRenders": "No renders in history",
+    "export": "Export JSON",
+    "clear": "Clear History",
+    "delete": "Delete",
+    "confirmClear": "Clear History?",
+    "confirmClearText": "This will permanently delete all render history.",
+    "pending": "Pending",
+    "rendering": "Rendering",
+    "completed": "Completed",
+    "error": "Error",
+    "cancelled": "Cancelled",
+    "filter": {
+      "all": "All",
+      "completed": "Completed",
+      "error": "Errors",
+      "rendering": "Rendering"
+    }
   }
 }

@@ -1,0 +1,260 @@
+.video-info-test {
+    padding: 2rem;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.video-info-test h2 {
+    margin-bottom: 0.5rem;
+    color: var(--text-primary, #333);
+}
+
+.video-info-test .description {
+    color: var(--text-secondary, #666);
+    margin-bottom: 2rem;
+}
+
+.controls {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.btn-select,
+.btn-analyze {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+
+.btn-select {
+    background: var(--primary-color, #4a90e2);
+    color: white;
+}
+
+.btn-select:hover {
+    background: var(--primary-color-hover, #357abd);
+}
+
+.btn-analyze {
+    background: var(--success-color, #28a745);
+    color: white;
+}
+
+.btn-analyze:hover:not(:disabled) {
+    background: var(--success-color-hover, #218838);
+}
+
+.btn-analyze:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.selected-file {
+    padding: 0.75rem;
+    background: var(--bg-secondary, #f5f5f5);
+    border-radius: 6px;
+    border-left: 4px solid var(--primary-color, #4a90e2);
+}
+
+.selected-file strong {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: var(--text-primary, #333);
+}
+
+.file-path {
+    font-family: monospace;
+    font-size: 0.9rem;
+    color: var(--text-secondary, #666);
+    word-break: break-all;
+}
+
+.error-box {
+    padding: 1rem;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+}
+
+.error-box strong {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #856404;
+}
+
+.error-box p {
+    margin: 0;
+    color: #856404;
+}
+
+.metadata-box {
+    background: var(--bg-secondary, #f8f9fa);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.metadata-box h3 {
+    margin-top: 0;
+    margin-bottom: 1rem;
+    color: var(--text-primary, #333);
+}
+
+.metadata-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.metadata-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.75rem;
+    background: white;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.metadata-item .label {
+    font-size: 0.85rem;
+    color: var(--text-secondary, #666);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.metadata-item .value {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary, #333);
+}
+
+.raw-data {
+    margin-top: 1rem;
+}
+
+.raw-data details {
+    background: white;
+    border-radius: 6px;
+    padding: 1rem;
+}
+
+.raw-data summary {
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--primary-color, #4a90e2);
+    user-select: none;
+}
+
+.raw-data summary:hover {
+    color: var(--primary-color-hover, #357abd);
+}
+
+.raw-data pre {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--bg-secondary, #f5f5f5);
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.instructions {
+    background: #e7f3ff;
+    border: 1px solid #b3d9ff;
+    border-radius: 6px;
+    padding: 1rem;
+}
+
+.instructions h4 {
+    margin-top: 0;
+    color: #004085;
+}
+
+.instructions ol {
+    margin: 0.5rem 0 0 0;
+    padding-left: 1.5rem;
+    color: #004085;
+}
+
+.instructions li {
+    margin-bottom: 0.5rem;
+}
+
+.instructions li:last-child {
+    margin-bottom: 0;
+}
+
+/* Dark theme support */
+@media (prefers-color-scheme: dark) {
+    .video-info-test h2 {
+        color: #e0e0e0;
+    }
+
+    .video-info-test .description {
+        color: #b0b0b0;
+    }
+
+    .selected-file {
+        background: #2a2a2a;
+    }
+
+    .selected-file strong {
+        color: #e0e0e0;
+    }
+
+    .file-path {
+        color: #b0b0b0;
+    }
+
+    .metadata-box {
+        background: #2a2a2a;
+    }
+
+    .metadata-box h3 {
+        color: #e0e0e0;
+    }
+
+    .metadata-item {
+        background: #1e1e1e;
+    }
+
+    .metadata-item .label {
+        color: #b0b0b0;
+    }
+
+    .metadata-item .value {
+        color: #e0e0e0;
+    }
+
+    .raw-data details {
+        background: #1e1e1e;
+    }
+
+    .raw-data pre {
+        background: #0d0d0d;
+        color: #e0e0e0;
+    }
+
+    .instructions {
+        background: #1a3a52;
+        border-color: #2a5a82;
+    }
+
+    .instructions h4,
+    .instructions ol,
+    .instructions li {
+        color: #b3d9ff;
+    }
+}

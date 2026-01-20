@@ -87,6 +87,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
             <option value="ch">中文</option>
             <option value="eo">Esperanto</option>
             <option value="my">Medžuslovjansky</option>
+            <option value="vz">🦖Взрывной😰</option>
           </select>
         </div>
 

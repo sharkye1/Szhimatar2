@@ -4,7 +4,7 @@ import enTranslations from '../lang/en.json';
 import chTranslations from '../lang/ch.json';
 import eoTranslations from '../lang/eo.json';
 import myTranslations from '../lang/my.json';
-
+import vzTranslations from '../lang/vz.json';
 
 type Translations = typeof ruTranslations;
 
@@ -22,7 +22,8 @@ const languages: Record<string, Translations> = {
   en: enTranslations,
   ch: chTranslations,
   eo: eoTranslations,
-  my: myTranslations
+  my: myTranslations,
+  vz: vzTranslations
 };
 
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {

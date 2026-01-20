@@ -169,3 +169,65 @@
 .controls button:disabled:hover {
   transform: none;
 }
+/* Statistics overlay */
+.stats-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 20, 44, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  z-index: 2000;
+}
+
+.stats-modal {
+  width: min(1100px, 92vw);
+  max-height: 90vh;
+  border: 1px solid;
+  border-radius: 14px;
+  box-shadow: 0 18px 60px rgba(0,0,0,0.35);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.stats-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-bottom: 1px solid;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.stats-modal-title {
+  font-size: 16px;
+}
+
+.stats-modal-close {
+  background: transparent;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  line-height: 1;
+}
+
+.stats-modal-close:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+@media (max-width: 768px) {
+  .stats-overlay {
+    padding: 16px;
+  }
+
+  .stats-modal {
+    width: 100%;
+    max-height: 92vh;
+  }
+}

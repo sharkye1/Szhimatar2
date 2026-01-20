@@ -1,9 +1,13 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { open } from '@tauri-apps/api/dialog';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import PresetManager from '../components/PresetManager';
+import useRenderQueue from '../hooks/useRenderQueue';
+import StatisticsPanel from '../components/StatisticsPanel';
+import type { RenderJob } from '../services/RenderService';
 import type {
   AppPreset,
   VideoSettings,
@@ -13,15 +17,6 @@ import type {
 } from '../types';
 import '../styles/MainWindow.css';
 console.log("Импорты завершены")
-
-
-interface QueueItem {
-  id: number;
-  name: string;
-  path: string;
-  status: 'pending' | 'processing' | 'completed' | 'error';
-  progress: number;
-}
 
 type Screen = 'main' | 'video' | 'audio' | 'general' | 'watermark';
 
@@ -55,9 +50,47 @@ const MainWindow: React.FC<MainWindowProps> = ({
   
   const { t } = useLanguage();
   const { theme } = useTheme();
-  const [queue, setQueue] = useState<QueueItem[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
+  
+  // Use RenderService hook for queue management
+  const {
+    jobs,
+    isProcessing,
+    isPaused,
+    totalJobs,
+    completedJobs,
+    errorJobs,
+    pendingJobs,
+    addFiles,
+    removeJob,
+    clearCompleted,
+    start,
+    pause,
+    resume,
+    stop,
+    // stopJob - available for individual job control if needed
+    updateSettings,
+  } = useRenderQueue();
+
+  const [showStats, setShowStats] = useState(false);
+
+  const closeStats = useCallback(() => setShowStats(false), []);
+
+  // Close on Escape
+  useEffect(() => {
+    if (!showStats) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeStats();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showStats, closeStats]);
+
+  // Update RenderService settings when preset changes
+  useEffect(() => {
+    updateSettings(videoSettings, audioSettings, watermarkSettings, mainScreenSettings, undefined, selectedPresetName);
+  }, [videoSettings, audioSettings, watermarkSettings, mainScreenSettings, selectedPresetName, updateSettings]);
 
   const handleSelectFiles = async () => {
     try {
@@ -70,16 +103,8 @@ const MainWindow: React.FC<MainWindowProps> = ({
       });
 
       if (selected && Array.isArray(selected)) {
-        const newItems: QueueItem[] = selected.map((path, index) => ({
-          id: Date.now() + index,
-          name: path.split(/[\\/]/).pop() || path,
-          path,
-          status: 'pending',
-          progress: 0
-        }));
-        setQueue([...queue, ...newItems]);
-        
-        await invoke('write_log', { message: `Added ${newItems.length} files to queue` });
+        await addFiles(selected);
+        await invoke('write_log', { message: `Added ${selected.length} files to queue` });
       }
     } catch (error) {
       console.error('Failed to select files:', error);
@@ -106,23 +131,53 @@ const MainWindow: React.FC<MainWindowProps> = ({
   };
 
   const handleStart = async () => {
-    setIsProcessing(true);
-    setIsPaused(false);
-    await invoke('write_log', { message: 'Started processing queue' });
-    // TODO: Implement FFmpeg processing logic
+    try {
+      await start();
+      await invoke('write_log', { message: 'Started processing queue' });
+    } catch (error) {
+      console.error('Failed to start processing:', error);
+      await invoke('write_log', { message: `Error starting: ${error}` });
+    }
   };
 
   const handlePause = async () => {
-    setIsPaused(!isPaused);
-    await invoke('write_log', { message: isPaused ? 'Resumed processing' : 'Paused processing' });
-    // TODO: Implement pause logic
+    if (isPaused) {
+      await resume();
+      await invoke('write_log', { message: 'Resumed processing' });
+    } else {
+      pause();
+      await invoke('write_log', { message: 'Paused processing' });
+    }
   };
 
   const handleStop = async () => {
-    setIsProcessing(false);
-    setIsPaused(false);
+    await stop();
     await invoke('write_log', { message: 'Stopped processing' });
-    // TODO: Implement stop logic (kill ffmpeg process)
+  };
+
+  const handleRemoveJob = (jobId: string) => {
+    removeJob(jobId);
+  };
+
+  const handleClearCompleted = () => {
+    clearCompleted();
+  };
+
+  // Get status display text and color
+  const getStatusDisplay = (job: RenderJob) => {
+    const statusColors: Record<string, string> = {
+      pending: theme.colors.textSecondary,
+      processing: theme.colors.primary,
+      completed: theme.colors.success,
+      error: theme.colors.error,
+      paused: theme.colors.warning,
+      stopped: theme.colors.textSecondary,
+    };
+    
+    return {
+      text: job.status,
+      color: statusColors[job.status] || theme.colors.textSecondary,
+    };
   };
 
   const handleApplyPreset = (preset: AppPreset) => {
@@ -152,6 +207,9 @@ const MainWindow: React.FC<MainWindowProps> = ({
           </button>
           <button onClick={() => onNavigate('general')} style={{ background: theme.colors.secondary, color: '#fff' }}>
             ⚙️ {t('settings.title')}
+          </button>
+          <button onClick={() => setShowStats(true)} style={{ background: theme.colors.primary, color: '#fff' }}>
+            📊 {t('stats.title') || 'Statistics'}
           </button>
         </div>
       </header>
@@ -201,38 +259,120 @@ const MainWindow: React.FC<MainWindowProps> = ({
         </div>
 
         <div className="queue-section">
-          <h2>{t('main.queue')} ({queue.length})</h2>
+          <div className="queue-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2>{t('main.queue')} ({totalJobs})</h2>
+            <div className="queue-stats" style={{ fontSize: '0.85rem', color: theme.colors.textSecondary }}>
+              {completedJobs > 0 && <span style={{ color: theme.colors.success }}>✓ {completedJobs}</span>}
+              {errorJobs > 0 && <span style={{ color: theme.colors.error, marginLeft: '8px' }}>✗ {errorJobs}</span>}
+              {pendingJobs > 0 && <span style={{ marginLeft: '8px' }}>⏳ {pendingJobs}</span>}
+              {completedJobs > 0 && (
+                <button
+                  onClick={handleClearCompleted}
+                  style={{ 
+                    marginLeft: '12px', 
+                    padding: '2px 8px',
+                    fontSize: '0.8rem',
+                    background: theme.colors.surface,
+                    color: theme.colors.text,
+                    border: `1px solid ${theme.colors.border}`,
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Clear completed
+                </button>
+              )}
+            </div>
+          </div>
           <div className="queue-list" style={{ background: theme.colors.surface, borderColor: theme.colors.border }}>
-            {queue.length === 0 ? (
+            {jobs.length === 0 ? (
               <div className="empty-queue" style={{ color: theme.colors.textSecondary }}>
                 {t('main.selectFiles')}...
               </div>
             ) : (
-              queue.map(item => (
-                <div key={item.id} className="queue-item" style={{ borderColor: theme.colors.border }}>
-                  <div className="item-info">
-                    <span className="item-name">{item.name}</span>
-                    <span className="item-status" style={{ 
-                      color: item.status === 'completed' ? theme.colors.success : 
-                             item.status === 'error' ? theme.colors.error : 
-                             theme.colors.textSecondary 
-                    }}>
-                      {item.status}
-                    </span>
-                  </div>
-                  {item.status === 'processing' && (
-                    <div className="progress-bar" style={{ background: theme.colors.border }}>
-                      <div 
-                        className="progress-fill" 
-                        style={{ 
-                          width: `${item.progress}%`, 
-                          background: theme.colors.primary 
-                        }}
-                      />
+              jobs.map(item => {
+                const statusDisplay = getStatusDisplay(item);
+                return (
+                  <div key={item.id} className="queue-item" style={{ borderColor: theme.colors.border }}>
+                    <div className="item-info">
+                      <div className="item-main-info" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span className="item-name" title={item.inputPath}>{item.fileName}</span>
+                        <div className="item-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          {item.status === 'processing' && (
+                            <span className="item-details" style={{ fontSize: '0.8rem', color: theme.colors.textSecondary }}>
+                              {item.fps > 0 && `${item.fps.toFixed(1)} fps`}
+                              {item.speed > 0 && ` • ${item.speed.toFixed(2)}x`}
+                            </span>
+                          )}
+                          <span className="item-status" style={{ color: statusDisplay.color }}>
+                            {statusDisplay.text}
+                          </span>
+                          {(item.status === 'pending' || item.status === 'completed' || item.status === 'error') && (
+                            <button
+                              onClick={() => handleRemoveJob(item.id)}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: theme.colors.error,
+                                cursor: 'pointer',
+                                padding: '2px 6px',
+                                fontSize: '1rem'
+                              }}
+                              title="Remove from queue"
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {item.error && (
+                        <div className="item-error" style={{ 
+                          fontSize: '0.8rem', 
+                          color: theme.colors.error,
+                          marginTop: '4px'
+                        }}>
+                          {item.error}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))
+                    {(item.status === 'processing' || item.status === 'paused') && (
+                      <div className="progress-section" style={{ marginTop: '8px' }}>
+                        <div className="progress-bar" style={{ background: theme.colors.border, height: '8px', borderRadius: '4px' }}>
+                          <div 
+                            className="progress-fill" 
+                            style={{ 
+                              width: `${item.progress}%`, 
+                              background: item.status === 'paused' ? theme.colors.warning : theme.colors.primary,
+                              height: '100%',
+                              borderRadius: '4px',
+                              transition: 'width 0.3s ease'
+                            }}
+                          />
+                        </div>
+                        <div className="progress-details" style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          fontSize: '0.8rem', 
+                          color: theme.colors.textSecondary,
+                          marginTop: '4px'
+                        }}>
+                          <span>{item.progress.toFixed(1)}%</span>
+                          <span>ETA: {item.etaFormatted}</span>
+                        </div>
+                      </div>
+                    )}
+                    {item.status === 'completed' && (
+                      <div className="completed-info" style={{ 
+                        fontSize: '0.8rem', 
+                        color: theme.colors.success,
+                        marginTop: '4px'
+                      }}>
+                        ✓ Completed
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
@@ -240,7 +380,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
         <div className="controls">
           <button 
             onClick={handleStart} 
-            disabled={isProcessing || queue.length === 0}
+            disabled={isProcessing || jobs.length === 0 || pendingJobs === 0}
             style={{ background: theme.colors.success, color: '#fff' }}
           >
             ▶️ {t('main.start')}
@@ -261,6 +401,37 @@ const MainWindow: React.FC<MainWindowProps> = ({
           </button>
         </div>
       </div>
+
+      <AnimatePresence>
+        {showStats && (
+          <motion.div
+            className="stats-overlay"
+            onClick={closeStats}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <motion.div
+              className="stats-modal"
+              onClick={(e) => e.stopPropagation()}
+              initial={{ opacity: 0, y: 20, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              transition={{ duration: 0.25, ease: 'easeOut' }}
+              style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
+            >
+              <div className="stats-modal-header">
+                <div className="stats-modal-title">{t('stats.title') || 'Render Statistics'}</div>
+                <button className="stats-modal-close" onClick={closeStats} aria-label="Close statistics">
+                  ×
+                </button>
+              </div>
+              <StatisticsPanel onClose={closeStats} />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

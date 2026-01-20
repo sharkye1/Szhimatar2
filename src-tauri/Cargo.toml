@@ -1,6 +1,6 @@
 [package]
 name = "szhimatar"
-version = "0.1.2"
+version = "0.2.0"
 description = "Offline video compressor"
 authors = ["you"]
 license = ""
@@ -12,6 +12,7 @@ tauri-build = { version = "1.5", features = [] }
 
 [dependencies]
 tauri = { version = "1.5", features = [
+    "shell-execute",
     "window-unminimize",
     "window-maximize",
     "window-set-title",
@@ -30,6 +31,8 @@ serde_json = "1.0"
 chrono = "0.4"
 dirs = "5.0"
 walkdir = "2.4"
+lazy_static = "1.4"
+regex = "1.10"
 
 [features]
 default = ["custom-protocol"]
