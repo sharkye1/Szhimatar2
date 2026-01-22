@@ -56,6 +56,8 @@ export interface RenderJob {
   frame: number;
   outputSize: string; // Current output file size (e.g., "12.5 MB")
   outputSizeBytes: number; // Size in bytes for calculations
+  estimatedFinalSize?: string; // Estimated final size (e.g., "~50.2 MB")
+  estimatedFinalSizeBytes?: number; // Estimated final size in bytes
   assignedSlot?: 'cpu' | 'gpu'; // Which slot was used for this render
 }
 
@@ -1126,6 +1128,19 @@ class RenderServiceImpl {
       const parsed = this.parseFileSize(progress.total_size);
       job.outputSizeBytes = parsed.bytes;
       job.outputSize = parsed.formatted;
+      
+      // Calculate estimated final size based on progress ratio
+      // Only estimate if we have at least 5% progress to avoid wild estimates
+      if (progress.progress_percent >= 5 && parsed.bytes > 0) {
+        const processedRatio = progress.progress_percent / 100;
+        const estimatedBytes = Math.round(parsed.bytes / processedRatio);
+        const estimatedMB = estimatedBytes / (1024 * 1024);
+        
+        job.estimatedFinalSizeBytes = estimatedBytes;
+        job.estimatedFinalSize = estimatedMB >= 1000
+          ? `~${(estimatedMB / 1024).toFixed(2)} GB`
+          : `~${estimatedMB.toFixed(1)} MB`;
+      }
     }
 
     this.notifyListeners();

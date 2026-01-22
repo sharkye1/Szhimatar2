@@ -448,7 +448,14 @@ const MainWindow: React.FC<MainWindowProps> = ({
                           <span>{item.progress.toFixed(1)}%</span>
                           <div style={{ display: 'flex', gap: '12px' }}>
                             {item.outputSizeBytes > 0 && (
-                              <span style={{ fontFamily: 'monospace' }}>{item.outputSize}</span>
+                              <span style={{ fontFamily: 'monospace' }}>
+                                {item.outputSize}
+                                {item.estimatedFinalSize && (
+                                  <span style={{ color: theme.colors.textSecondary }}>
+                                    {' / '}{item.estimatedFinalSize}
+                                  </span>
+                                )}
+                              </span>
                             )}
                             <span>ETA: {item.etaFormatted}</span>
                           </div>
