@@ -13,6 +13,16 @@ import {
   loadFFmpegPaths,
 } from '../utils/ffmpeg';
 
+/**
+ * Strip Windows \\?\ prefix from path for clean storage and display
+ * This prefix appears in long/UNC paths but shouldn't be saved
+ */
+function cleanPath(path: string): string {
+  if (!path) return '';
+  // Remove \\?\ or \\?\UNC\ prefix from Windows paths
+  return path.replace(/^\\\\\?\\(UNC\\)?/, '');
+}
+
 export interface FFmpegInfo {
   path: string;
   version: string;
@@ -230,17 +240,22 @@ class FFmpegFinderService {
       ffprobe = await this.searchForBinary('ffprobe', ffmpeg.path);
     }
 
-    // Save to backend
+    // Clean paths before saving
+    const cleanedFfmpegPath = cleanPath(ffmpeg.path);
+    const cleanedFfprobePath = cleanPath(ffprobe?.path || '');
+
+    // Save cleaned paths to backend
     try {
-      await saveFFmpegPaths(ffmpeg.path, ffprobe?.path || '');
+      await saveFFmpegPaths(cleanedFfmpegPath, cleanedFfprobePath);
     } catch (error) {
       console.error('Failed to save paths:', error);
       throw error;
     }
 
+    // Return result with cleaned paths
     const result: FFmpegFinderResult = {
-      ffmpeg,
-      ffprobe,
+      ffmpeg: { ...ffmpeg, path: cleanedFfmpegPath },
+      ffprobe: ffprobe ? { ...ffprobe, path: cleanedFfprobePath } : null,
       lastUpdated: new Date()
     };
 
@@ -293,12 +308,16 @@ class FFmpegFinderService {
         return null;
       }
 
-      const ffmpeg = saved.ffmpeg_path?.trim()
-        ? await this.validateAndGetInfo(saved.ffmpeg_path).catch(() => null)
+      // Clean paths when loading from storage
+      const cleanedFfmpegPath = cleanPath(saved.ffmpeg_path || '');
+      const cleanedFfprobePath = cleanPath(saved.ffprobe_path || '');
+
+      const ffmpeg = cleanedFfmpegPath.trim()
+        ? await this.validateAndGetInfo(cleanedFfmpegPath).catch(() => null)
         : null;
 
-      let ffprobe = saved.ffprobe_path?.trim()
-        ? await this.validateAndGetInfo(saved.ffprobe_path).catch(() => null)
+      let ffprobe = cleanedFfprobePath.trim()
+        ? await this.validateAndGetInfo(cleanedFfprobePath).catch(() => null)
         : null;
 
       if (!ffprobe && ffmpeg) {
@@ -308,9 +327,10 @@ class FFmpegFinderService {
         }
       }
 
+      // Return with cleaned paths
       return {
-        ffmpeg,
-        ffprobe,
+        ffmpeg: ffmpeg ? { ...ffmpeg, path: cleanPath(ffmpeg.path) } : null,
+        ffprobe: ffprobe ? { ...ffprobe, path: cleanPath(ffprobe.path) } : null,
         lastUpdated: new Date()
       };
     } catch (error) {

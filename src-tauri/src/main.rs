@@ -8,6 +8,11 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use walkdir::WalkDir;
 
+#[cfg(windows)]
+use winreg::enums::*;
+#[cfg(windows)]
+use winreg::RegKey;
+
 // Process manager module
 mod process_manager;
 use process_manager::PROCESS_MANAGER;
@@ -25,6 +30,12 @@ struct Settings {
     gpu_available: bool,
     #[serde(rename = "renderMode")]
     render_mode: String,
+    #[serde(rename = "screenAnimation", default = "default_screen_animation")]
+    screen_animation: String,
+}
+
+fn default_screen_animation() -> String {
+    "default".to_string()
 }
 
 impl Default for Settings {
@@ -39,6 +50,7 @@ impl Default for Settings {
             default_audio_codec: "aac".to_string(),
             gpu_available: false,
             render_mode: "cpu".to_string(),
+            screen_animation: "default".to_string(),
         }
     }
 }
@@ -88,8 +100,16 @@ fn save_settings(settings: Settings) -> Result<(), String> {
 }
 
 /// Check GPU (NVENC) compatibility and persist result in settings.json
+/// WARNING: This can be overridden for UI testing, but actual FFmpeg rendering
+/// will still use real hardware capabilities
 #[tauri::command]
 fn check_gpu_compatibility() -> Result<bool, String> {
+    // Check for override first (for UI testing only)
+    if let Some(override_config) = load_hardware_override() {
+        println!("[HARDWARE OVERRIDE] GPU Available: {}", override_config.gpu_available);
+        return Ok(override_config.gpu_available);
+    }
+    
     let config = load_ffmpeg_config();
     if config.ffmpeg_path.trim().is_empty() {
         return Err("FFmpeg path not configured".to_string());
@@ -124,6 +144,144 @@ fn check_gpu_compatibility() -> Result<bool, String> {
     Ok(gpu_available)
 }
 
+/// Detect hardware information (CPU and GPU vendors)
+#[tauri::command]
+fn detect_hardware_info() -> Result<HardwareInfo, String> {
+    // Check for override first (for testing UI only)
+    if let Some(override_config) = load_hardware_override() {
+        return Ok(HardwareInfo {
+            cpu_vendor: override_config.cpu_vendor,
+            gpu_vendor: override_config.gpu_vendor,
+        });
+    }
+    
+    // Use real hardware detection
+    let cpu_vendor = detect_cpu_vendor();
+    let gpu_vendor = detect_gpu_vendor();
+    
+    Ok(HardwareInfo {
+        cpu_vendor,
+        gpu_vendor,
+    })
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct HardwareInfo {
+    cpu_vendor: String,
+    gpu_vendor: String,
+}
+
+/// Hardware override configuration for testing (DOES NOT affect actual rendering)
+#[derive(serde::Deserialize)]
+struct HardwareOverride {
+    enabled: bool,
+    cpu_vendor: String,
+    gpu_vendor: String,
+    gpu_available: bool,
+}
+
+/// Load hardware override from .hardware-override.json if exists and enabled
+fn load_hardware_override() -> Option<HardwareOverride> {
+    // Try to read .hardware-override.json from app directory
+    let config_path = std::env::current_dir()
+        .ok()?
+        .join(".hardware-override.json");
+    
+    if !config_path.exists() {
+        return None;
+    }
+    
+    let content = fs::read_to_string(config_path).ok()?;
+    let override_config: HardwareOverride = serde_json::from_str(&content).ok()?;
+    
+    if override_config.enabled {
+        println!("[HARDWARE OVERRIDE] Enabled: CPU={}, GPU={}", 
+                 override_config.cpu_vendor, override_config.gpu_vendor);
+        Some(override_config)
+    } else {
+        None
+    }
+}
+
+fn detect_cpu_vendor() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        
+        // Use WMIC to get CPU info
+        let output = Command::new("wmic")
+            .creation_flags(CREATE_NO_WINDOW)
+            .args(["cpu", "get", "name"])
+            .output();
+        
+        if let Ok(output) = output {
+            let stdout = String::from_utf8_lossy(&output.stdout).to_lowercase();
+            if stdout.contains("intel") {
+                return "intel".to_string();
+            } else if stdout.contains("amd") {
+                return "amd".to_string();
+            }
+        }
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(content) = fs::read_to_string("/proc/cpuinfo") {
+            let lower = content.to_lowercase();
+            if lower.contains("intel") {
+                return "intel".to_string();
+            } else if lower.contains("amd") {
+                return "amd".to_string();
+            }
+        }
+    }
+    
+    "unknown".to_string()
+}
+
+fn detect_gpu_vendor() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        
+        // Use WMIC to get GPU info
+        let output = Command::new("wmic")
+            .creation_flags(CREATE_NO_WINDOW)
+            .args(["path", "win32_videocontroller", "get", "name"])
+            .output();
+        
+        if let Ok(output) = output {
+            let stdout = String::from_utf8_lossy(&output.stdout).to_lowercase();
+            if stdout.contains("nvidia") || stdout.contains("geforce") || stdout.contains("rtx") || stdout.contains("gtx") {
+                return "nvidia".to_string();
+            } else if stdout.contains("amd") || stdout.contains("radeon") {
+                return "amd".to_string();
+            } else if stdout.contains("intel") {
+                return "intel".to_string();
+            }
+        }
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        let output = Command::new("lspci")
+            .output();
+        
+        if let Ok(output) = output {
+            let stdout = String::from_utf8_lossy(&output.stdout).to_lowercase();
+            if stdout.contains("nvidia") {
+                return "nvidia".to_string();
+            } else if stdout.contains("amd") || stdout.contains("radeon") {
+                return "amd".to_string();
+            }
+        }
+    }
+    
+    "unknown".to_string()
+}
+
 /// Save render mode to settings
 #[tauri::command]
 fn save_render_mode(mode: String) -> Result<(), String> {
@@ -148,6 +306,110 @@ fn write_log(message: String) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())
 }
+
+/// Get the size of the logs directory in bytes
+#[tauri::command]
+fn get_logs_size() -> Result<u64, String> {
+    let logs_dir = get_app_data_dir().join("logs");
+    
+    // If directory doesn't exist, return 0
+    if !logs_dir.exists() {
+        return Ok(0);
+    }
+    
+    let mut total_size: u64 = 0;
+    
+    // Walk through all files and subdirectories recursively
+    for entry in WalkDir::new(&logs_dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        if entry.file_type().is_file() {
+            if let Ok(metadata) = entry.metadata() {
+                total_size += metadata.len();
+            }
+        }
+    }
+    
+    Ok(total_size)
+}
+
+/// Get the path to the logs directory
+#[tauri::command]
+fn get_logs_path() -> Result<String, String> {
+    let logs_dir = get_app_data_dir().join("logs");
+    
+    // Create directory if it doesn't exist
+    if !logs_dir.exists() {
+        fs::create_dir_all(&logs_dir).map_err(|e| e.to_string())?;
+    }
+    
+    logs_dir
+        .to_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Failed to convert path to string".to_string())
+}
+
+/// Clear all contents of the logs directory (but keep the directory itself)
+#[tauri::command]
+fn clear_logs() -> Result<(), String> {
+    let logs_dir = get_app_data_dir().join("logs");
+    
+    // If directory doesn't exist, nothing to clear
+    if !logs_dir.exists() {
+        return Ok(());
+    }
+    
+    // Remove all contents but keep the directory
+    for entry in fs::read_dir(&logs_dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        
+        if path.is_file() {
+            fs::remove_file(&path).map_err(|e| e.to_string())?;
+        } else if path.is_dir() {
+            fs::remove_dir_all(&path).map_err(|e| e.to_string())?;
+        }
+    }
+    
+    Ok(())
+}
+
+/// Open the logs folder in the system file manager
+#[tauri::command]
+fn open_logs_folder() -> Result<(), String> {
+    let logs_dir = get_app_data_dir().join("logs");
+    
+    // Ensure the directory exists before opening
+    fs::create_dir_all(&logs_dir).map_err(|e| e.to_string())?;
+    
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer")
+            .arg(logs_dir)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(logs_dir)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(logs_dir)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    
+    Ok(())
+}
+
 
 // ============================================================================
 // FFMPEG INTEGRATION
@@ -1292,6 +1554,201 @@ fn export_statistics(output_path: String) -> Result<(), String> {
     Ok(())
 }
 
+// ============================================================================
+// Context Menu Registry Commands (Windows only)
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ContextMenuStatus {
+    pub enabled: bool,
+    pub registry_path: String,
+    pub exe_path: String,
+    pub exe_valid: bool,
+    pub needs_admin: bool,
+}
+
+/// Get current executable path
+#[cfg(windows)]
+fn get_current_exe_path() -> Result<String, String> {
+    std::env::current_exe()
+        .map_err(|e| format!("Failed to get exe path: {}", e))?
+        .to_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Failed to convert exe path to string".to_string())
+}
+
+#[cfg(not(windows))]
+fn get_current_exe_path() -> Result<String, String> {
+    Err("Context menu is only supported on Windows".to_string())
+}
+
+const CONTEXT_MENU_NAME: &str = "CompressWithSzhimatar";
+const VIDEO_EXTENSIONS: &[&str] = &[".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".mpeg", ".mpg", ".3gp"];
+
+/// Check if context menu is registered and valid
+#[tauri::command]
+fn check_context_menu_status() -> Result<ContextMenuStatus, String> {
+    #[cfg(windows)]
+    {
+        let exe_path = get_current_exe_path().unwrap_or_default();
+        let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
+        
+        // Check first extension (.mp4) as representative
+        let test_ext = VIDEO_EXTENSIONS[0];
+        let key_path = format!(r"SystemFileAssociations\{}\shell\{}", test_ext, CONTEXT_MENU_NAME);
+        
+        match hkcr.open_subkey(&key_path) {
+            Ok(key) => {
+                // Key exists, check command
+                let command_key = match key.open_subkey("command") {
+                    Ok(k) => k,
+                    Err(_) => return Ok(ContextMenuStatus {
+                        enabled: false,
+                        registry_path: format!("HKEY_CLASSES_ROOT\\SystemFileAssociations\\<ext>\\shell\\{}", CONTEXT_MENU_NAME),
+                        exe_path,
+                        exe_valid: false,
+                        needs_admin: false,
+                    }),
+                };
+                
+                let registered_cmd: String = command_key.get_value("").unwrap_or_default();
+                let exe_valid = registered_cmd.contains(&exe_path);
+                
+                Ok(ContextMenuStatus {
+                    enabled: true,
+                    registry_path: format!("HKEY_CLASSES_ROOT\\SystemFileAssociations\\<ext>\\shell\\{}", CONTEXT_MENU_NAME),
+                    exe_path,
+                    exe_valid,
+                    needs_admin: false,
+                })
+            }
+            Err(_) => {
+                Ok(ContextMenuStatus {
+                    enabled: false,
+                    registry_path: format!("HKEY_CLASSES_ROOT\\SystemFileAssociations\\<ext>\\shell\\{}", CONTEXT_MENU_NAME),
+                    exe_path,
+                    exe_valid: false,
+                    needs_admin: false,
+                })
+            }
+        }
+    }
+    
+    #[cfg(not(windows))]
+    {
+        Err("Context menu is only supported on Windows".to_string())
+    }
+}
+
+/// Add context menu entry to Windows registry for all video extensions
+#[tauri::command]
+fn add_context_menu() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let exe_path = get_current_exe_path()?;
+        let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
+        
+        // Helper to check for admin required error
+        fn check_admin_error<T>(result: Result<T, std::io::Error>) -> Result<T, String> {
+            result.map_err(|e| {
+                let err_str = e.to_string();
+                if err_str.contains("Access is denied") || e.raw_os_error() == Some(5) {
+                    "ADMIN_REQUIRED".to_string()
+                } else {
+                    format!("Registry error: {}", err_str)
+                }
+            })
+        }
+        
+        // Register for each video extension
+        for ext in VIDEO_EXTENSIONS {
+            let key_path = format!(r"SystemFileAssociations\{}\shell\{}", ext, CONTEXT_MENU_NAME);
+            
+            // Create main key
+            let (key, _) = check_admin_error(hkcr.create_subkey(&key_path))?;
+            
+            // Set display name
+            check_admin_error(key.set_value("", &"Сжать Сжиматором"))?;
+            
+            // Set icon
+            check_admin_error(key.set_value("Icon", &format!("{},0", exe_path)))?;
+            
+            // Create command subkey
+            let (command_key, _) = check_admin_error(key.create_subkey("command"))?;
+            
+            // Set command
+            let command = format!(r#""{}" "%1""#, exe_path);
+            check_admin_error(command_key.set_value("", &command))?;
+        }
+        
+        Ok(())
+    }
+    
+    #[cfg(not(windows))]
+    {
+        Err("Context menu is only supported on Windows".to_string())
+    }
+}
+
+/// Remove context menu entry from Windows registry for all video extensions
+#[tauri::command]
+fn remove_context_menu() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
+        
+        // Remove for each video extension
+        for ext in VIDEO_EXTENSIONS {
+            let shell_path = format!(r"SystemFileAssociations\{}\shell", ext);
+            
+            // Try to open shell key with write access
+            if let Ok(shell_key) = hkcr.open_subkey_with_flags(&shell_path, KEY_WRITE) {
+                // Try to delete the key tree, ignore if not exists
+                let _ = shell_key.delete_subkey_all(CONTEXT_MENU_NAME);
+            }
+        }
+        
+        // Verify at least one was removed by checking if any still exist
+        let test_ext = VIDEO_EXTENSIONS[0];
+        let key_path = format!(r"SystemFileAssociations\{}\shell\{}", test_ext, CONTEXT_MENU_NAME);
+        
+        if hkcr.open_subkey(&key_path).is_ok() {
+            // Key still exists, probably need admin rights
+            return Err("ADMIN_REQUIRED".to_string());
+        }
+        
+        Ok(())
+    }
+    
+    #[cfg(not(windows))]
+    {
+        Err("Context menu is only supported on Windows".to_string())
+    }
+}
+
+/// Get files passed via command line arguments
+#[tauri::command]
+fn get_cli_files() -> Vec<String> {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    
+    // Filter to only video files that exist
+    let video_extensions = ["mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "m4v", "mpeg", "mpg", "3gp"];
+    
+    args.into_iter()
+        .filter(|arg| {
+            let path = std::path::Path::new(arg);
+            if !path.exists() || !path.is_file() {
+                return false;
+            }
+            if let Some(ext) = path.extension() {
+                video_extensions.contains(&ext.to_string_lossy().to_lowercase().as_str())
+            } else {
+                false
+            }
+        })
+        .collect()
+}
+
 fn main() {
     // Ensure app directories exist
     if let Err(e) = ensure_app_dirs() {
@@ -1303,8 +1760,13 @@ fn main() {
             load_settings,
             save_settings,
             check_gpu_compatibility,
+            detect_hardware_info,
             save_render_mode,
             write_log,
+            get_logs_size,
+            get_logs_path,
+            clear_logs,
+            open_logs_folder,
             // FFmpeg commands
             check_ffmpeg_status,
             search_ffmpeg_fast,
@@ -1331,6 +1793,11 @@ fn main() {
             save_statistics,
             clear_statistics,
             export_statistics,
+            // Context menu commands
+            check_context_menu_status,
+            add_context_menu,
+            remove_context_menu,
+            get_cli_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

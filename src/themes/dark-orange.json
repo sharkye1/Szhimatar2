@@ -1,0 +1,16 @@
+{
+    "name": "dark-orange",
+    "colors": {
+        "background": "#1a1410",
+        "surface": "#2d2318",
+        "primary": "#d97934",
+        "secondary": "#8d6e4f",
+        "text": "#f5e6d3",
+        "textSecondary": "#c4a57b",
+        "border": "#4a3a28",
+        "success": "#7cb342",
+        "warning": "#ff9800",
+        "error": "#e57373",
+        "hover": "#3d2f1f"
+    }
+}

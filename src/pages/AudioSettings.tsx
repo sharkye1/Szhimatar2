@@ -1,7 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { AudioSettings as AudioSettingsType } from '../types/index';
+import { 
+  getCodecOptions, 
+  applyCodecConstraints,
+  hasActiveFilters,
+  validateAudioSettings
+} from '../utils/audioValidation';
 import '../styles/AudioSettings.css';
 
 interface AudioSettingsProps {
@@ -14,6 +20,7 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
   const { t } = useLanguage();
   const { theme } = useTheme();
   const [expandedSection, setExpandedSection] = useState<'noise' | 'effects' | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   // Codec presets with compatibility info
   const codecs = [
@@ -25,32 +32,42 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
     { label: t('audioSettings.codecs.copy'), value: 'copy', supportsEffects: false },
   ];
 
-  const bitrates = [
-    { label: '64', value: '64' },
-    { label: '96', value: '96' },
-    { label: '128', value: '128' },
-    { label: '192', value: '192' },
-    { label: '256', value: '256' },
-    { label: '320', value: '320' },
-    { label: '384', value: '384' },
-    { label: '448', value: '448' },
-    { label: '512', value: '512' },
-  ];
+  // Get dynamic options based on current codec
+  const codecOptions = getCodecOptions(settings.codec);
 
-  const sampleRates = [
-    { label: '22050 Hz', value: '22050' },
-    { label: '44100 Hz', value: '44100' },
-    { label: '48000 Hz', value: '48000' },
-    { label: '96000 Hz', value: '96000' },
-    { label: '192000 Hz', value: '192000' },
-  ];
+  // Show warning and auto-hide after 5 seconds
+  const showWarning = useCallback((message: string) => {
+    setWarning(message);
+    setTimeout(() => setWarning(null), 5000);
+  }, []);
 
-  const channelOptions = [
-    { label: t('audioSettings.channels.mono'), value: '1' },
-    { label: t('audioSettings.channels.stereo'), value: '2' },
-    { label: '5.1', value: '6' },
-    { label: '7.1', value: '8' },
-  ];
+  // Handle codec change with auto-correction
+  const handleCodecChange = useCallback((newCodec: string) => {
+    const correctedSettings = applyCodecConstraints(settings, newCodec);
+    const hasChanges = 
+      correctedSettings.sampleRate !== settings.sampleRate ||
+      correctedSettings.channels !== settings.channels ||
+      correctedSettings.bitrate !== settings.bitrate ||
+      (newCodec === 'copy' && hasActiveFilters(settings));
+    
+    if (hasChanges) {
+      showWarning(t('audioValidation.warningAutoCorrected'));
+    }
+    
+    setSettings(correctedSettings);
+  }, [settings, setSettings, showWarning, t]);
+
+  // Validate settings when codec changes
+  useEffect(() => {
+    const validation = validateAudioSettings(settings);
+    if (!validation.isValid && Object.keys(validation.correctedSettings).length > 0) {
+      // Auto-apply corrections
+      setSettings(prev => ({ ...prev, ...validation.correctedSettings }));
+      if (validation.warnings.length > 0) {
+        showWarning(t('audioValidation.warningAutoCorrected'));
+      }
+    }
+  }, [settings.codec]); // Only validate on codec change to avoid loops
 
   const canUseEffects = () => {
     const codec = codecs.find(c => c.value === settings.codec);
@@ -99,6 +116,34 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
       </header>
 
       <div className="settings-content audio-settings-extended">
+        {/* Warning Banner */}
+        {warning && (
+          <div 
+            className="audio-warning-banner"
+            style={{ 
+              background: theme.colors.warning + '20', 
+              borderColor: theme.colors.warning,
+              color: theme.colors.warning 
+            }}
+          >
+            ⚠️ {warning}
+          </div>
+        )}
+
+        {/* Codec Constraint Info */}
+        {settings.codec !== 'copy' && settings.codec !== 'aac' && (
+          <div 
+            className="codec-info-banner"
+            style={{ 
+              background: theme.colors.primary + '15', 
+              borderColor: theme.colors.primary,
+              color: theme.colors.textSecondary 
+            }}
+          >
+            ℹ️ {t(`audioValidation.codecInfo.${settings.codec}`) || t('audioValidation.codecInfoDefault')}
+          </div>
+        )}
+
         {/* Auto-Select */}
         <div className="setting-group">
           <label className="checkbox-label">
@@ -118,7 +163,7 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
             <label>{t('audio.codec')}</label>
             <select
               value={settings.codec}
-              onChange={(e) => setSettings({ ...settings, codec: e.target.value })}
+              onChange={(e) => handleCodecChange(e.target.value)}
               style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
             >
               {codecs.map(codec => (
@@ -128,14 +173,21 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
           </div>
 
           <div className="setting-group flex-1">
-            <label>{t('audio.bitrate')}</label>
+            <label>
+              {t('audio.bitrate')}
+              {codecOptions.bitrateDisabled && settings.codec !== 'copy' && (
+                <span style={{ fontSize: '11px', color: theme.colors.textSecondary, marginLeft: '4px' }}>
+                  ({t('audioValidation.notApplicable')})
+                </span>
+              )}
+            </label>
             <select
               value={settings.bitrate}
               onChange={(e) => setSettings({ ...settings, bitrate: e.target.value })}
               style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
-              disabled={settings.codec === 'copy'}
+              disabled={codecOptions.bitrateDisabled}
             >
-              {bitrates.map(br => (
+              {codecOptions.bitrates.map(br => (
                 <option key={br.value} value={br.value}>{br.label} {t('audioSettings.bitrateUnit')}</option>
               ))}
             </select>
@@ -150,23 +202,34 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
               value={settings.channels}
               onChange={(e) => setSettings({ ...settings, channels: e.target.value })}
               style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
-              disabled={settings.codec === 'copy'}
+              disabled={codecOptions.channelsDisabled}
             >
-              {channelOptions.map(ch => (
-                <option key={ch.value} value={ch.value}>{ch.label}</option>
+              {codecOptions.channels.map(ch => (
+                <option key={ch.value} value={ch.value}>
+                  {ch.value === '1' ? t('audioSettings.channels.mono') : 
+                   ch.value === '2' ? t('audioSettings.channels.stereo') : 
+                   ch.label}
+                </option>
               ))}
             </select>
           </div>
 
           <div className="setting-group flex-1">
-            <label>{t('audio.sampleRate')}</label>
+            <label>
+              {t('audio.sampleRate')}
+              {codecOptions.sampleRateDisabled && settings.codec !== 'copy' && (
+                <span style={{ fontSize: '11px', color: theme.colors.textSecondary, marginLeft: '4px' }}>
+                  ({t('audioValidation.fixed')})
+                </span>
+              )}
+            </label>
             <select
               value={settings.sampleRate}
               onChange={(e) => setSettings({ ...settings, sampleRate: e.target.value })}
               style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
-              disabled={settings.codec === 'copy'}
+              disabled={codecOptions.sampleRateDisabled}
             >
-              {sampleRates.map(sr => (
+              {codecOptions.sampleRates.map(sr => (
                 <option key={sr.value} value={sr.value}>{sr.label}</option>
               ))}
             </select>

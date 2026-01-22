@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import PresetManager from '../components/PresetManager';
+import RenderModeSelector from '../components/RenderModeSelector';
 import useRenderQueue from '../hooks/useRenderQueue';
 import StatisticsPanel from '../components/StatisticsPanel';
 import type { RenderJob } from '../services/RenderService';
@@ -18,7 +19,7 @@ import type {
 import '../styles/MainWindow.css';
 console.log("Импорты завершены")
 
-type Screen = 'main' | 'video' | 'audio' | 'general' | 'watermark';
+type Screen = 'main' | 'video' | 'audio' | 'general';
 
 interface MainWindowProps {
   onNavigate: (screen: Screen) => void;
@@ -32,6 +33,8 @@ interface MainWindowProps {
   setWatermarkSettings: React.Dispatch<React.SetStateAction<WatermarkSettings>>;
   selectedPresetName: string;
   setSelectedPresetName: React.Dispatch<React.SetStateAction<string>>;
+  cliFiles?: string[];
+  onCliFilesProcessed?: () => void;
 }
 const MainWindow: React.FC<MainWindowProps> = ({
   onNavigate,
@@ -45,6 +48,8 @@ const MainWindow: React.FC<MainWindowProps> = ({
   setWatermarkSettings,
   selectedPresetName,
   setSelectedPresetName,
+  cliFiles,
+  onCliFilesProcessed,
 }) => {
   // console.log('MainWindow render');
   
@@ -76,12 +81,12 @@ const MainWindow: React.FC<MainWindowProps> = ({
 
   const [showStats, setShowStats] = useState(false);
 
-  // Simple CPU/GPU toggle handler - switches between cpu and gpu modes
-  const handleToggleRenderMode = useCallback(() => {
-    if (!gpuAvailable) return; // Can't switch if GPU not available
-    const newMode = renderMode === 'gpu' ? 'cpu' : 'gpu';
-    setRenderMode(newMode);
-  }, [renderMode, gpuAvailable, setRenderMode]);
+  // Handler for setting specific render mode
+  const handleSetRenderMode = useCallback((mode: 'cpu' | 'gpu' | 'duo') => {
+    // Can't use GPU/Duo if GPU not available
+    if (!gpuAvailable && mode !== 'cpu') return;
+    setRenderMode(mode);
+  }, [gpuAvailable, setRenderMode]);
 
   const closeStats = useCallback(() => setShowStats(false), []);
 
@@ -101,6 +106,19 @@ const MainWindow: React.FC<MainWindowProps> = ({
   useEffect(() => {
     updateSettings(videoSettings, audioSettings, watermarkSettings, mainScreenSettings, undefined, selectedPresetName);
   }, [videoSettings, audioSettings, watermarkSettings, mainScreenSettings, selectedPresetName, updateSettings]);
+
+  // Handle CLI files (from context menu)
+  useEffect(() => {
+    if (cliFiles && cliFiles.length > 0) {
+      console.log('[MainWindow] Adding CLI files to queue:', cliFiles);
+      addFiles(cliFiles).then(() => {
+        console.log('[MainWindow] CLI files added successfully');
+        onCliFilesProcessed?.();
+      }).catch(err => {
+        console.error('[MainWindow] Failed to add CLI files:', err);
+      });
+    }
+  }, [cliFiles, addFiles, onCliFilesProcessed]);
 
   const handleSelectFiles = async () => {
     try {
@@ -176,12 +194,12 @@ const MainWindow: React.FC<MainWindowProps> = ({
   // Get status display text, color and icon
   const getStatusDisplay = (job: RenderJob) => {
     const statusConfig: Record<string, { text: string; color: string; icon: string }> = {
-      pending: { text: 'Ожидание', color: theme.colors.textSecondary, icon: '⏳' },
-      processing: { text: 'Рендеринг', color: theme.colors.primary, icon: '🔄' },
-      completed: { text: 'Готово', color: theme.colors.success, icon: '✓' },
-      error: { text: 'Ошибка', color: theme.colors.error, icon: '✗' },
-      paused: { text: 'Пауза', color: theme.colors.warning, icon: '⏸' },
-      stopped: { text: 'Остановлено', color: theme.colors.warning, icon: '■' },
+      pending: { text: t('queue.status.pending'), color: theme.colors.textSecondary, icon: '⏳' },
+      processing: { text: t('queue.status.processing'), color: theme.colors.primary, icon: '🔄' },
+      completed: { text: t('queue.status.completed'), color: theme.colors.success, icon: '✓' },
+      error: { text: t('queue.status.error'), color: theme.colors.error, icon: '✗' },
+      paused: { text: t('queue.status.paused'), color: theme.colors.warning, icon: '⏸' },
+      stopped: { text: t('queue.status.stopped'), color: theme.colors.warning, icon: '■' },
     };
     
     return statusConfig[job.status] || statusConfig.pending;
@@ -208,9 +226,6 @@ const MainWindow: React.FC<MainWindowProps> = ({
           </button>
           <button onClick={() => onNavigate('audio')} style={{ background: theme.colors.primary, color: '#fff' }}>
             🔊 {t('audio.title')}
-          </button>
-          <button onClick={() => onNavigate('watermark')} style={{ background: theme.colors.primary, color: '#fff' }}>
-            🖼️ Watermark
           </button>
           <button onClick={() => onNavigate('general')} style={{ background: theme.colors.secondary, color: '#fff' }}>
             ⚙️ {t('settings.title')}
@@ -262,48 +277,14 @@ const MainWindow: React.FC<MainWindowProps> = ({
               {t('main.saveInSourceDirectory')}
             </label>
 
-            {/* CPU/GPU Toggle - single segmented button */}
-            <div style={{ 
-              display: 'flex', 
-              border: `1px solid ${theme.colors.border}`,
-              borderRadius: '4px',
-              overflow: 'hidden',
-              marginLeft: '16px'
-            }}>
-              <button
-                onClick={handleToggleRenderMode}
-                style={{
-                  background: renderMode === 'cpu' || renderMode === 'duo' ? theme.colors.primary : theme.colors.surface,
-                  color: renderMode === 'cpu' || renderMode === 'duo' ? '#fff' : theme.colors.text,
-                  border: 'none',
-                  padding: '4px 10px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  fontWeight: renderMode === 'cpu' ? 'bold' : 'normal',
-                  fontSize: '0.85rem'
-                }}
-              >
-                CPU
-              </button>
-              <button
-                onClick={handleToggleRenderMode}
-                disabled={!gpuAvailable}
-                title={!gpuAvailable ? 'GPU недоступен — проверьте совместимость в настройках' : ''}
-                style={{
-                  background: renderMode === 'gpu' ? theme.colors.primary : theme.colors.surface,
-                  color: renderMode === 'gpu' ? '#fff' : theme.colors.text,
-                  border: 'none',
-                  borderLeft: `1px solid ${theme.colors.border}`,
-                  padding: '4px 10px',
-                  cursor: gpuAvailable ? 'pointer' : 'not-allowed',
-                  opacity: gpuAvailable ? 1 : 0.5,
-                  transition: 'all 0.2s',
-                  fontWeight: renderMode === 'gpu' ? 'bold' : 'normal',
-                  fontSize: '0.85rem'
-                }}
-              >
-                GPU
-              </button>
+            {/* CPU/GPU/Duo Toggle - Advanced visual selector */}
+            <div style={{ marginLeft: '16px' }}>
+              <RenderModeSelector
+                mode={renderMode}
+                onModeChange={handleSetRenderMode}
+                gpuAvailable={gpuAvailable}
+                isRendering={isProcessing}
+              />
             </div>
           </div>
           
@@ -330,7 +311,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
                     cursor: 'pointer'
                   }}
                 >
-                  Clear completed
+                  {t('queue.clearCompleted')}
                 </button>
               )}
             </div>
@@ -423,7 +404,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
                                 e.currentTarget.style.background = `${theme.colors.error}15`;
                                 e.currentTarget.style.borderColor = `${theme.colors.error}40`;
                               }}
-                              title="Удалить из очереди"
+                              title={t('queue.deleteFromQueue')}
                             >
                               ×
                             </button>
@@ -482,7 +463,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
                         display: 'flex',
                         gap: '8px'
                       }}>
-                        <span>✓ Готово</span>
+                        <span>{t('queue.completedWithSize')}</span>
                         <span style={{ color: theme.colors.textSecondary, fontFamily: 'monospace' }}>
                           ({item.outputSize})
                         </span>

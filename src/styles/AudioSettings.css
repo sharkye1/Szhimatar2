@@ -8,6 +8,31 @@
     padding: 20px;
 }
 
+/* Audio Warning Banner */
+.audio-warning-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    border: 1px solid;
+    font-size: 13px;
+    font-weight: 500;
+    animation: slideDown 0.3s ease-out;
+}
+
+/* Codec Info Banner */
+.codec-info-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid;
+    font-size: 12px;
+    animation: slideDown 0.3s ease-out;
+}
+
 /* Setting Rows */
 .setting-row {
     display: flex;

@@ -1,0 +1,16 @@
+{
+    "name": "purple-pink",
+    "colors": {
+        "background": "#1a0f1f",
+        "surface": "#2d1f3a",
+        "primary": "#ba68c8",
+        "secondary": "#8e6b9d",
+        "text": "#f3e5f5",
+        "textSecondary": "#ce93d8",
+        "border": "#4a2f5a",
+        "success": "#eabbf2",
+        "warning": "#eabbf2",
+        "error": "#eabbf2",
+        "hover": "#3a2748"
+    }
+}

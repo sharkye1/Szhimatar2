@@ -3,6 +3,9 @@ import lightTheme from '../themes/light.json';
 import darkRedTheme from '../themes/dark-red.json';
 import blueOceanTheme from '../themes/blue-ocean.json';
 import darkBlueTheme from '../themes/dark-blue.json';
+import darkOrangeTheme from '../themes/dark-orange.json';
+import darkGreenTheme from '../themes/dark-green.json';
+import purplePinkTheme from '../themes/purple-pink.json';
 
 interface Theme {
   name: string;
@@ -34,6 +37,9 @@ const themes: Record<string, Theme> = {
   'dark-red': darkRedTheme,
   'blue-ocean': blueOceanTheme,
   'dark-blue': darkBlueTheme,
+  'dark-orange': darkOrangeTheme,
+  'dark-green': darkGreenTheme,
+  'purple-pink': purplePinkTheme,
 };
 
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {

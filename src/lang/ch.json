@@ -90,7 +90,37 @@
   "ffmpeg": {
     "configurationLabel": "FFmpeg配置",
     "toggleConfigure": "配置FFmpeg",
-    "toggleHide": "隐藏FFmpeg设置"
+    "toggleHide": "隐藏FFmpeg配置",
+    "setup": "FFmpeg设置",
+    "found": "已找到",
+    "notFound": "未找到",
+    "required": "视频压缩需要FFmpeg。让我们找到它！",
+    "autoSearch": "🔍 自动搜索FFmpeg",
+    "searching": "搜索中...",
+    "fastSearchComplete": "⚠️ 快速搜索完成",
+    "ffmpegNotFound": "在常见位置未找到FFmpeg。",
+    "ffprobeNotFound": "在常见位置未找到FFprobe。",
+    "bothNotFound": "在常见位置未找到FFmpeg和FFprobe。",
+    "deepSearchWarning": "深度搜索将扫描整个计算机。这可能需要几分钟并且可能会减慢系统速度。",
+    "startDeepSearch": "🔎 开始深度搜索",
+    "cancel": "取消",
+    "deepSearching": "深度搜索中...",
+    "checkedLocations": "已检查{count}个位置",
+    "pleaseWait": "这可能需要一些时间。请耐心等待...",
+    "searchComplete": "✓ 搜索完成！",
+    "ok": "确定",
+    "manualSetup": "手动设置",
+    "manualSetupHelp": "如果自动搜索不起作用，您可以手动指定FFmpeg和FFprobe二进制文件的路径。",
+    "ffmpegPath": "FFmpeg路径：",
+    "ffprobePath": "FFprobe路径：",
+    "ffmpegPathPlaceholder": "/path/to/ffmpeg 或 C:\\ffmpeg\\bin\\ffmpeg.exe",
+    "ffprobePathPlaceholder": "/path/to/ffprobe 或 C:\\ffmpeg\\bin\\ffprobe.exe",
+    "browse": "浏览...",
+    "savePaths": "保存路径",
+    "whereToGet": "在哪里获取FFmpeg？",
+    "downloadFrom": "从以下位置下载FFmpeg：",
+    "forWindows": "对于Windows，您还可以使用：",
+    "selectAtLeastOne": "请至少选择一个路径"
   },
   "audio": {
     "title": "音频设置",
@@ -141,6 +171,24 @@
       "compressor": "压缩器（压缩动态范围）"
     }
   },
+  "audioValidation": {
+    "warningAutoCorrected": "所选音频设置与编解码器不兼容，已自动更正",
+    "warningSampleRate": "采样率已调整以兼容编解码器",
+    "warningChannels": "声道数已调整以兼容编解码器",
+    "warningBitrate": "比特率已调整以兼容编解码器",
+    "warningFiltersDisabled": "音频滤镜已禁用（复制流不支持滤镜）",
+    "errorCopyWithFilters": "无法在复制流时使用音频滤镜",
+    "errorNormalizationCopy": "音频规范化不支持 copy 编解码器",
+    "notApplicable": "不适用",
+    "fixed": "固定",
+    "codecInfoDefault": "部分参数受限以兼容编解码器",
+    "codecInfo": {
+      "opus": "Opus：48 kHz采样率（固定），1-2声道，16-128 kbps比特率",
+      "mp3": "MP3：44.1 kHz采样率（固定），1-2声道，64-192 kbps比特率",
+      "flac": "FLAC：无损，比特率不适用",
+      "vorbis": "Vorbis：1-2声道"
+    }
+  },
   "presets": {
     "label": "预设",
     "selectPreset": "选择一个预设",
@@ -174,6 +222,14 @@
     "ffmpegPath": "FFmpeg路径",
     "ffprobePath": "FFprobe路径",
     "outputSuffix": "输出文件后缀",
+    "screenAnimation": "屏幕过渡动画",
+    "animations": {
+      "default": "默认 (淡入淡出 + 滑动)",
+      "softBlur": "柔和模糊",
+      "physics": "物理 (弹簧)",
+      "scaleFade": "缩放 + 淡入淡出",
+      "none": "无动画"
+    },
     "checkUpdates": "检查更新",
     "save": "保存",
     "cancel": "取消"
@@ -204,31 +260,117 @@
     "error": "错误"
   },
   "stats": {
-    "title": "Render Statistics",
-    "loading": "Loading statistics...",
-    "totalRenders": "Total Renders",
-    "successful": "Successful",
-    "failed": "Failed",
-    "successRate": "Success Rate %",
-    "avgTime": "Average Time",
-    "totalTime": "Total Time",
-    "activeRenders": "Active Renders",
-    "noRenders": "No renders in history",
-    "export": "Export JSON",
-    "clear": "Clear History",
-    "delete": "Delete",
-    "confirmClear": "Clear History?",
-    "confirmClearText": "This will permanently delete all render history.",
-    "pending": "Pending",
-    "rendering": "Rendering",
-    "completed": "Completed",
-    "error": "Error",
-    "cancelled": "Cancelled",
+    "title": "渲染统计",
+    "loading": "加载统计中...",
+    "totalRenders": "总渲染数",
+    "successful": "成功",
+    "failed": "失败",
+    "successRate": "成功率 %",
+    "avgTime": "平均时间",
+    "totalTime": "总时间",
+    "activeRenders": "活跃渲染",
+    "noRenders": "历史记录为空",
+    "export": "导出JSON",
+    "clear": "清除历史",
+    "delete": "删除",
+    "confirmClear": "清除历史？",
+    "confirmClearText": "这将永久删除所有渲染历史。",
+    "pending": "等待中",
+    "rendering": "渲染中",
+    "completed": "已完成",
+    "error": "错误",
+    "cancelled": "已取消",
+    "stopped": "已停止",
     "filter": {
-      "all": "All",
-      "completed": "Completed",
-      "error": "Errors",
-      "rendering": "Rendering"
+      "all": "全部",
+      "completed": "已完成",
+      "error": "错误",
+      "rendering": "渲染中"
     }
+  },
+  "queue": {
+    "status": {
+      "pending": "等待中",
+      "processing": "渲染中",
+      "completed": "完成",
+      "error": "错误",
+      "paused": "已暂停",
+      "stopped": "已停止"
+    },
+    "clearCompleted": "清除已完成",
+    "deleteFromQueue": "从队列删除",
+    "completedWithSize": "完成"
+  },
+  "gpu": {
+    "label": "GPU (NVENC)",
+    "checkCompatibility": "检查GPU兼容性",
+    "available": "可用 (NVENC)",
+    "unavailable": "不可用",
+    "notAvailableTooltip": "GPU不可用 — 请在设置中检查兼容性",
+    "compatibleFound": "GPU兼容 (找到NVENC). 要应用更改，请重启应用程序。",
+    "notFoundOrUnavailable": "未找到GPU或NVENC不可用",
+    "checkError": "GPU检查错误",
+    "pathsNotConfigured": "请先在FFmpeg配置部分设置FFmpeg和FFprobe路径"
+  },
+  "renderMode": {
+    "cpu": "CPU",
+    "gpu": "GPU",
+    "duo": "Duo",
+    "cpuTooltip": "仅使用CPU渲染",
+    "gpuTooltip": "使用GPU渲染 (NVENC)",
+    "duoTooltip": "并行渲染: CPU + GPU 同时进行",
+    "duoDisabledTooltip": "GPU不可用于Duo模式"
+  },
+  "ffmpegPresets": {
+    "ultrafast": "极速",
+    "superfast": "超快",
+    "veryfast": "很快",
+    "faster": "较快",
+    "fast": "快速",
+    "medium": "中等（推荐）",
+    "slow": "慢速",
+    "slower": "较慢",
+    "veryslow": "极慢",
+    "descriptions": {
+      "ultrafast": "最快编码，最差压缩",
+      "superfast": "很快，压缩较差",
+      "veryfast": "快速，中等压缩",
+      "faster": "平衡速度",
+      "fast": "平衡",
+      "medium": "默认（推荐）",
+      "slow": "较慢编码，更好压缩",
+      "slower": "很慢，最佳压缩",
+      "veryslow": "极慢，最佳压缩"
+    }
+  },
+  "videoGuide": {
+    "title": "📖 视频指南"
+  },
+  "logs": {
+    "title": "日志",
+    "viewFolder": "查看日志文件夹",
+    "warningTitle": "警告",
+    "warningMessage": "日志用于计算统计数据和使用总结。对此文件夹中文件的任何修改、删除或移动都可能导致统计数据丢失或程序运行不正常。",
+    "pathLabel": "日志位置：",
+    "continue": "我理解风险。",
+    "cancel": "取消",
+    "errorOpening": "打开日志文件夹错误"
+  },
+  "contextMenu": {
+    "title": "Windows 右键菜单",
+    "status": "状态",
+    "statusAdded": "已添加到右键菜单",
+    "statusNotAdded": "未添加",
+    "statusInvalid": "应用程序已移动",
+    "add": "添加到右键菜单",
+    "remove": "从右键菜单移除",
+    "description": "将“用 Szhimatar 压缩”选项添加到 Windows 资源管理器的视频文件右键菜单。选中的文件将自动添加到队列。",
+    "exeMovedWarning": "应用程序已移动。需要重新安装右键菜单。",
+    "added": "右键菜单添加成功",
+    "removed": "右键菜单移除成功",
+    "adminRequired": "需要管理员权限。请以管理员身份运行应用程序。",
+    "errorAdding": "添加到右键菜单时出错",
+    "errorRemoving": "从右键菜单移除时出错",
+    "windowsOnly": "右键菜单仅在 Windows 上可用"
   }
 }

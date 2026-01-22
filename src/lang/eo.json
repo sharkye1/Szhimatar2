@@ -90,7 +90,37 @@
   "ffmpeg": {
     "configurationLabel": "FFmpeg-agordo",
     "toggleConfigure": "Agordi FFmpeg",
-    "toggleHide": "Kaŝi FFmpeg-agordon"
+    "toggleHide": "Kaŝi FFmpeg-agordojn",
+    "setup": "FFmpeg Agordo",
+    "found": "Trovita",
+    "notFound": "Ne trovita",
+    "required": "FFmpeg estas bezonata por videa densigo. Ni trovu ĝin!",
+    "autoSearch": "🔍 Aŭtomate Serĉi FFmpeg",
+    "searching": "Serĉante...",
+    "fastSearchComplete": "⚠️ Rapida Serĉo Finita",
+    "ffmpegNotFound": "FFmpeg ne trovita en komunaj lokoj.",
+    "ffprobeNotFound": "FFprobe ne trovita en komunaj lokoj.",
+    "bothNotFound": "FFmpeg kaj FFprobe ne trovitaj en komunaj lokoj.",
+    "deepSearchWarning": "Profunda serĉo skanos vian tutan komputilon. Ĉi tio povas daŭri kelkajn minutojn kaj eble malrapidigos vian sistemon.",
+    "startDeepSearch": "🔎 Komenci Profundan Serĉon",
+    "cancel": "Nuligi",
+    "deepSearching": "Profunde serĉante...",
+    "checkedLocations": "Kontrolitaj {count} lokoj",
+    "pleaseWait": "Ĉi tio povas daŭri iom da tempo. Bonvolu paciencan...",
+    "searchComplete": "✓ Serĉo finita!",
+    "ok": "Bone",
+    "manualSetup": "Mana Agordo",
+    "manualSetupHelp": "Se aŭtomata serĉo ne funkcias, vi povas mane specifi la vojojn al FFmpeg kaj FFprobe dosieroj.",
+    "ffmpegPath": "FFmpeg Vojo:",
+    "ffprobePath": "FFprobe Vojo:",
+    "ffmpegPathPlaceholder": "/path/to/ffmpeg aŭ C:\\ffmpeg\\bin\\ffmpeg.exe",
+    "ffprobePathPlaceholder": "/path/to/ffprobe aŭ C:\\ffmpeg\\bin\\ffprobe.exe",
+    "browse": "Foliumi...",
+    "savePaths": "Konservi Vojojn",
+    "whereToGet": "Kie akiri FFmpeg?",
+    "downloadFrom": "Elŝuti FFmpeg de:",
+    "forWindows": "Por Windows, vi ankaŭ povas uzi:",
+    "selectAtLeastOne": "Bonvolu elekti almenaŭ unu vojon"
   },
   "audio": {
     "title": "Aŭdaj agordoj",
@@ -141,6 +171,24 @@
       "compressor": "Kompresoro (kunpremas dinamikan intervalon)"
     }
   },
+  "audioValidation": {
+    "warningAutoCorrected": "Elektitaj aŭdaj agordoj estas nekongruaj kun la kodeko kaj estis aŭtomate korektitaj",
+    "warningSampleRate": "Specimena rapido alĝustigita por kodeka kongrueco",
+    "warningChannels": "Kanala nombro alĝustigita por kodeka kongrueco",
+    "warningBitrate": "Bitrapido alĝustigita por kodeka kongrueco",
+    "warningFiltersDisabled": "Aŭdaj filtriloj malŝaltitaj",
+    "errorCopyWithFilters": "Ne eblas uzi aŭdajn filtrilojn kun kopio-fluo",
+    "errorNormalizationCopy": "Aŭda normaligo ne subtenata kun kodeko copy",
+    "notApplicable": "N/A",
+    "fixed": "fiksita",
+    "codecInfoDefault": "Iuj parametroj estas limigitaj por kodeka kongrueco",
+    "codecInfo": {
+      "opus": "Opus: 48 kHz specimena rapido (fiksita), 1-2 kanaloj, 16-128 kbps",
+      "mp3": "MP3: 44.1 kHz specimena rapido (fiksita), 1-2 kanaloj, 64-192 kbps",
+      "flac": "FLAC: senperda, bitrapido ne aplikebla",
+      "vorbis": "Vorbis: 1-2 kanaloj"
+    }
+  },
   "presets": {
     "label": "Antaŭagordoj",
     "selectPreset": "Elekti antaŭagordon",
@@ -174,6 +222,14 @@
     "ffmpegPath": "FFmpeg-vojo",
     "ffprobePath": "FFprobe-vojo",
     "outputSuffix": "Sufikso de eligaj dosieroj",
+    "screenAnimation": "Ekrantraŝika animacio",
+    "animations": {
+      "default": "Defaŭlta (fade + slide)",
+      "softBlur": "Mola nebuleco",
+      "physics": "Fiziko (risorto)",
+      "scaleFade": "Skalo + fade",
+      "none": "Sen animacio"
+    },
     "checkUpdates": "Kontroli ĝisdatigojn",
     "save": "Konservi",
     "cancel": "Nuligi"
@@ -204,31 +260,117 @@
     "error": "Eraro"
   },
   "stats": {
-    "title": "Render Statistics",
-    "loading": "Loading statistics...",
-    "totalRenders": "Total Renders",
-    "successful": "Successful",
-    "failed": "Failed",
-    "successRate": "Success Rate %",
-    "avgTime": "Average Time",
-    "totalTime": "Total Time",
-    "activeRenders": "Active Renders",
-    "noRenders": "No renders in history",
-    "export": "Export JSON",
-    "clear": "Clear History",
-    "delete": "Delete",
-    "confirmClear": "Clear History?",
-    "confirmClearText": "This will permanently delete all render history.",
-    "pending": "Pending",
-    "rendering": "Rendering",
-    "completed": "Completed",
-    "error": "Error",
-    "cancelled": "Cancelled",
+    "title": "Renderaj Statistikoj",
+    "loading": "Ŝarĝado de statistikoj...",
+    "totalRenders": "Totalaj Renderoj",
+    "successful": "Sukcesaj",
+    "failed": "Malsukcesaj",
+    "successRate": "Sukcesindico %",
+    "avgTime": "Averaĝa Tempo",
+    "totalTime": "Totala Tempo",
+    "activeRenders": "Aktivaj Renderoj",
+    "noRenders": "Neniuj renderoj en historio",
+    "export": "Eksporti JSON",
+    "clear": "Viŝi Historion",
+    "delete": "Forigi",
+    "confirmClear": "Viŝi Historion?",
+    "confirmClearText": "Ĉi tio forviŝos ĉiujn renderajn historiojn por ĉiam.",
+    "pending": "Atendanta",
+    "rendering": "Renderado",
+    "completed": "Kompletita",
+    "error": "Eraro",
+    "cancelled": "Nuligita",
+    "stopped": "Haltigita",
     "filter": {
-      "all": "All",
-      "completed": "Completed",
-      "error": "Errors",
-      "rendering": "Rendering"
+      "all": "Ĉiuj",
+      "completed": "Kompletiĝintaj",
+      "error": "Eraroj",
+      "rendering": "Renderantaj"
     }
+  },
+  "queue": {
+    "status": {
+      "pending": "Atendanta",
+      "processing": "Renderado",
+      "completed": "Finita",
+      "error": "Eraro",
+      "paused": "Paŭzigita",
+      "stopped": "Haltigita"
+    },
+    "clearCompleted": "Viŝi kompletiĝintajn",
+    "deleteFromQueue": "Forigi el atendovico",
+    "completedWithSize": "Finita"
+  },
+  "gpu": {
+    "label": "GPU (NVENC)",
+    "checkCompatibility": "Kontroli GPU-kongruecon",
+    "available": "Disponebla (NVENC)",
+    "unavailable": "Nedisponebla",
+    "notAvailableTooltip": "GPU nedisponebla — kontrolu kongruecon en agordoj",
+    "compatibleFound": "GPU kongruas (NVENC trovita). Por apliki, restartu la aplikaĵon.",
+    "notFoundOrUnavailable": "GPU ne trovita aŭ NVENC nedisponebla",
+    "checkError": "GPU-kontrola eraro",
+    "pathsNotConfigured": "Bonvolu unue agordi FFmpeg kaj FFprobe vojojn en la FFmpeg-agorda sekcio"
+  },
+  "renderMode": {
+    "cpu": "CPU",
+    "gpu": "GPU",
+    "duo": "Duo",
+    "cpuTooltip": "Bildigi nur per CPU",
+    "gpuTooltip": "Bildigi per GPU (NVENC)",
+    "duoTooltip": "Paralela bildigado: CPU + GPU samtempe",
+    "duoDisabledTooltip": "GPU ne disponebla por Duo-reĝimo"
+  },
+  "ffmpegPresets": {
+    "ultrafast": "Plejrapida",
+    "superfast": "Superrapida",
+    "veryfast": "Tre rapida",
+    "faster": "Pli rapida",
+    "fast": "Rapida",
+    "medium": "Meza (rekomendita)",
+    "slow": "Malrapida",
+    "slower": "Pli malrapida",
+    "veryslow": "Tre malrapida",
+    "descriptions": {
+      "ultrafast": "Plejrapida kodado, plej malbona kunpremo",
+      "superfast": "Tre rapida, malbona kunpremo",
+      "veryfast": "Rapida, meza kunpremo",
+      "faster": "Ekvilibra rapido",
+      "fast": "Ekvilibra",
+      "medium": "Defaŭlta (rekomendita)",
+      "slow": "Pli malrapida kodado, pli bona kunpremo",
+      "slower": "Tre malrapida, plej bona kunpremo",
+      "veryslow": "Ekstreme malrapida, plej bona kunpremo"
+    }
+  },
+  "videoGuide": {
+    "title": "📖 Video gvidilo"
+  },
+  "logs": {
+    "title": "Protokoloj",
+    "viewFolder": "Vidi protokolan dosierujon",
+    "warningTitle": "Averto",
+    "warningMessage": "Protokoloj estas uzataj por kalkuli statistikojn kaj resumojn de uzado. Ĉiuj modifoj, forviŝoj aŭ translokigoj de dosieroj en ĉi tiu dosierujo povas kaŭzi perdon de statistikoj aŭ malkorektan funkciigon de la programo.",
+    "pathLabel": "Protokola loko:",
+    "continue": "Mi konscias pri la riskoj.",
+    "cancel": "Nuligi",
+    "errorOpening": "Eraro malfermante protokolan dosierujon"
+  },
+  "contextMenu": {
+    "title": "Windows kunteksta menuo",
+    "status": "Stato",
+    "statusAdded": "Aldonita al kunteksta menuo",
+    "statusNotAdded": "Ne aldonita",
+    "statusInvalid": "Aplikajo estis movita",
+    "add": "Aldoni al kunteksta menuo",
+    "remove": "Forigi el kunteksta menuo",
+    "description": "Aldonas opcion \"Kunpremi per Szhimatar\" al Windows Esplorilo por videaj dosieroj. Elektitaj dosieroj aŭtomate aldoniĝas al la atendovico.",
+    "exeMovedWarning": "Aplikajo estis movita. Vi devas reinstali la kuntekstan menuon.",
+    "added": "Kunteksta menuo sukcese aldonita",
+    "removed": "Kunteksta menuo sukcese forigita",
+    "adminRequired": "Administrantaj rajtoj bezonataj. Rulu la aplikajon kiel administranto.",
+    "errorAdding": "Eraro aldonante al kunteksta menuo",
+    "errorRemoving": "Eraro forigante el kunteksta menuo",
+    "windowsOnly": "Kunteksta menuo disponeblas nur en Windows"
   }
 }

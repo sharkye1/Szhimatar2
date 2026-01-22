@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/api/dialog';
 import { ffmpegFinder } from '../services/FFmpegFinder';
+import { useLanguage } from '../contexts/LanguageContext';
 import '../styles/FfmpegManager.css';
 
 interface FfmpegStatus {
@@ -22,7 +23,18 @@ const isWindows = (): boolean => {
          navigator.platform.toLowerCase().includes('win');
 };
 
+/**
+ * Strip Windows \\?\ prefix from path for clean display
+ * This prefix appears in long/UNC paths but shouldn't be shown to users
+ */
+const cleanPath = (path: string): string => {
+  if (!path) return '';
+  // Remove \\?\ or \\?\UNC\ prefix from Windows paths
+  return path.replace(/^\\\\\?\\(UNC\\)?/, '');
+};
+
 export function FfmpegManager() {
+  const { t } = useLanguage();
   const [status, setStatus] = useState<FfmpegStatus | null>(null);
   const [searchStage, setSearchStage] = useState<SearchStage>('idle');
   const [searchMessage, setSearchMessage] = useState('');
@@ -56,8 +68,8 @@ export function FfmpegManager() {
       setStatus({
         ffmpeg_found: !!result.ffmpeg?.isValid,
         ffprobe_found: !!result.ffprobe?.isValid,
-        ffmpeg_path: result.ffmpeg?.path || '',
-        ffprobe_path: result.ffprobe?.path || '',
+        ffmpeg_path: cleanPath(result.ffmpeg?.path || ''),
+        ffprobe_path: cleanPath(result.ffprobe?.path || ''),
         ffmpeg_version: result.ffmpeg?.version || '',
         ffprobe_version: result.ffprobe?.version || ''
       });
@@ -69,7 +81,7 @@ export function FfmpegManager() {
 
   const handleFastSearch = async () => {
     setSearchStage('searching');
-    setSearchMessage('Searching for FFmpeg...');
+    setSearchMessage(t('ffmpeg.searching'));
     setError('');
     setFilesChecked(0);
 
@@ -81,8 +93,8 @@ export function FfmpegManager() {
       setStatus({
         ffmpeg_found: !!result.ffmpeg?.isValid,
         ffprobe_found: !!result.ffprobe?.isValid,
-        ffmpeg_path: result.ffmpeg?.path || '',
-        ffprobe_path: result.ffprobe?.path || '',
+        ffmpeg_path: cleanPath(result.ffmpeg?.path || ''),
+        ffprobe_path: cleanPath(result.ffprobe?.path || ''),
         ffmpeg_version: result.ffmpeg?.version || '',
         ffprobe_version: result.ffprobe?.version || ''
       });
@@ -99,13 +111,18 @@ export function FfmpegManager() {
 
   const handleDeepSearch = async () => {
     setSearchStage('deep-searching');
-    setSearchMessage('Starting deep search...');
+    setSearchMessage(t('ffmpeg.deepSearching'));
     setError('');
     setFilesChecked(0);
 
     try {
       const result = await invoke<FfmpegStatus>('search_ffmpeg_deep');
-      setStatus(result);
+      // Clean paths from backend result
+      setStatus({
+        ...result,
+        ffmpeg_path: cleanPath(result.ffmpeg_path),
+        ffprobe_path: cleanPath(result.ffprobe_path)
+      });
       setSearchStage('complete');
     } catch (err) {
       setError(String(err));
@@ -147,7 +164,7 @@ export function FfmpegManager() {
 
   const handleSetCustomPaths = async () => {
     if (!customFfmpegPath && !customFfprobePath) {
-      setError('Please select at least one path');
+      setError(t('ffmpeg.selectAtLeastOne'));
       return;
     }
 
@@ -160,8 +177,8 @@ export function FfmpegManager() {
       setStatus({
         ffmpeg_found: !!result.ffmpeg?.isValid,
         ffprobe_found: !!result.ffprobe?.isValid,
-        ffmpeg_path: result.ffmpeg?.path || '',
-        ffprobe_path: result.ffprobe?.path || '',
+        ffmpeg_path: cleanPath(result.ffmpeg?.path || ''),
+        ffprobe_path: cleanPath(result.ffprobe?.path || ''),
         ffmpeg_version: result.ffmpeg?.version || '',
         ffprobe_version: result.ffprobe?.version || ''
       });
@@ -189,7 +206,7 @@ export function FfmpegManager() {
             <strong>FFmpeg:</strong>{' '}
             {status.ffmpeg_found ? (
               <>
-                <span className="status-found">Found</span>
+                <span className="status-found">{t('ffmpeg.found')}</span>
                 {/* Always show absolute path */}
                 {status.ffmpeg_path && (
                   <div className="status-path" title={status.ffmpeg_path}>
@@ -201,7 +218,7 @@ export function FfmpegManager() {
                 )}
               </>
             ) : (
-              <span className="status-missing">Not found</span>
+              <span className="status-missing">{t('ffmpeg.notFound')}</span>
             )}
           </div>
         </div>
@@ -214,7 +231,7 @@ export function FfmpegManager() {
             <strong>FFprobe:</strong>{' '}
             {status.ffprobe_found ? (
               <>
-                <span className="status-found">Found</span>
+                <span className="status-found">{t('ffmpeg.found')}</span>
                 {/* Always show absolute path */}
                 {status.ffprobe_path && (
                   <div className="status-path" title={status.ffprobe_path}>
@@ -226,7 +243,7 @@ export function FfmpegManager() {
                 )}
               </>
             ) : (
-              <span className="status-missing">Not found</span>
+              <span className="status-missing">{t('ffmpeg.notFound')}</span>
             )}
           </div>
         </div>
@@ -236,7 +253,7 @@ export function FfmpegManager() {
 
   return (
     <div className="ffmpeg-manager">
-      <h2>FFmpeg Setup</h2>
+      <h2>{t('ffmpeg.setup')}</h2>
 
       {renderStatus()}
 
@@ -244,9 +261,9 @@ export function FfmpegManager() {
 
       {searchStage === 'idle' && (!status?.ffmpeg_found || !status?.ffprobe_found) && (
         <div className="search-section">
-          <p>FFmpeg is required for video compression. Let's find it!</p>
+          <p>{t('ffmpeg.required')}</p>
           <button onClick={handleFastSearch} className="btn-primary">
-            🔍 Auto-Search for FFmpeg
+            {t('ffmpeg.autoSearch')}
           </button>
         </div>
       )}
@@ -254,28 +271,27 @@ export function FfmpegManager() {
       {searchStage === 'searching' && (
         <div className="search-progress">
           <div className="spinner"></div>
-          <p>{searchMessage || 'Searching...'}</p>
+          <p>{searchMessage || t('ffmpeg.searching')}</p>
         </div>
       )}
 
       {searchStage === 'deep-search-warning' && (
         <div className="warning-box">
-          <h3>⚠️ Fast Search Complete</h3>
+          <h3>{t('ffmpeg.fastSearchComplete')}</h3>
           <p>
-            {status?.ffmpeg_found && !status?.ffprobe_found && 'FFprobe not found in common locations.'}
-            {!status?.ffmpeg_found && status?.ffprobe_found && 'FFmpeg not found in common locations.'}
-            {!status?.ffmpeg_found && !status?.ffprobe_found && 'FFmpeg and FFprobe not found in common locations.'}
+            {status?.ffmpeg_found && !status?.ffprobe_found && t('ffmpeg.ffprobeNotFound')}
+            {!status?.ffmpeg_found && status?.ffprobe_found && t('ffmpeg.ffmpegNotFound')}
+            {!status?.ffmpeg_found && !status?.ffprobe_found && t('ffmpeg.bothNotFound')}
           </p>
           <p>
-            <strong>Deep search</strong> will scan your entire computer. This may take several minutes
-            and could slow down your system.
+            {t('ffmpeg.deepSearchWarning')}
           </p>
           <div className="warning-actions">
             <button onClick={handleDeepSearch} className="btn-warning">
-              🔎 Start Deep Search
+              {t('ffmpeg.startDeepSearch')}
             </button>
             <button onClick={() => setSearchStage('idle')} className="btn-secondary">
-              Cancel
+              {t('ffmpeg.cancel')}
             </button>
           </div>
         </div>
@@ -284,53 +300,53 @@ export function FfmpegManager() {
       {searchStage === 'deep-searching' && (
         <div className="search-progress deep">
           <div className="spinner large"></div>
-          <p>{searchMessage || 'Deep searching...'}</p>
-          {filesChecked > 0 && <p className="files-checked">Checked {filesChecked} locations</p>}
-          <p className="deep-warning">This may take a while. Please be patient...</p>
+          <p>{searchMessage || t('ffmpeg.deepSearching')}</p>
+          {filesChecked > 0 && <p className="files-checked">{t('ffmpeg.checkedLocations').replace('{count}', String(filesChecked))}</p>}
+          <p className="deep-warning">{t('ffmpeg.pleaseWait')}</p>
         </div>
       )}
 
       {searchStage === 'complete' && (
         <div className="search-complete">
-          <p>✓ Search complete!</p>
+          <p>{t('ffmpeg.searchComplete')}</p>
           <button onClick={() => setSearchStage('idle')} className="btn-secondary">
-            OK
+            {t('ffmpeg.ok')}
           </button>
         </div>
       )}
 
       <div className="manual-section">
-        <h3>Manual Setup</h3>
+        <h3>{t('ffmpeg.manualSetup')}</h3>
         <p className="help-text">
-          If auto-search doesn't work, you can manually specify the paths to FFmpeg and FFprobe binaries.
+          {t('ffmpeg.manualSetupHelp')}
         </p>
 
         <div className="path-input-group">
-          <label>FFmpeg Path:</label>
+          <label>{t('ffmpeg.ffmpegPath')}</label>
           <div className="path-input">
             <input
               type="text"
               value={customFfmpegPath || status?.ffmpeg_path || ''}
               onChange={(e) => setCustomFfmpegPath(e.target.value)}
-              placeholder="/path/to/ffmpeg or C:\ffmpeg\bin\ffmpeg.exe"
+              placeholder={t('ffmpeg.ffmpegPathPlaceholder')}
             />
             <button onClick={handleSelectFfmpeg} className="btn-browse">
-              Browse...
+              {t('ffmpeg.browse')}
             </button>
           </div>
         </div>
 
         <div className="path-input-group">
-          <label>FFprobe Path:</label>
+          <label>{t('ffmpeg.ffprobePath')}</label>
           <div className="path-input">
             <input
               type="text"
               value={customFfprobePath || status?.ffprobe_path || ''}
               onChange={(e) => setCustomFfprobePath(e.target.value)}
-              placeholder="/path/to/ffprobe or C:\ffmpeg\bin\ffprobe.exe"
+              placeholder={t('ffmpeg.ffprobePathPlaceholder')}
             />
             <button onClick={handleSelectFfprobe} className="btn-browse">
-              Browse...
+              {t('ffmpeg.browse')}
             </button>
           </div>
         </div>
@@ -340,20 +356,20 @@ export function FfmpegManager() {
           className="btn-primary"
           disabled={!customFfmpegPath && !customFfprobePath}
         >
-          Save Paths
+          {t('ffmpeg.savePaths')}
         </button>
       </div>
 
       <div className="help-section">
         <details>
-          <summary>Where to get FFmpeg?</summary>
+          <summary>{t('ffmpeg.whereToGet')}</summary>
           <p>
-            Download FFmpeg from: <a href="https://ffmpeg.org/download.html" target="_blank" rel="noopener noreferrer">
+            {t('ffmpeg.downloadFrom')} <a href="https://ffmpeg.org/download.html" target="_blank" rel="noopener noreferrer">
               ffmpeg.org/download.html
             </a>
           </p>
           <p>
-            For Windows, you can also use: <a href="https://www.gyan.dev/ffmpeg/builds/" target="_blank" rel="noopener noreferrer">
+            {t('ffmpeg.forWindows')} <a href="https://www.gyan.dev/ffmpeg/builds/" target="_blank" rel="noopener noreferrer">
               gyan.dev/ffmpeg/builds
             </a>
           </p>

@@ -351,6 +351,84 @@ export class FFmpegCommandBuilder {
 }
 
 // Placeholder for FFmpeg process manager (for future implementation)
+/**
+ * Detect FPS for a video file during render pipeline
+ * 
+ * Used internally by render service to automatically detect FPS
+ * when fpsMode === "auto"
+ * 
+ * @param videoPath - Path to video file
+ * @param fallbackFps - FPS to use if detection fails (default: 30)
+ * @returns Detected FPS or fallback value
+ * 
+ * Important: This function:
+ * - Normalizes path (removes \\?\ prefix for Windows paths)
+ * - Logs errors to console but doesn't throw
+ * - Always returns a valid FPS value
+ * - Prefers avg_frame_rate, falls back to r_frame_rate
+ */
+export async function detectFpsForRender(videoPath: string, fallbackFps: number = 30): Promise<number> {
+  try {
+    // Normalize path - remove \\?\ and \\?\UNC\ prefixes used by Windows APIs
+    const normalizedPath = videoPath.replace(/^\\\\\?\\(UNC\\)?/, '');
+    
+    // Get FFprobe path from config
+    const paths = await loadFFmpegPaths();
+    const ffprobePath = paths.ffprobe_path;
+    
+    if (!ffprobePath || ffprobePath.trim() === '') {
+      console.warn('[detectFpsForRender] FFprobe not configured, using fallback FPS:', fallbackFps);
+      return fallbackFps;
+    }
+    
+    // Normalize ffprobe path too
+    const normalizedFfprobePath = ffprobePath.replace(/^\\\\\?\\(UNC\\)?/, '');
+    
+    // Build FFprobe command
+    const args = [
+      '-v', 'quiet',
+      '-print_format', 'json',
+      '-show_streams',
+      normalizedPath
+    ];
+    
+    // Execute FFprobe
+    const command = new Command(normalizedFfprobePath, args);
+    const output = await command.execute();
+    
+    if (output.code !== 0) {
+      console.warn('[detectFpsForRender] FFprobe failed, using fallback FPS:', fallbackFps, 'Error:', output.stderr);
+      return fallbackFps;
+    }
+    
+    // Parse JSON output
+    const probeData = JSON.parse(output.stdout);
+    const videoStream = probeData.streams?.find((s: any) => s.codec_type === 'video');
+    
+    if (!videoStream) {
+      console.warn('[detectFpsForRender] No video stream found, using fallback FPS:', fallbackFps);
+      return fallbackFps;
+    }
+    
+    // Try avg_frame_rate first, then r_frame_rate
+    const frameRateStr = videoStream.avg_frame_rate || videoStream.r_frame_rate;
+    const detectedFps = parseFps(frameRateStr);
+    
+    if (detectedFps <= 0 || isNaN(detectedFps)) {
+      console.warn('[detectFpsForRender] Invalid FPS detected, using fallback FPS:', fallbackFps, 'Detected:', detectedFps);
+      return fallbackFps;
+    }
+    
+    console.log('[detectFpsForRender] Detected FPS:', detectedFps, 'for video:', normalizedPath);
+    return detectedFps;
+    
+  } catch (error) {
+    console.warn('[detectFpsForRender] Error during FPS detection, using fallback FPS:', fallbackFps);
+    console.warn('[detectFpsForRender] Error details:', error);
+    return fallbackFps;
+  }
+}
+
 export class FFmpegProcessManager {
   // TODO: Implement FFmpeg process management
   // private currentProcess: any = null;

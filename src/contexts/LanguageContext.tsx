@@ -5,7 +5,8 @@ import chTranslations from '../lang/ch.json';
 import eoTranslations from '../lang/eo.json';
 import myTranslations from '../lang/my.json';
 import vzTranslations from '../lang/vz.json';
-
+import empTranslations from '../lang/emp.json';
+// To new lang add <option> tag to GeneralSettings.tsx after import it here
 type Translations = typeof ruTranslations;
 
 interface LanguageContextType {
@@ -23,7 +24,8 @@ const languages: Record<string, Translations> = {
   ch: chTranslations,
   eo: eoTranslations,
   my: myTranslations,
-  vz: vzTranslations
+  vz: vzTranslations,
+  emp: empTranslations,
 };
 
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {

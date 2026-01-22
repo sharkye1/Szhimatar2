@@ -19,6 +19,10 @@ pnpm-debug.log*
 lerna-debug.log*
 *.pem
 
+# --- Hardware Override (Testing Only) ---
+.hardware-override*.json
+HARDWARE_OVERRIDE*.md
+
 # --- Rust/Tauri ---
 target/
 src-tauri/target/
@@ -88,6 +92,8 @@ Icon
 .next
 .nuxt
 out/
+src/lang/logs*.json
+src/lang/backup*.json
 
 # --- macOS specific ---
 .DS_Store
@@ -102,6 +108,7 @@ $RECYCLE.BIN/
 .nyc_output/
 *.lcov
 .mocha-timeout
+src/services/__tests__/
 
 # --- Production artifacts ---
 *.log
@@ -120,9 +127,12 @@ QUICKSTART.md
 spec.md
 FFMPEG*.md
 FFPROBE*.md
+DUO_MODE_GUIDE.md
 
 # --- Other scripts ---
 update_lang.py
 test_version_manager.py
 update_version.py
 sync-version.js
+
+test-compressor/

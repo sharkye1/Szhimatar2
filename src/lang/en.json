@@ -90,7 +90,37 @@
   "ffmpeg": {
     "configurationLabel": "FFmpeg Configuration",
     "toggleConfigure": "Configure FFmpeg",
-    "toggleHide": "Hide FFmpeg Setup"
+    "toggleHide": "Hide FFmpeg Setup",
+    "setup": "FFmpeg Setup",
+    "found": "Found",
+    "notFound": "Not found",
+    "required": "FFmpeg is required for video compression. Let's find it!",
+    "autoSearch": "🔍 Auto-Search for FFmpeg",
+    "searching": "Searching...",
+    "fastSearchComplete": "⚠️ Fast Search Complete",
+    "ffmpegNotFound": "FFmpeg not found in common locations.",
+    "ffprobeNotFound": "FFprobe not found in common locations.",
+    "bothNotFound": "FFmpeg and FFprobe not found in common locations.",
+    "deepSearchWarning": "Deep search will scan your entire computer. This may take several minutes and could slow down your system.",
+    "startDeepSearch": "🔎 Start Deep Search",
+    "cancel": "Cancel",
+    "deepSearching": "Deep searching...",
+    "checkedLocations": "Checked {count} locations",
+    "pleaseWait": "This may take a while. Please be patient...",
+    "searchComplete": "✓ Search complete!",
+    "ok": "OK",
+    "manualSetup": "Manual Setup",
+    "manualSetupHelp": "If auto-search doesn't work, you can manually specify the paths to FFmpeg and FFprobe binaries.",
+    "ffmpegPath": "FFmpeg Path:",
+    "ffprobePath": "FFprobe Path:",
+    "ffmpegPathPlaceholder": "/path/to/ffmpeg or C:\\ffmpeg\\bin\\ffmpeg.exe",
+    "ffprobePathPlaceholder": "/path/to/ffprobe or C:\\ffmpeg\\bin\\ffprobe.exe",
+    "browse": "Browse...",
+    "savePaths": "Save Paths",
+    "whereToGet": "Where to get FFmpeg?",
+    "downloadFrom": "Download FFmpeg from:",
+    "forWindows": "For Windows, you can also use:",
+    "selectAtLeastOne": "Please select at least one path"
   },
   "audio": {
     "title": "Audio Settings",
@@ -141,6 +171,24 @@
       "compressor": "Compressor (Compresses Dynamic Range)"
     }
   },
+  "audioValidation": {
+    "warningAutoCorrected": "Selected audio settings are incompatible with the codec and have been automatically corrected",
+    "warningSampleRate": "Sample rate adjusted for codec compatibility",
+    "warningChannels": "Channel count adjusted for codec compatibility",
+    "warningBitrate": "Bitrate adjusted for codec compatibility",
+    "warningFiltersDisabled": "Audio filters disabled (copy stream does not support filters)",
+    "errorCopyWithFilters": "Cannot use audio filters with copy stream",
+    "errorNormalizationCopy": "Audio normalization not supported with codec \"copy\"",
+    "notApplicable": "N/A",
+    "fixed": "fixed",
+    "codecInfoDefault": "Some parameters are limited for codec compatibility",
+    "codecInfo": {
+      "opus": "Opus: 48 kHz sample rate (fixed), 1-2 channels, 16-128 kbps bitrate",
+      "mp3": "MP3: 44.1 kHz sample rate (fixed), 1-2 channels, 64-192 kbps bitrate",
+      "flac": "FLAC: lossless, bitrate not applicable",
+      "vorbis": "Vorbis: 1-2 channels"
+    }
+  },
   "presets": {
     "label": "Presets",
     "selectPreset": "Select a preset",
@@ -174,6 +222,14 @@
     "ffmpegPath": "FFmpeg Path",
     "ffprobePath": "FFprobe Path",
     "outputSuffix": "Output File Suffix",
+    "screenAnimation": "Screen Transition Animation",
+    "animations": {
+      "default": "Default (fade + slide)",
+      "softBlur": "Soft Blur",
+      "physics": "Physics (spring)",
+      "scaleFade": "Scale + Fade",
+      "none": "No Animation"
+    },
     "checkUpdates": "Check for Updates",
     "save": "Save",
     "cancel": "Cancel"
@@ -224,11 +280,97 @@
     "completed": "Completed",
     "error": "Error",
     "cancelled": "Cancelled",
+    "stopped": "Stopped",
     "filter": {
       "all": "All",
       "completed": "Completed",
       "error": "Errors",
       "rendering": "Rendering"
     }
+  },
+  "queue": {
+    "status": {
+      "pending": "Pending",
+      "processing": "Rendering",
+      "completed": "Done",
+      "error": "Error",
+      "paused": "Paused",
+      "stopped": "Stopped"
+    },
+    "clearCompleted": "Clear completed",
+    "deleteFromQueue": "Delete from queue",
+    "completedWithSize": "Done"
+  },
+  "gpu": {
+    "label": "GPU (NVENC)",
+    "checkCompatibility": "Check GPU Compatibility",
+    "available": "Available (NVENC)",
+    "unavailable": "Unavailable",
+    "notAvailableTooltip": "GPU unavailable — check compatibility in settings",
+    "compatibleFound": "GPU compatible (NVENC found). To apply, restart the application.",
+    "notFoundOrUnavailable": "GPU not found or NVENC unavailable",
+    "checkError": "GPU check error",
+    "pathsNotConfigured": "Please configure FFmpeg and FFprobe paths in the FFmpeg Configuration section first"
+  },
+  "renderMode": {
+    "cpu": "CPU",
+    "gpu": "GPU",
+    "duo": "Duo",
+    "cpuTooltip": "Render using CPU only",
+    "gpuTooltip": "Render using GPU (NVENC)",
+    "duoTooltip": "Parallel rendering: CPU + GPU simultaneously",
+    "duoDisabledTooltip": "GPU not available for Duo Mode"
+  },
+  "ffmpegPresets": {
+    "ultrafast": "Ultrafast",
+    "superfast": "Superfast",
+    "veryfast": "Very Fast",
+    "faster": "Faster",
+    "fast": "Fast",
+    "medium": "Medium (recommended)",
+    "slow": "Slow",
+    "slower": "Slower",
+    "veryslow": "Very Slow",
+    "descriptions": {
+      "ultrafast": "Fastest encoding, worst compression",
+      "superfast": "Very fast, poor compression",
+      "veryfast": "Fast, moderate compression",
+      "faster": "Balanced speed",
+      "fast": "Balanced",
+      "medium": "Default (recommended)",
+      "slow": "Slower encoding, better compression",
+      "slower": "Very slow, best compression",
+      "veryslow": "Extremely slow, best compression"
+    }
+  },
+  "videoGuide": {
+    "title": "📖 Video Guide"
+  },
+  "logs": {
+    "title": "Logs",
+    "viewFolder": "View logs folder",
+    "warningTitle": "Warning",
+    "warningMessage": "Logs are used to calculate statistics and usage summaries. Any modifications, deletion, or relocation of files in this folder may lead to loss of statistics or incorrect program operation.",
+    "pathLabel": "Logs location:",
+    "continue": "I am aware of the risks",
+    "cancel": "Cancel",
+    "errorOpening": "Error opening logs folder"
+  },
+  "contextMenu": {
+    "title": "Windows Context Menu",
+    "status": "Status",
+    "statusAdded": "Added to context menu",
+    "statusNotAdded": "Not added",
+    "statusInvalid": "Application was moved",
+    "add": "Add to context menu",
+    "remove": "Remove from context menu",
+    "description": "Adds \"Compress with Szhimatar\" option to Windows Explorer context menu for video files. Selected files are automatically added to the queue.",
+    "exeMovedWarning": "Application was moved. You need to reinstall the context menu.",
+    "added": "Context menu successfully added",
+    "removed": "Context menu successfully removed",
+    "adminRequired": "Administrator rights required. Run the application as administrator.",
+    "errorAdding": "Error adding to context menu",
+    "errorRemoving": "Error removing from context menu",
+    "windowsOnly": "Context menu is only available on Windows"
   }
 }

@@ -1,0 +1,16 @@
+{
+    "name": "dark-green",
+    "colors": {
+        "background": "#0f1a14",
+        "surface": "#1a2d23",
+        "primary": "#5fa777",
+        "secondary": "#6b8e7f",
+        "text": "#e0f2e9",
+        "textSecondary": "#a8c9bb",
+        "border": "#2d4a3a",
+        "success": "#66bb6a",
+        "warning": "#ffb74d",
+        "error": "#ef5350",
+        "hover": "#243a2f"
+    }
+}

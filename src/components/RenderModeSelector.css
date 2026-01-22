@@ -1,0 +1,443 @@
+/**
+ * RenderModeSelector - Styles with advanced animations
+ * 
+ * Features:
+ * - Hardware-based gradient colors (CSS variables)
+ * - Pulsating glow effects
+ * - Energy bridge / plasma flow animation
+ * - Smooth state transitions
+ */
+
+/* ============================================================================
+   Container
+   ============================================================================ */
+
+.render-mode-selector {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 8px 12px;
+    border-radius: 16px;
+    background: rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(10px);
+    position: relative;
+    isolation: isolate;
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.render-mode-selector.duo-active {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+/* ============================================================================
+   Outer Glow (Duo Mode)
+   ============================================================================ */
+
+.duo-outer-glow {
+    position: absolute;
+    inset: -4px;
+    border-radius: 20px;
+    background: linear-gradient(90deg,
+            var(--cpu-glow),
+            transparent 30%,
+            transparent 70%,
+            var(--gpu-glow));
+    opacity: 0.2;
+    filter: blur(6px);
+    z-index: -1;
+    /* Убираем постоянную пульсацию в режиме покоя */
+}
+
+.render-mode-selector.rendering .duo-outer-glow {
+    animation: outerGlowPulseIntense 1.5s ease-in-out infinite;
+}
+
+@keyframes outerGlowPulseIntense {
+
+    0%,
+    100% {
+        opacity: 0.3;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.5;
+        transform: scale(1.02);
+    }
+}
+
+/* ============================================================================
+   Energy Bridge (Duo Mode)
+   ============================================================================ */
+
+.energy-bridge {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    height: 35%;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+    border-radius: 6px;
+}
+
+.plasma-flow {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg,
+            var(--cpu-primary) 0%,
+            var(--cpu-secondary) 20%,
+            rgba(255, 255, 255, 0.15) 50%,
+            var(--gpu-secondary) 80%,
+            var(--gpu-primary) 100%);
+    opacity: 0.15;
+    filter: blur(3px);
+    /* Убираем постоянную анимацию в режиме покоя */
+}
+
+.render-mode-selector.rendering .plasma-flow {
+    animation: plasmaFlowIntense 1s ease-in-out infinite;
+}
+
+@keyframes plasmaFlowIntense {
+    0% {
+        opacity: 0.25;
+        background-position: -100% 0;
+    }
+
+    50% {
+        opacity: 0.5;
+        background-position: 0% 0;
+    }
+
+    100% {
+        opacity: 0.25;
+        background-position: 100% 0;
+    }
+}
+
+/* ============================================================================
+   Mode Buttons (Base)
+   ============================================================================ */
+
+.mode-button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 20px;
+    border: 2px solid transparent;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+    transition: all 0.25s ease;
+    position: relative;
+    overflow: hidden;
+    min-width: 80px;
+    min-height: 70px;
+    z-index: 1;
+}
+
+.mode-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+}
+
+.mode-button .button-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    position: relative;
+    z-index: 2;
+}
+
+.mode-button .button-icon {
+    width: 28px;
+    height: 28px;
+}
+
+.mode-button .button-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.mode-button .button-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.mode-button .vendor-badge {
+    font-size: 0.6rem;
+    font-weight: 500;
+    opacity: 0.7;
+    padding: 1px 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    margin-top: 2px;
+}
+
+/* ============================================================================
+   CPU Button
+   ============================================================================ */
+
+.cpu-button {
+    border-radius: 12px 4px 4px 12px;
+}
+
+.cpu-button:hover:not(:disabled) {
+    background: linear-gradient(135deg,
+            rgba(var(--cpu-primary-rgb, 99, 102, 241), 0.15),
+            rgba(var(--cpu-secondary-rgb, 167, 139, 250), 0.1));
+    border-color: var(--cpu-primary);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.cpu-button.active {
+    background: linear-gradient(135deg,
+            var(--cpu-primary),
+            var(--cpu-secondary));
+    border-color: var(--cpu-secondary);
+    color: #fff;
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.4), 0 0 6px var(--cpu-primary);
+}
+
+.cpu-button.active .button-icon {
+    /* Убрали избыточный drop-shadow */
+}
+
+/* ============================================================================
+   GPU Button
+   ============================================================================ */
+
+.gpu-button {
+    border-radius: 4px 12px 12px 4px;
+}
+
+.gpu-button:hover:not(:disabled) {
+    background: linear-gradient(135deg,
+            rgba(var(--gpu-primary-rgb, 118, 185, 0), 0.15),
+            rgba(var(--gpu-secondary-rgb, 184, 233, 134), 0.1));
+    border-color: var(--gpu-primary);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.gpu-button.active {
+    background: linear-gradient(135deg,
+            var(--gpu-primary),
+            var(--gpu-secondary));
+    border-color: var(--gpu-secondary);
+    color: #fff;
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.4), 0 0 6px var(--gpu-primary);
+}
+
+.gpu-button.active .button-icon {
+    /* Убрали избыточный drop-shadow */
+}
+
+.gpu-button.disabled {
+    background: rgba(100, 100, 100, 0.2);
+    border-color: rgba(100, 100, 100, 0.3);
+}
+
+/* ============================================================================
+   Duo Button (Center)
+   ============================================================================ */
+
+.duo-button {
+    min-width: 60px;
+    min-height: 55px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    z-index: 2;
+}
+
+.duo-button .duo-icon {
+    width: 24px;
+    height: 24px;
+}
+
+.duo-button:hover:not(:disabled) {
+    background: linear-gradient(135deg,
+            rgba(255, 255, 255, 0.15),
+            rgba(255, 255, 255, 0.05));
+    border-color: rgba(255, 255, 255, 0.4);
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.duo-button.active {
+    background: linear-gradient(135deg,
+            var(--cpu-primary) 0%,
+            rgba(255, 255, 255, 0.3) 50%,
+            var(--gpu-primary) 100%);
+    border-color: rgba(255, 255, 255, 0.4);
+    color: #fff;
+    box-shadow: 0 0 12px rgba(0, 0, 0, 0.5), 0 0 6px rgba(255, 255, 255, 0.15);
+}
+
+.duo-button.active .button-icon {
+    /* Убрали избыточный drop-shadow */
+}
+
+/* Energy Core (Duo Active) */
+.energy-core {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center,
+            rgba(255, 255, 255, 0.15) 0%,
+            transparent 70%);
+    filter: blur(6px);
+    /* Убираем постоянную пульсацию в режиме покоя */
+    z-index: 0;
+}
+
+.render-mode-selector.rendering .energy-core {
+    animation: energyCorePulseIntense 1s ease-in-out infinite;
+}
+
+@keyframes energyCorePulseIntense {
+
+    0%,
+    100% {
+        opacity: 0.3;
+        transform: scale(0.95);
+    }
+
+    50% {
+        opacity: 0.6;
+        transform: scale(1.05);
+    }
+}
+
+/* ============================================================================
+   Active Indicator (Bottom Line)
+   ============================================================================ */
+
+.active-indicator {
+    position: absolute;
+    bottom: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 30%;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 2px;
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.4), 0 0 3px rgba(255, 255, 255, 0.2);
+}
+
+.duo-indicator {
+    background: linear-gradient(90deg,
+            var(--cpu-secondary),
+            #fff,
+            var(--gpu-secondary));
+    width: 50%;
+}
+
+/* ============================================================================
+   Hover Effects
+   ============================================================================ */
+
+.mode-button.hovered::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+            rgba(255, 255, 255, 0.15) 0%,
+            transparent 60%);
+    opacity: 0;
+    animation: hoverGlow 0.3s ease forwards;
+}
+
+@keyframes hoverGlow {
+    to {
+        opacity: 1;
+    }
+}
+
+/* ============================================================================
+   Rendering State Enhancements
+   ============================================================================ */
+
+.render-mode-selector.rendering .mode-button.active {
+    animation: activeButtonPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes activeButtonPulse {
+
+    0%,
+    100% {
+        filter: brightness(1);
+    }
+
+    50% {
+        filter: brightness(1.1);
+    }
+}
+
+/* ============================================================================
+   Responsive
+   ============================================================================ */
+
+@media (max-width: 400px) {
+    .render-mode-selector {
+        gap: 2px;
+        padding: 6px 8px;
+    }
+
+    .mode-button {
+        min-width: 60px;
+        min-height: 55px;
+        padding: 8px 12px;
+    }
+
+    .duo-button {
+        min-width: 50px;
+        min-height: 45px;
+        padding: 6px 10px;
+    }
+
+    .mode-button .button-icon {
+        width: 22px;
+        height: 22px;
+    }
+
+    .mode-button .button-label {
+        font-size: 0.65rem;
+    }
+
+    .mode-button .vendor-badge {
+        font-size: 0.5rem;
+    }
+}
+
+/* ============================================================================
+   Dark/Light Theme Adjustments
+   ============================================================================ */
+
+:root[data-theme="light"] .render-mode-selector {
+    background: rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="light"] .mode-button {
+    background: rgba(0, 0, 0, 0.03);
+    color: rgba(0, 0, 0, 0.6);
+}
+
+:root[data-theme="light"] .mode-button:hover:not(:disabled) {
+    color: rgba(0, 0, 0, 0.9);
+}
+
+:root[data-theme="light"] .mode-button.active {
+    color: #fff;
+}
+
+:root[data-theme="light"] .mode-button .vendor-badge {
+    background: rgba(0, 0, 0, 0.08);
+}

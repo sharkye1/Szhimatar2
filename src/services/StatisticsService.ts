@@ -84,6 +84,8 @@ class StatisticsServiceImpl {
     lastUpdated: new Date().toISOString(),
   };
   private loaded: boolean = false;
+  private loading: boolean = false;
+  private loadPromise: Promise<Statistics> | null = null;
   private listeners: Set<StatisticsEventCallback> = new Set();
   private unlistenProgress: UnlistenFn | null = null;
   private unlistenComplete: UnlistenFn | null = null;
@@ -93,6 +95,79 @@ class StatisticsServiceImpl {
 
   constructor() {
     this.setupEventListeners();
+    // AUTO-INITIALIZE: Load statistics from file immediately on service creation
+    // This ensures data is available before any render starts
+    this.init();
+  }
+
+  /**
+   * Initialize statistics - load from file
+   * This is called automatically in constructor, but can be called again if needed
+   * Safe to call multiple times - will only load once
+   */
+  public async init(): Promise<Statistics> {
+    // If already loaded, return current stats
+    if (this.loaded) {
+      return this.stats;
+    }
+    
+    // If currently loading, return existing promise to avoid duplicate loads
+    if (this.loading && this.loadPromise) {
+      return this.loadPromise;
+    }
+    
+    // Start loading
+    this.loading = true;
+    this.loadPromise = this.loadFromFile();
+    
+    try {
+      const result = await this.loadPromise;
+      return result;
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  /**
+   * Internal method to load from file
+   */
+  private async loadFromFile(): Promise<Statistics> {
+    try {
+      const jsonStr = await invoke<string>('load_statistics');
+      this.stats = JSON.parse(jsonStr);
+      // Backfill new fields for older data
+      if (typeof (this.stats as any).totalStopped === 'undefined') {
+        (this.stats as any).totalStopped = 0;
+      }
+      this.loaded = true;
+      console.log('[StatisticsService] Loaded statistics on init:', this.stats.renders.length, 'renders');
+      this.notifyListeners();
+      return this.stats;
+    } catch (error) {
+      console.error('[StatisticsService] Failed to load statistics on init:', error);
+      // Return default empty stats
+      this.stats = {
+        renders: [],
+        totalRenders: 0,
+        totalSuccessful: 0,
+        totalFailed: 0,
+        totalStopped: 0,
+        totalRenderTime: 0,
+        lastUpdated: new Date().toISOString(),
+      };
+      this.loaded = true;
+      return this.stats;
+    }
+  }
+
+  /**
+   * Ensure statistics are loaded before any operation
+   * This is called internally before any mutating operation
+   */
+  private async ensureLoaded(): Promise<void> {
+    if (!this.loaded) {
+      await this.init();
+    }
   }
 
   /**
@@ -160,34 +235,14 @@ class StatisticsServiceImpl {
 
   /**
    * Load statistics from file
+   * Now delegates to init() for consistent behavior
    */
   public async load(): Promise<Statistics> {
-    try {
-      const jsonStr = await invoke<string>('load_statistics');
-      this.stats = JSON.parse(jsonStr);
-      // Backfill new fields for older data
-      if (typeof (this.stats as any).totalStopped === 'undefined') {
-        (this.stats as any).totalStopped = 0;
-      }
-      this.loaded = true;
-      console.log('[StatisticsService] Loaded statistics:', this.stats.renders.length, 'renders');
-      this.notifyListeners();
-      return this.stats;
-    } catch (error) {
-      console.error('[StatisticsService] Failed to load statistics:', error);
-      // Return default empty stats
-      this.stats = {
-        renders: [],
-        totalRenders: 0,
-        totalSuccessful: 0,
-        totalFailed: 0,
-        totalStopped: 0,
-        totalRenderTime: 0,
-        lastUpdated: new Date().toISOString(),
-      };
-      this.loaded = true;
-      return this.stats;
+    // If already loaded, force reload
+    if (this.loaded) {
+      this.loaded = false;
     }
+    return this.init();
   }
 
   /**
@@ -233,6 +288,7 @@ class StatisticsServiceImpl {
 
   /**
    * Add a new render record when render starts
+   * NOTE: This method ensures statistics are loaded before adding
    */
   public addRender(info: {
     id: string;
@@ -244,7 +300,40 @@ class StatisticsServiceImpl {
     audio: AudioStatsSettings;
     duration: number;
   }): RenderStatRecord {
-    const record: RenderStatRecord = {
+    // CRITICAL FIX: Ensure data is loaded before adding
+    // If not loaded yet, the init() was already called in constructor,
+    // but we need to wait for it. Since addRender is sync, we schedule
+    // the actual add after ensuring load is complete.
+    if (!this.loaded) {
+      console.warn('[StatisticsService] addRender called before load complete, queuing...');
+      // Create record immediately for return value
+      const record = this.createRenderRecord(info);
+      // Queue the actual addition after load completes
+      this.ensureLoaded().then(() => {
+        this.addRenderInternal(record);
+      });
+      return record;
+    }
+
+    const record = this.createRenderRecord(info);
+    this.addRenderInternal(record);
+    return record;
+  }
+
+  /**
+   * Create a render record object
+   */
+  private createRenderRecord(info: {
+    id: string;
+    fileName: string;
+    inputPath: string;
+    outputPath: string;
+    preset: string;
+    video: VideoStatsSettings;
+    audio: AudioStatsSettings;
+    duration: number;
+  }): RenderStatRecord {
+    return {
       id: info.id,
       fileName: info.fileName,
       inputPath: info.inputPath,
@@ -264,6 +353,18 @@ class StatisticsServiceImpl {
       etaFormatted: '--:--:--',
       createdAt: new Date().toISOString(),
     };
+  }
+
+  /**
+   * Internal method to add render record to stats
+   */
+  private addRenderInternal(record: RenderStatRecord): void {
+    // Check if record already exists (in case of race condition)
+    const exists = this.stats.renders.some(r => r.id === record.id);
+    if (exists) {
+      console.log('[StatisticsService] Record already exists, skipping:', record.id);
+      return;
+    }
 
     // Add to beginning of list (newest first)
     this.stats.renders.unshift(record);
@@ -274,10 +375,9 @@ class StatisticsServiceImpl {
       this.stats.renders = this.stats.renders.slice(0, 100);
     }
 
+    console.log('[StatisticsService] Added render:', record.id, '| Total renders:', this.stats.renders.length);
     this.notifyListeners();
     this.save();
-
-    return record;
   }
 
   /**

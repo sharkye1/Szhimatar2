@@ -7,10 +7,20 @@
  * - Pause/Resume/Stop controls
  * - Error handling and recovery
  * - Preset-based FFmpeg command building
+ * - Audio parameter validation to prevent FFmpeg errors
  */
 
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { detectFpsForRender } from '../utils/ffmpeg';
+import { 
+  validateForRender, 
+  hasActiveFilters,
+  getCodecConstraints,
+  getValidSampleRate,
+  getValidChannels,
+  clampBitrate
+} from '../utils/audioValidation';
 import type {
   VideoSettings,
   AudioSettings,
@@ -115,54 +125,17 @@ export class FFmpegCommandBuilder {
     if (this.videoSettings.codec === 'copy') {
       args.push('-c:v', 'copy');
     } else {
-      // Map codec names to FFmpeg encoders (CPU)
-      const codecMap: Record<string, string> = {
-        'h264': 'libx264',
-        'h265': 'libx265',
-        'hevc': 'libx265',
-        'vp9': 'libvpx-vp9',
-        'vp8': 'libvpx',
-        'av1': 'libaom-av1',
-        'mpeg4': 'mpeg4',
-        'prores': 'prores_ks',
-      };
-
-      // GPU (NVENC) encoders for supported codecs
-      const gpuCodecMap: Record<string, string> = {
-        'h264': 'h264_nvenc',
-        'h265': 'hevc_nvenc',
-        'hevc': 'hevc_nvenc',
-      };
-
-      const encoder = this.preferGpu
-        ? (gpuCodecMap[this.videoSettings.codec] || '')
-        : (codecMap[this.videoSettings.codec] || this.videoSettings.codec);
-
-      if (this.preferGpu && !encoder) {
-        throw new Error(`GPU mode is not supported for codec ${this.videoSettings.codec}`);
-      }
-
+      // Determine encoder based on mode (CPU vs GPU)
+      const encoder = this.getVideoEncoder();
+      const isNvenc = encoder.includes('nvenc');
+      
       args.push('-c:v', encoder);
 
-      // Bitrate (clamp to valid range 0.1 - 100 Mbps)
-      if (this.videoSettings.bitrate && this.videoSettings.bitrate !== 'auto') {
-        const bitrateValue = Math.max(0.1, Math.min(100, parseFloat(this.videoSettings.bitrate)));
-        args.push('-b:v', `${bitrateValue}M`);
-      }
+      // Add encoder-specific quality/bitrate parameters
+      this.addEncoderQualityParams(args, encoder, isNvenc);
 
-      // CRF (quality) - clamp to valid range 0-51 for x264/x265
-      if (this.videoSettings.crf && this.videoSettings.crf !== 'auto') {
-        const crfValue = Math.max(0, Math.min(51, parseInt(this.videoSettings.crf, 10)));
-        args.push('-crf', crfValue.toString());
-      }
-
-      // Preset (encoding speed) - validate preset name
-      if (this.videoSettings.preset && 
-          (encoder === 'libx264' || encoder === 'libx265')) {
-        const validPresets = ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow', 'placebo'];
-        const preset = validPresets.includes(this.videoSettings.preset) ? this.videoSettings.preset : 'medium';
-        args.push('-preset', preset);
-      }
+      // Add encoder-specific preset
+      this.addEncoderPreset(args, encoder, isNvenc);
 
       // FPS (clamp to valid range 1-240)
       if (!this.videoSettings.fpsAuto && this.videoSettings.fps) {
@@ -170,12 +143,15 @@ export class FFmpegCommandBuilder {
         args.push('-r', fpsValue.toString());
       }
 
-      // Resolution
+      // Resolution - NVENC requires dimensions divisible by 2
       if (this.videoSettings.resolution && 
           this.videoSettings.resolution !== 'original' &&
           this.videoSettings.resolution !== 'source') {
-        const [width, height] = this.videoSettings.resolution.split('x');
-        videoFilters.push(`scale=${width}:${height}`);
+        const [width, height] = this.videoSettings.resolution.split('x').map(Number);
+        // Ensure dimensions are even (required for most encoders, especially NVENC)
+        const evenWidth = Math.floor(width / 2) * 2;
+        const evenHeight = Math.floor(height / 2) * 2;
+        videoFilters.push(`scale=${evenWidth}:${evenHeight}`);
       }
 
       // Speed/tempo adjustment
@@ -225,6 +201,12 @@ export class FFmpegCommandBuilder {
           }
         }
       }
+      
+      // For NVENC, ensure pixel format compatibility
+      if (isNvenc) {
+        // NVENC works best with yuv420p or nv12
+        videoFilters.push('format=yuv420p');
+      }
     }
 
     // ========== WATERMARK ==========
@@ -232,101 +214,111 @@ export class FFmpegCommandBuilder {
     if (this.watermarkSettings?.enabled && 
         this.watermarkSettings.imagePath &&
         this.videoSettings.codec !== 'copy') {
-      // Position mapping for watermark overlay (future implementation)
-      // Positions: topLeft, topRight, bottomLeft, bottomRight, center
-      // Will use FFmpeg complex filter with overlay
       console.log('[FFmpegCommandBuilder] Watermark enabled:', this.watermarkSettings.position);
     }
 
-    // ========== AUDIO SETTINGS ==========
+    // ========== AUDIO SETTINGS (with validation) ==========
     
-    if (this.audioSettings.codec === 'copy') {
+    // Validate audio settings before building command
+    const audioValidation = validateForRender(this.audioSettings);
+    if (!audioValidation.valid) {
+      console.error('[FFmpegCommandBuilder] Audio validation failed:', audioValidation.error);
+      // Fall back to safe defaults
+    }
+    
+    // Use validated settings
+    const validatedAudio = audioValidation.settings;
+    const filtersActive = hasActiveFilters(validatedAudio);
+    
+    // CRITICAL: If filters are active, we CANNOT use copy codec
+    if (validatedAudio.codec === 'copy' && !filtersActive) {
       args.push('-c:a', 'copy');
+      console.log('[FFmpegCommandBuilder] Audio: copy stream (no filters)');
     } else {
-      // Map codec names to FFmpeg encoders
-      const audioCodecMap: Record<string, string> = {
-        'aac': 'aac',
-        'mp3': 'libmp3lame',
-        'opus': 'libopus',
-        'vorbis': 'libvorbis',
-        'flac': 'flac',
-        'ac3': 'ac3',
-        'pcm': 'pcm_s16le',
-      };
+      // Get codec-specific constraints
+      const constraints = getCodecConstraints(validatedAudio.codec);
       
-      const audioEncoder = audioCodecMap[this.audioSettings.codec] || this.audioSettings.codec;
-      args.push('-c:a', audioEncoder);
-
-      // Audio bitrate (clamp to valid range 32-512 kbps)
-      if (this.audioSettings.bitrate && this.audioSettings.bitrate !== 'auto') {
-        const audioBitrate = Math.max(32, Math.min(512, parseInt(this.audioSettings.bitrate, 10)));
-        args.push('-b:a', `${audioBitrate}k`);
-      }
-
-      // Channels (clamp to valid range 1-8)
-      if (this.audioSettings.channels) {
-        const channels = Math.max(1, Math.min(8, parseInt(this.audioSettings.channels, 10)));
-        args.push('-ac', channels.toString());
-      }
-
-      // Sample rate (validate against common rates)
-      if (this.audioSettings.sampleRate && this.audioSettings.sampleRate !== 'auto') {
-        const validSampleRates = [8000, 11025, 16000, 22050, 32000, 44100, 48000, 96000];
-        const sampleRate = parseInt(this.audioSettings.sampleRate, 10);
-        // Find closest valid sample rate
-        const closestRate = validSampleRates.reduce((prev, curr) => 
-          Math.abs(curr - sampleRate) < Math.abs(prev - sampleRate) ? curr : prev
+      // If copy was selected but filters are active, force re-encoding
+      if (validatedAudio.codec === 'copy' && filtersActive) {
+        console.warn('[FFmpegCommandBuilder] Filters active with copy codec, forcing AAC encoder');
+        args.push('-c:a', 'aac');
+        args.push('-b:a', '192k');
+        args.push('-ac', '2');
+        args.push('-ar', '48000');
+      } else {
+        // Use the correct encoder for the codec
+        args.push('-c:a', constraints.encoderName);
+        
+        // Sample rate - use validated value (critical for Opus: 48kHz, MP3: 44.1kHz)
+        const sampleRate = getValidSampleRate(
+          parseInt(validatedAudio.sampleRate, 10),
+          constraints
         );
-        args.push('-ar', closestRate.toString());
+        args.push('-ar', sampleRate.toString());
+        console.log(`[FFmpegCommandBuilder] Audio sample rate: ${sampleRate}Hz (codec: ${validatedAudio.codec})`);
+        
+        // Channels - use validated value (Opus/MP3: 1-2 only)
+        const channels = getValidChannels(
+          parseInt(validatedAudio.channels, 10),
+          constraints
+        );
+        args.push('-ac', channels.toString());
+        console.log(`[FFmpegCommandBuilder] Audio channels: ${channels} (codec: ${validatedAudio.codec})`);
+        
+        // Bitrate - use validated value (Opus: 16-128k, MP3: 64-192k)
+        if (constraints.bitrateOptions.length > 0 && validatedAudio.bitrate) {
+          const bitrate = clampBitrate(
+            parseInt(validatedAudio.bitrate, 10),
+            constraints
+          );
+          args.push('-b:a', `${bitrate}k`);
+          console.log(`[FFmpegCommandBuilder] Audio bitrate: ${bitrate}k (codec: ${validatedAudio.codec})`);
+        }
       }
 
       // Volume adjustment (clamp to valid range 0.0 - 10.0)
-      if (this.audioSettings.volume && this.audioSettings.volume !== '100') {
-        const volumeFloat = Math.max(0, Math.min(10, parseFloat(this.audioSettings.volume) / 100));
+      if (validatedAudio.volume && validatedAudio.volume !== '100') {
+        const volumeFloat = Math.max(0, Math.min(10, parseFloat(validatedAudio.volume) / 100));
         if (volumeFloat !== 1.0) {
           audioFilters.push(`volume=${volumeFloat.toFixed(2)}`);
         }
       }
 
       // Gain (clamp to valid range -20dB to +20dB)
-      if (this.audioSettings.gain && this.audioSettings.gain !== '0') {
-        const gainValue = Math.max(-20, Math.min(20, parseFloat(this.audioSettings.gain)));
+      if (validatedAudio.gain && validatedAudio.gain !== '0') {
+        const gainValue = Math.max(-20, Math.min(20, parseFloat(validatedAudio.gain)));
         if (gainValue !== 0) {
           audioFilters.push(`volume=${gainValue}dB`);
         }
       }
 
-      // Normalization
-      if (this.audioSettings.normalization) {
+      // Normalization - ONLY if not using copy codec
+      if (validatedAudio.normalization && validatedAudio.codec !== 'copy') {
         audioFilters.push('loudnorm=I=-16:LRA=11:TP=-1.5');
+        console.log('[FFmpegCommandBuilder] Audio normalization enabled (loudnorm)');
       }
 
-      // Pitch shift (clamp to valid range -12 to +12 semitones)
-      if (this.audioSettings.pitch && this.audioSettings.pitch !== 0) {
-        const pitchSemitones = Math.max(-12, Math.min(12, this.audioSettings.pitch));
-        const pitchFactor = Math.pow(2, pitchSemitones / 12);
-        audioFilters.push(`asetrate=44100*${pitchFactor.toFixed(4)},aresample=44100`);
+      // Pitch shift without changing speed (rubberband, semitones -> ratio)
+      if (validatedAudio.pitch && validatedAudio.pitch !== 0) {
+        const semitones = Math.max(-12, Math.min(12, validatedAudio.pitch));
+        const pitchFactor = Math.pow(2, semitones / 12);
+        audioFilters.push(`rubberband=pitch=${pitchFactor.toFixed(6)}`);
       }
 
       // Noise reduction using afftdn filter
       // nf (noise floor) must be in range -80 to -20 dB
-      // noiseReduction value is 0.0 to 1.0, map to -80dB (light) to -20dB (aggressive)
-      if (this.audioSettings.noiseReduction && 
-          parseFloat(this.audioSettings.noiseReduction) > 0) {
-        const nrLevel = Math.max(0, Math.min(1, parseFloat(this.audioSettings.noiseReduction)));
-        // Map 0.0-1.0 to -80dB to -20dB (more negative = less noise reduction)
-        // At 0.1 (light), nf should be around -74dB
-        // At 1.0 (heavy), nf should be around -20dB
+      if (validatedAudio.noiseReduction && 
+          parseFloat(validatedAudio.noiseReduction) > 0) {
+        const nrLevel = Math.max(0, Math.min(1, parseFloat(validatedAudio.noiseReduction)));
         const noiseFloor = Math.round(-80 + (nrLevel * 60));
-        // Clamp to valid FFmpeg range
         const clampedNf = Math.max(-80, Math.min(-20, noiseFloor));
         audioFilters.push(`afftdn=nf=${clampedNf}`);
       }
 
       // Equalizer
-      if (this.audioSettings.equalizer) {
+      if (validatedAudio.equalizer) {
         const eqParts: string[] = [];
-        for (const band of this.audioSettings.equalizer) {
+        for (const band of validatedAudio.equalizer) {
           if (band.gain !== 0) {
             eqParts.push(`equalizer=f=${band.frequency}:width_type=o:width=2:g=${band.gain}`);
           }
@@ -337,8 +329,8 @@ export class FFmpegCommandBuilder {
       }
 
       // Audio effects
-      if (this.audioSettings.effects) {
-        for (const effect of this.audioSettings.effects) {
+      if (validatedAudio.effects) {
+        for (const effect of validatedAudio.effects) {
           if (effect.enabled) {
             switch (effect.name) {
               case 'reverb':
@@ -370,6 +362,163 @@ export class FFmpegCommandBuilder {
     args.push('-movflags', '+faststart');
 
     return args;
+  }
+
+  /**
+   * Get the video encoder name based on codec and GPU preference
+   */
+  private getVideoEncoder(): string {
+    // Map codec names to FFmpeg encoders (CPU)
+    const cpuCodecMap: Record<string, string> = {
+      'h264': 'libx264',
+      'h265': 'libx265',
+      'hevc': 'libx265',
+      'vp9': 'libvpx-vp9',
+      'vp8': 'libvpx',
+      'av1': 'libaom-av1',
+      'mpeg4': 'mpeg4',
+      'prores': 'prores_ks',
+    };
+
+    // GPU (NVENC) encoders for supported codecs
+    const gpuCodecMap: Record<string, string> = {
+      'h264': 'h264_nvenc',
+      'h265': 'hevc_nvenc',
+      'hevc': 'hevc_nvenc',
+    };
+
+    if (this.preferGpu) {
+      const gpuEncoder = gpuCodecMap[this.videoSettings.codec];
+      if (!gpuEncoder) {
+        console.warn(`[FFmpegCommandBuilder] GPU not supported for codec ${this.videoSettings.codec}, falling back to CPU`);
+        return cpuCodecMap[this.videoSettings.codec] || this.videoSettings.codec;
+      }
+      return gpuEncoder;
+    }
+
+    return cpuCodecMap[this.videoSettings.codec] || this.videoSettings.codec;
+  }
+
+  /**
+   * Add encoder-specific quality/bitrate parameters
+   * CPU (libx264/libx265): uses -crf for quality
+   * GPU (NVENC): uses -cq (constant quality) or -b:v (bitrate mode)
+   */
+  private addEncoderQualityParams(args: string[], encoder: string, isNvenc: boolean): void {
+    const hasBitrate = this.videoSettings.bitrate && this.videoSettings.bitrate !== 'auto';
+    const hasCrf = this.videoSettings.crf && this.videoSettings.crf !== 'auto';
+
+    if (isNvenc) {
+      // NVENC rate control
+      if (hasBitrate) {
+        // VBR mode with target bitrate
+        const bitrateValue = Math.max(0.1, Math.min(100, parseFloat(this.videoSettings.bitrate!)));
+        
+        args.push('-rc', 'vbr');
+        args.push('-b:v', `${bitrateValue}M`);
+        // Set maxrate to 1.5x target for VBR headroom
+        args.push('-maxrate', `${(bitrateValue * 1.5).toFixed(1)}M`);
+        // Buffer size = 2 seconds of video at max rate
+        args.push('-bufsize', `${(bitrateValue * 3).toFixed(0)}M`);
+      } else if (hasCrf) {
+        // CQ (Constant Quality) mode - NVENC equivalent of CRF
+        // NVENC CQ range is 0-51, same as CRF conceptually
+        const cqValue = Math.max(0, Math.min(51, parseInt(this.videoSettings.crf!, 10)));
+        
+        args.push('-rc', 'constqp');
+        args.push('-cq', cqValue.toString());
+        // Also set qp values for consistency
+        args.push('-qp', cqValue.toString());
+      } else {
+        // Default: use CQ mode with reasonable quality (CQ 23 is good default)
+        args.push('-rc', 'constqp');
+        args.push('-cq', '23');
+        args.push('-qp', '23');
+      }
+      
+      // NVENC-specific optimizations
+      args.push('-spatial-aq', '1');  // Spatial adaptive quantization
+      args.push('-temporal-aq', '1'); // Temporal adaptive quantization
+      
+      // B-frames for better compression (except for lowest latency)
+      if (encoder === 'hevc_nvenc') {
+        args.push('-b_ref_mode', 'middle');
+      }
+      
+    } else {
+      // CPU encoders (libx264, libx265, etc.)
+      if (hasBitrate && hasCrf) {
+        // If both are set, use two-pass-like behavior: CRF with max bitrate cap
+        const crfValue = Math.max(0, Math.min(51, parseInt(this.videoSettings.crf!, 10)));
+        const bitrateValue = Math.max(0.1, Math.min(100, parseFloat(this.videoSettings.bitrate!)));
+        
+        args.push('-crf', crfValue.toString());
+        args.push('-maxrate', `${bitrateValue}M`);
+        args.push('-bufsize', `${(bitrateValue * 2).toFixed(0)}M`);
+      } else if (hasBitrate) {
+        // Bitrate-only mode
+        const bitrateValue = Math.max(0.1, Math.min(100, parseFloat(this.videoSettings.bitrate!)));
+        args.push('-b:v', `${bitrateValue}M`);
+      } else if (hasCrf) {
+        // CRF-only mode (recommended for quality)
+        const crfValue = Math.max(0, Math.min(51, parseInt(this.videoSettings.crf!, 10)));
+        args.push('-crf', crfValue.toString());
+      } else {
+        // Default: use CRF 23 (good quality/size balance)
+        args.push('-crf', '23');
+      }
+    }
+  }
+
+  /**
+   * Add encoder-specific preset
+   * CPU: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow
+   * NVENC: p1-p7 (fastest to slowest) or named presets
+   */
+  private addEncoderPreset(args: string[], encoder: string, isNvenc: boolean): void {
+    const preset = this.videoSettings.preset;
+    
+    if (!preset) {
+      // Default presets
+      if (isNvenc) {
+        args.push('-preset', 'p4'); // Balanced quality/speed for NVENC
+      } else if (encoder === 'libx264' || encoder === 'libx265') {
+        args.push('-preset', 'medium');
+      }
+      return;
+    }
+
+    if (isNvenc) {
+      // Map CPU presets to NVENC presets
+      // NVENC presets: p1 (fastest) to p7 (slowest/best quality)
+      const nvencPresetMap: Record<string, string> = {
+        'ultrafast': 'p1',
+        'superfast': 'p2',
+        'veryfast': 'p3',
+        'faster': 'p4',
+        'fast': 'p4',
+        'medium': 'p5',
+        'slow': 'p6',
+        'slower': 'p7',
+        'veryslow': 'p7',
+        'placebo': 'p7',
+        // Also accept direct NVENC presets
+        'p1': 'p1', 'p2': 'p2', 'p3': 'p3', 'p4': 'p4',
+        'p5': 'p5', 'p6': 'p6', 'p7': 'p7',
+      };
+      
+      const nvencPreset = nvencPresetMap[preset.toLowerCase()] || 'p4';
+      args.push('-preset', nvencPreset);
+      
+      // Set tuning for NVENC (hq = high quality)
+      args.push('-tune', 'hq');
+      
+    } else if (encoder === 'libx264' || encoder === 'libx265') {
+      // CPU presets
+      const validPresets = ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow', 'placebo'];
+      const cpuPreset = validPresets.includes(preset.toLowerCase()) ? preset.toLowerCase() : 'medium';
+      args.push('-preset', cpuPreset);
+    }
   }
 
   /**
@@ -457,12 +606,23 @@ export class FFmpegCommandBuilder {
   getSettingsDescription(): string {
     const parts: string[] = [];
     
-    parts.push(`Video: ${this.videoSettings.codec}`);
-    if (this.videoSettings.bitrate && this.videoSettings.bitrate !== 'auto') {
-      parts.push(`${this.videoSettings.bitrate}Mbps`);
-    }
-    if (this.videoSettings.crf && this.videoSettings.crf !== 'auto') {
-      parts.push(`CRF ${this.videoSettings.crf}`);
+    // Show actual encoder being used
+    const encoder = this.videoSettings.codec === 'copy' ? 'copy' : this.getVideoEncoder();
+    const isNvenc = encoder.includes('nvenc');
+    
+    parts.push(`Video: ${encoder}${isNvenc ? ' (GPU)' : ''}`);
+    
+    if (this.videoSettings.codec !== 'copy') {
+      if (this.videoSettings.bitrate && this.videoSettings.bitrate !== 'auto') {
+        parts.push(`${this.videoSettings.bitrate}Mbps`);
+      }
+      if (this.videoSettings.crf && this.videoSettings.crf !== 'auto') {
+        // Show CQ for NVENC, CRF for CPU
+        parts.push(`${isNvenc ? 'CQ' : 'CRF'} ${this.videoSettings.crf}`);
+      }
+      if (this.videoSettings.preset) {
+        parts.push(`preset: ${this.videoSettings.preset}`);
+      }
     }
     
     parts.push(`Audio: ${this.audioSettings.codec}`);
@@ -854,9 +1014,42 @@ class RenderServiceImpl {
 
     try {
       // Build FFmpeg arguments
+      // AUTO FPS DETECTION: Detect FPS for each video if fpsAuto is enabled
+      let effectiveVideoSettings = this.videoSettings!;
+      if (this.videoSettings?.fpsAuto) {
+        try {
+          const detectedFps = await detectFpsForRender(job.inputPath, 30);
+          console.log(`[RenderService] FPS Auto: Detected ${detectedFps} fps for ${job.fileName}`);
+          
+          // Create a new settings object with detected FPS
+          effectiveVideoSettings = {
+            ...this.videoSettings!,
+            fps: detectedFps.toString(),
+            fpsAuto: false, // Use the detected FPS, don't try to detect again
+          };
+          
+          // Update statistics with detected FPS
+          await invoke('write_render_log', {
+            jobId,
+            message: `[Auto FPS] Detected ${detectedFps} fps from video metadata`
+          });
+        } catch (fpsError) {
+          console.warn('[RenderService] FPS detection failed, continuing with fallback FPS 30:', fpsError);
+          effectiveVideoSettings = {
+            ...this.videoSettings!,
+            fps: '30',
+            fpsAuto: false,
+          };
+          await invoke('write_render_log', {
+            jobId,
+            message: `[Auto FPS] Detection failed, using fallback FPS 30`
+          }).catch(() => {});
+        }
+      }
+      
       const preferGpu = slot === 'gpu' && this.gpuAvailable;
       const builder = new FFmpegCommandBuilder(
-        this.videoSettings!,
+        effectiveVideoSettings,
         this.audioSettings!,
         this.watermarkSettings,
         preferGpu
@@ -986,6 +1179,7 @@ class RenderServiceImpl {
     const job = this.jobs.get(jobId);
     if (!job) return;
 
+    const slot = job.assignedSlot || 'unknown';
     job.status = 'completed';
     job.progress = 100;
     job.eta = 0;
@@ -998,18 +1192,19 @@ class RenderServiceImpl {
       this.currentJobId = null;
     }
 
-    console.log('[RenderService] Job completed:', jobId);
+    console.log(`[RenderService] Job completed on ${slot.toUpperCase()} slot:`, jobId);
 
-    // Log completion
+    // Log completion with slot info
     invoke('write_render_log', {
       jobId,
-      message: `Render completed successfully. Duration: ${((job.endTime! - job.startTime!) / 1000).toFixed(1)}s`
+      message: `Render completed on ${slot.toUpperCase()} slot. Duration: ${((job.endTime! - job.startTime!) / 1000).toFixed(1)}s`
     });
     this.notifyListeners();
     
 
-    // Process next job(s)
+    // Process next job(s) - Duo mode can continue parallel rendering
     if (this.isProcessing && !this.isPaused) {
+      console.log(`[RenderService] Dispatching next job after ${slot.toUpperCase()} completion. Active jobs: ${this.activeJobs.size}`);
       this.dispatch();
     }
     }
@@ -1056,6 +1251,7 @@ class RenderServiceImpl {
         const job = this.jobs.get(jobId);
         if (!job) return;
 
+        const slot = job.assignedSlot || 'unknown';
         job.status = 'error';
         job.error = error;
         job.endTime = Date.now();
@@ -1066,18 +1262,19 @@ class RenderServiceImpl {
           this.currentJobId = null;
         }
 
-        console.error('[RenderService] Job error:', jobId, error);
+        console.error(`[RenderService] Job error on ${slot.toUpperCase()} slot:`, jobId, error);
 
-        // Log error
+        // Log error with slot info
         invoke('write_render_log', {
         jobId,
-        message: `Render failed: ${error}`
+        message: `Render failed on ${slot.toUpperCase()} slot: ${error}`
         });
     
     this.notifyListeners();
     
-    // Continue with next job (don't stop queue on error)
+    // Continue with next job - other slot's renders are unaffected
     if (this.isProcessing && !this.isPaused) {
+      console.log(`[RenderService] Continuing queue after ${slot.toUpperCase()} slot error. Active jobs: ${this.activeJobs.size}`);
       this.dispatch();
     }
     }

@@ -1,0 +1,376 @@
+{
+  "app": {
+    "title": "",
+    "version": ""
+  },
+  "main": {
+    "selectFiles": "",
+    "selectFolder": "",
+    "outputFolder": "",
+    "saveInSourceDirectory": "",
+    "queue": "",
+    "start": "",
+    "pause": "",
+    "stop": "",
+    "progress": "",
+    "preview": ""
+  },
+  "video": {
+    "title": "",
+    "codec": "",
+    "bitrate": "",
+    "fps": "",
+    "resolution": "",
+    "crf": "",
+    "aspectRatio": "",
+    "preset": ""
+  },
+  "videoSettings": {
+    "fps": "",
+    "autoFps": "",
+    "detecting": "",
+    "fpsShort": "",
+    "resolution": "",
+    "aspectRatio": "",
+    "crf": "",
+    "crfHint": "",
+    "preset": "",
+    "presetHint": "",
+    "speed": "",
+    "speedLabel": {
+      "normal": "",
+      "slowMotion": "",
+      "fastForward": ""
+    },
+    "rotation": "",
+    "rotationOptions": {
+      "none": "",
+      "deg90": "",
+      "deg180": "",
+      "deg270": ""
+    },
+    "flip": "",
+    "flipOptions": {
+      "none": "",
+      "horizontal": "",
+      "vertical": ""
+    },
+    "filters": "",
+    "filterNames": {
+      "deinterlace": "",
+      "denoise": "",
+      "sharpen": ""
+    },
+    "codecs": {
+      "h264": "",
+      "h265": "",
+      "vp9": "",
+      "av1": ""
+    },
+    "resolutionOptions": {
+      "144pPotato": "",
+      "240pPotatoPlus": "",
+      "360pMobile": "",
+      "480pSD": "",
+      "720pHD": "",
+      "1080pFullHD": "",
+      "1440p2K": "",
+      "2160p4KUHD": "",
+      "4kDci": "",
+      "ultrawide": ""
+    },
+    "aspectRatios": {
+      "16_9": "",
+      "4_3": "",
+      "21_9": "",
+      "1_1": "",
+      "9_16": ""
+    }
+  },
+  "ffmpeg": {
+    "configurationLabel": "",
+    "toggleConfigure": "",
+    "toggleHide": "",
+    "setup": "",
+    "found": "",
+    "notFound": "",
+    "required": "",
+    "autoSearch": "",
+    "searching": "",
+    "fastSearchComplete": "",
+    "ffmpegNotFound": "",
+    "ffprobeNotFound": "",
+    "bothNotFound": "",
+    "deepSearchWarning": "",
+    "startDeepSearch": "",
+    "cancel": "",
+    "deepSearching": "",
+    "checkedLocations": "",
+    "pleaseWait": "",
+    "searchComplete": "",
+    "ok": "",
+    "manualSetup": "",
+    "manualSetupHelp": "",
+    "ffmpegPath": "",
+    "ffprobePath": "",
+    "ffmpegPathPlaceholder": "",
+    "ffprobePathPlaceholder": "",
+    "browse": "",
+    "savePaths": "",
+    "whereToGet": "",
+    "downloadFrom": "",
+    "forWindows": "",
+    "selectAtLeastOne": ""
+  },
+  "audio": {
+    "title": "",
+    "codec": "",
+    "bitrate": "",
+    "channels": "",
+    "sampleRate": "",
+    "volume": "",
+    "equalizer": ""
+  },
+  "audioSettings": {
+    "autoSelect": "",
+    "autoSelectHint": "",
+    "bitrateUnit": "",
+    "volume": "",
+    "gain": "",
+    "normalization": "",
+    "normalizationHint": "",
+    "pitch": "",
+    "pitchLabel": {
+      "normal": "",
+      "higher": "",
+      "lower": "",
+      "semitones": ""
+    },
+    "noiseReduction": "",
+    "noiseReductionHint": "",
+    "equalizer": "",
+    "resetEQ": "",
+    "effects": "",
+    "effectsDisabledNotice": "",
+    "effectsHint": "",
+    "codecs": {
+      "aac": "",
+      "mp3": "",
+      "opus": "",
+      "vorbis": "",
+      "flac": "",
+      "copy": ""
+    },
+    "channels": {
+      "mono": "",
+      "stereo": ""
+    },
+    "effectNames": {
+      "reverb": "",
+      "chorus": "",
+      "compressor": ""
+    }
+  },
+  "audioValidation": {
+    "warningAutoCorrected": "",
+    "warningSampleRate": "",
+    "warningChannels": "",
+    "warningBitrate": "",
+    "warningFiltersDisabled": "",
+    "errorCopyWithFilters": "",
+    "errorNormalizationCopy": "",
+    "notApplicable": "",
+    "fixed": "",
+    "codecInfoDefault": "",
+    "codecInfo": {
+      "opus": "",
+      "mp3": "",
+      "flac": "",
+      "vorbis": ""
+    }
+  },
+  "presets": {
+    "label": "",
+    "selectPreset": "",
+    "apply": "",
+    "save": "",
+    "delete": "",
+    "saveDialogTitle": "",
+    "deleteDialogTitle": "",
+    "namePlaceholder": "",
+    "descriptionPlaceholder": "",
+    "saveButton": "",
+    "deleteButton": "",
+    "cancel": "",
+    "saved": "",
+    "applied": "",
+    "deleted": "",
+    "makeDefault": "",
+    "defaultSet": "",
+    "errorSaving": "",
+    "errorLoading": "",
+    "errorDeleting": "",
+    "errorEmptyName": "",
+    "errorInvalidName": "",
+    "deleteConfirmation": "",
+    "notificationSaved": ""
+  },
+  "settings": {
+    "title": "",
+    "theme": "",
+    "language": "",
+    "ffmpegPath": "",
+    "ffprobePath": "",
+    "outputSuffix": "",
+    "screenAnimation": "",
+    "animations": {
+      "default": "",
+      "softBlur": "",
+      "physics": "",
+      "scaleFade": "",
+      "none": ""
+    },
+    "checkUpdates": "",
+    "save": "",
+    "cancel": ""
+  },
+  "watermark": {
+    "title": "",
+    "selectImage": "",
+    "position": "",
+    "opacity": "",
+    "positions": {
+      "topLeft": "",
+      "topRight": "",
+      "bottomLeft": "",
+      "bottomRight": "",
+      "center": ""
+    }
+  },
+  "buttons": {
+    "apply": "",
+    "reset": "",
+    "close": "",
+    "browse": "",
+    "back": ""
+  },
+  "messages": {
+    "filesAdded": "",
+    "processingComplete": "",
+    "error": ""
+  },
+  "stats": {
+    "title": "",
+    "loading": "",
+    "totalRenders": "",
+    "successful": "",
+    "failed": "",
+    "successRate": "",
+    "avgTime": "",
+    "totalTime": "",
+    "activeRenders": "",
+    "noRenders": "",
+    "export": "",
+    "clear": "",
+    "delete": "",
+    "confirmClear": "",
+    "confirmClearText": "",
+    "pending": "",
+    "rendering": "",
+    "completed": "",
+    "error": "",
+    "cancelled": "",
+    "stopped": "",
+    "filter": {
+      "all": "",
+      "completed": "",
+      "error": "",
+      "rendering": ""
+    }
+  },
+  "queue": {
+    "status": {
+      "pending": "",
+      "processing": "",
+      "completed": "",
+      "error": "",
+      "paused": "",
+      "stopped": ""
+    },
+    "clearCompleted": "",
+    "deleteFromQueue": "",
+    "completedWithSize": ""
+  },
+  "gpu": {
+    "label": "",
+    "checkCompatibility": "",
+    "available": "",
+    "unavailable": "",
+    "notAvailableTooltip": "",
+    "compatibleFound": "",
+    "notFoundOrUnavailable": "",
+    "checkError": "",
+    "pathsNotConfigured": ""
+  },
+  "renderMode": {
+    "cpu": "",
+    "gpu": "",
+    "duo": "",
+    "cpuTooltip": "",
+    "gpuTooltip": "",
+    "duoTooltip": "",
+    "duoDisabledTooltip": ""
+  },
+  "ffmpegPresets": {
+    "ultrafast": " ",
+    "superfast": "",
+    "veryfast": "",
+    "faster": "",
+    "fast": "",
+    "medium": "",
+    "slow": "",
+    "slower": "",
+    "veryslow": "",
+    "descriptions": {
+      "ultrafast": "",
+      "superfast": "",
+      "veryfast": "",
+      "faster": "",
+      "fast": "",
+      "medium": "",
+      "slow": "",
+      "slower": "",
+      "veryslow": ""
+    }
+  },
+  "videoGuide": {
+    "title": ""
+  },
+  "logs": {
+    "title": "",
+    "viewFolder": "",
+    "warningTitle": "",
+    "warningMessage": "",
+    "pathLabel": "",
+    "continue": "",
+    "cancel": "",
+    "errorOpening": ""
+  },
+  "contextMenu": {
+    "title": "",
+    "status": "",
+    "statusAdded": "",
+    "statusNotAdded": "",
+    "statusInvalid": "",
+    "add": "",
+    "remove": "",
+    "description": "",
+    "exeMovedWarning": "",
+    "added": "",
+    "removed": "",
+    "adminRequired": "",
+    "errorAdding": "",
+    "errorRemoving": "",
+    "windowsOnly": ""
+  }
+}

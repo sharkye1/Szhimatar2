@@ -3,12 +3,12 @@ import { AnimatePresence } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/tauri';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { LanguageProvider } from './contexts/LanguageContext';
+import { SettingsProvider } from './contexts/SettingsContext';
 import MainWindow from './pages/MainWindow';
 import RenderService from './services/RenderService';
 import VideoSettings from './pages/VideoSettings';
 import AudioSettings from './pages/AudioSettings';
 import GeneralSettings from './pages/GeneralSettings';
-import WatermarkSettings from './pages/WatermarkSettings';
 import MotionScreen from './components/MotionScreen';
 import {
   VideoSettings as VideoSettingsType,
@@ -22,7 +22,7 @@ import {
   DEFAULT_WATERMARK_SETTINGS,
 } from './types';
 
-type Screen = 'main' | 'video' | 'audio' | 'general' | 'watermark';
+type Screen = 'main' | 'video' | 'audio' | 'general';
 
 function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('main');
@@ -31,6 +31,7 @@ function App() {
   const [mainScreenSettings, setMainScreenSettings] = useState<MainScreenSettings>(DEFAULT_MAIN_SCREEN_SETTINGS);
   const [watermarkSettings, setWatermarkSettings] = useState<WatermarkSettingsType>(DEFAULT_WATERMARK_SETTINGS);
   const [selectedPresetName, setSelectedPresetName] = useState<string>('');
+  const [cliFiles, setCliFiles] = useState<string[]>([]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -112,20 +113,38 @@ function App() {
     applyDefaultPreset();
   }, []);
 
+  // Check for CLI files passed from context menu
+  useEffect(() => {
+    const loadCliFiles = async () => {
+      try {
+        const files = await invoke<string[]>('get_cli_files');
+        if (files && files.length > 0) {
+          console.log('[App] CLI files received:', files);
+          setCliFiles(files);
+        }
+      } catch (error) {
+        console.error('Failed to get CLI files:', error);
+      }
+    };
+
+    loadCliFiles();
+  }, []);
+
   const navigateTo = (screen: Screen) => setCurrentScreen(screen);
   const goBack = () => setCurrentScreen('main');
 
   return (
     <ThemeProvider>
       <LanguageProvider>
-        {/* Persistent themed frame to prevent white flashes */}
-        <div style={{ width: '100vw', height: '100vh', display: 'flex' }}>
-          <AnimatePresence mode="wait" initial={false}>
-            {currentScreen === 'main' && (
-              <MotionScreen key="screen-main">
-                <MainWindow
-                  onNavigate={navigateTo}
-                  videoSettings={videoSettings}
+        <SettingsProvider>
+          {/* Persistent themed frame to prevent white flashes */}
+          <div style={{ width: '100vw', height: '100vh', display: 'flex' }}>
+            <AnimatePresence mode="wait" initial={false}>
+              {currentScreen === 'main' && (
+                <MotionScreen key="screen-main">
+                  <MainWindow
+                    onNavigate={navigateTo}
+                    videoSettings={videoSettings}
                   setVideoSettings={setVideoSettings}
                   audioSettings={audioSettings}
                   setAudioSettings={setAudioSettings}
@@ -135,6 +154,8 @@ function App() {
                   setWatermarkSettings={setWatermarkSettings}
                   selectedPresetName={selectedPresetName}
                   setSelectedPresetName={setSelectedPresetName}
+                  cliFiles={cliFiles}
+                  onCliFilesProcessed={() => setCliFiles([])}
                 />
               </MotionScreen>
             )}
@@ -144,6 +165,8 @@ function App() {
                   onBack={goBack}
                   settings={videoSettings}
                   setSettings={setVideoSettings}
+                  watermarkSettings={watermarkSettings}
+                  setWatermarkSettings={setWatermarkSettings}
                 />
               </MotionScreen>
             )}
@@ -161,17 +184,9 @@ function App() {
                 <GeneralSettings onBack={goBack} />
               </MotionScreen>
             )}
-            {currentScreen === 'watermark' && (
-              <MotionScreen key="screen-watermark">
-                <WatermarkSettings
-                  onBack={goBack}
-                  settings={watermarkSettings}
-                  setSettings={setWatermarkSettings}
-                />
-              </MotionScreen>
-            )}
           </AnimatePresence>
         </div>
+        </SettingsProvider>
       </LanguageProvider>
     </ThemeProvider>
   );

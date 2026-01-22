@@ -90,7 +90,37 @@
   "ffmpeg": {
     "configurationLabel": "FFmpeg konfiguracija",
     "toggleConfigure": "Konfigurovati FFmpeg",
-    "toggleHide": "Skriti FFmpeg nastavenja"
+    "toggleHide": "Skriti FFmpeg nastavenja",
+    "setup": "Nastavenje FFmpeg",
+    "found": "Najdeny",
+    "notFound": "Ne najdeny",
+    "required": "FFmpeg jest trěbny dlja kompresije videa. Poiskajmo jego!",
+    "autoSearch": "🔍 Avtomatično Iskati FFmpeg",
+    "searching": "Iskanje...",
+    "fastSearchComplete": "⚠️ Bystroje Iskanje Završeno",
+    "ffmpegNotFound": "FFmpeg ne najdeny v običnyh městah.",
+    "ffprobeNotFound": "FFprobe ne najdeny v običnyh městah.",
+    "bothNotFound": "FFmpeg i FFprobe ne najdeny v običnyh městah.",
+    "deepSearchWarning": "Gluboke iskanje proskanuje cěly vaš kompjuter. To može trěbovati několiko minut i možlivo spovolniti vašu sistemu.",
+    "startDeepSearch": "🔎 Započeti Gluboke Iskanje",
+    "cancel": "Otměniti",
+    "deepSearching": "Gluboko iskanje...",
+    "checkedLocations": "Prověrjeno {count} měst",
+    "pleaseWait": "To može trěbovati času. Prošu terpěti...",
+    "searchComplete": "✓ Iskanje završeno!",
+    "ok": "Dobro",
+    "manualSetup": "Ručno Nastavenje",
+    "manualSetupHelp": "Jedli avtomatično iskanje ne raboti, možete ručno ukazati pųti k FFmpeg i FFprobe datotekam.",
+    "ffmpegPath": "Pųť k FFmpeg:",
+    "ffprobePath": "Pųť k FFprobe:",
+    "ffmpegPathPlaceholder": "/path/to/ffmpeg ili C:\\ffmpeg\\bin\\ffmpeg.exe",
+    "ffprobePathPlaceholder": "/path/to/ffprobe ili C:\\ffmpeg\\bin\\ffprobe.exe",
+    "browse": "Prěgledati...",
+    "savePaths": "Sohraniti Pųti",
+    "whereToGet": "Gde dobiti FFmpeg?",
+    "downloadFrom": "Prěuzeti FFmpeg s:",
+    "forWindows": "Za Windows, možete takože koristiti:",
+    "selectAtLeastOne": "Prošu izabrati najmenje jednu pųť"
   },
   "audio": {
     "title": "Nastavenja audio",
@@ -141,6 +171,24 @@
       "compressor": "Kompresor (stiskaje dinamičny razpon)"
     }
   },
+  "audioValidation": {
+    "warningAutoCorrected": "Izbrane audio nastave su nekompatibelne s kodekom i bile avtomatičeski korektovane",
+    "warningSampleRate": "Čestota diskretizacije korektovana",
+    "warningChannels": "Količestvo kanalov korektovano",
+    "warningBitrate": "Bitrejt korektovan",
+    "warningFiltersDisabled": "Audio filtre onemogočene",
+    "errorCopyWithFilters": "Ne možna koristiti filtre s kopiranjem toka",
+    "errorNormalizationCopy": "Normalizacija ne podpira kodek copy",
+    "notApplicable": "N/A",
+    "fixed": "fiksno",
+    "codecInfoDefault": "Nekotore parametre su ograničene",
+    "codecInfo": {
+      "opus": "Opus: 48 kHz, 1-2 kanala, 16-128 kbps",
+      "mp3": "MP3: 44.1 kHz, 1-2 kanala, 64-192 kbps",
+      "flac": "FLAC: bez gubitka",
+      "vorbis": "Vorbis: 1-2 kanala"
+    }
+  },
   "presets": {
     "label": "Prednastavenja",
     "selectPreset": "Izbrati prednastavenje",
@@ -174,6 +222,14 @@
     "ffmpegPath": "FFmpeg put",
     "ffprobePath": "FFprobe put",
     "outputSuffix": "Sufiks izhodnyh fajlov",
+    "screenAnimation": "Animacija prehodov",
+    "animations": {
+      "default": "Standardna (fade + slide)",
+      "softBlur": "Měkky blur",
+      "physics": "Fizika (spring)",
+      "scaleFade": "Maštab + fade",
+      "none": "Bez animaciji"
+    },
     "checkUpdates": "Proveriti obnovy",
     "save": "Sahraniti",
     "cancel": "Otkazati"
@@ -204,31 +260,117 @@
     "error": "Greška"
   },
   "stats": {
-    "title": "Render Statistics",
-    "loading": "Loading statistics...",
-    "totalRenders": "Total Renders",
-    "successful": "Successful",
-    "failed": "Failed",
-    "successRate": "Success Rate %",
-    "avgTime": "Average Time",
-    "totalTime": "Total Time",
-    "activeRenders": "Active Renders",
-    "noRenders": "No renders in history",
-    "export": "Export JSON",
-    "clear": "Clear History",
-    "delete": "Delete",
-    "confirmClear": "Clear History?",
-    "confirmClearText": "This will permanently delete all render history.",
-    "pending": "Pending",
-    "rendering": "Rendering",
-    "completed": "Completed",
-    "error": "Error",
-    "cancelled": "Cancelled",
+    "title": "Statistika renderovanja",
+    "loading": "Nalaganje statistiky...",
+    "totalRenders": "Vsě renderovanja",
+    "successful": "Uspěšnych",
+    "failed": "Neuspěšnych",
+    "successRate": "% Uspěšnosti",
+    "avgTime": "Srědnji čas",
+    "totalTime": "Obći čas",
+    "activeRenders": "Aktivna renderovanja",
+    "noRenders": "Nět renderovanj v historiji",
+    "export": "Eksportovati JSON",
+    "clear": "Očistiti historiju",
+    "delete": "Udaliti",
+    "confirmClear": "Očistiti historiju?",
+    "confirmClearText": "To navěky udalit vsě renderovanja iz historije.",
+    "pending": "Čeka",
+    "rendering": "Renderuje",
+    "completed": "Gotovo",
+    "error": "Greška",
+    "cancelled": "Otmenjeno",
+    "stopped": "Zastavjeno",
     "filter": {
-      "all": "All",
-      "completed": "Completed",
-      "error": "Errors",
-      "rendering": "Rendering"
+      "all": "Vsě",
+      "completed": "Gotove",
+      "error": "Grěšky",
+      "rendering": "Renderujuće"
     }
+  },
+  "queue": {
+    "status": {
+      "pending": "Čeka",
+      "processing": "Renderuje",
+      "completed": "Gotovo",
+      "error": "Greška",
+      "paused": "Pauzovano",
+      "stopped": "Zastavjeno"
+    },
+    "clearCompleted": "Očistiti gotove",
+    "deleteFromQueue": "Udaliti iz čereda",
+    "completedWithSize": "Gotovo"
+  },
+  "gpu": {
+    "label": "GPU (NVENC)",
+    "checkCompatibility": "Prověriti kompatibilnost GPU",
+    "available": "Dostupny (NVENC)",
+    "unavailable": "Nedostupny",
+    "notAvailableTooltip": "GPU nedostupny — prověriti kompatibilnost v nastavenjah",
+    "compatibleFound": "GPU kompatibilny (NVENC najdeny). Za priměnenje perезапustiti prilozhenije.",
+    "notFoundOrUnavailable": "GPU ne najdeny ili NVENC nedostupny",
+    "checkError": "Greška prověrky GPU",
+    "pathsNotConfigured": "Najprěv trěbno ukazati pųti k FFmpeg i FFprobe v sekciji konfiguracije FFmpeg"
+  },
+  "renderMode": {
+    "cpu": "CPU",
+    "gpu": "GPU",
+    "duo": "Duo",
+    "cpuTooltip": "Renderovanje samo na CPU",
+    "gpuTooltip": "Renderovanje na GPU (NVENC)",
+    "duoTooltip": "Paralelno renderovanje: CPU + GPU jednočasno",
+    "duoDisabledTooltip": "GPU nedostupan za Duo režim"
+  },
+  "ffmpegPresets": {
+    "ultrafast": "Najbrže",
+    "superfast": "Veľmi brzo",
+    "veryfast": "Brzo",
+    "faster": "Brže",
+    "fast": "Brzо",
+    "medium": "Srědnje (doporučeno)",
+    "slow": "Pomaly",
+    "slower": "Pomalše",
+    "veryslow": "Veľmi pomaly",
+    "descriptions": {
+      "ultrafast": "Najbrže koděranje, najgorše stiskanje",
+      "superfast": "Veľmi brzo, slabo stiskanje",
+      "veryfast": "Brzo, srědnje stiskanje",
+      "faster": "Balansovana brzina",
+      "fast": "Balansovany",
+      "medium": "Standardny (doporučeno)",
+      "slow": "Pomalše koděranje, lěpše stiskanje",
+      "slower": "Veľmi pomaly, najbolše stiskanje",
+      "veryslow": "Ekstremno pomaly, najbolše stiskanje"
+    }
+  },
+  "videoGuide": {
+    "title": "📖 Videa gaid"
+  },
+  "logs": {
+    "title": "Zapisy",
+    "viewFolder": "Posmotret' katalog zapisov",
+    "warningTitle": "Uvaha",
+    "warningMessage": "Zapisy služat' dlja rasčota statystyky i vyvodov vykorystannja prohramy. Budj-jaki zminy, vydalennja abo peremisčennja fajliv u comu katalohu možut' pryzvesty do vtraty statystyky abo nekorektnoj roboty prohramy.",
+    "pathLabel": "Roztašuvannja zapisov:",
+    "continue": "Ja uvědomjuju si riziki",
+    "cancel": "Skasuvaty",
+    "errorOpening": "Pomylka vidkryttja katalohu zapisov"
+  },
+  "contextMenu": {
+    "title": "Kontekstno menu Windows",
+    "status": "Status",
+    "statusAdded": "Dodano do kontekstnogo menu",
+    "statusNotAdded": "Ne dodano",
+    "statusInvalid": "Aplikacija byla premješčena",
+    "add": "Dodati do kontekstnogo menu",
+    "remove": "Udaliti iz kontekstnogo menu",
+    "description": "Dodaje punkt \"Sžimati Sžimatarom\" do kontekstnogo menu Windows Eksploreru dlja video fajlov. Vybrani fajly avtomatično dodajut'sja do čergi.",
+    "exeMovedWarning": "Aplikacija byla premješčena. Treba perezainstaluvati kontekstno menu.",
+    "added": "Kontekstno menu uspješno dodano",
+    "removed": "Kontekstno menu uspješno udaleno",
+    "adminRequired": "Potrebni prava administratora. Zapustite aplikaciju jak administrator.",
+    "errorAdding": "Pomylka dodavannja do kontekstnogo menu",
+    "errorRemoving": "Pomylka udalennja iz kontekstnogo menu",
+    "windowsOnly": "Kontekstno menu dostupno tilko na Windows"
   }
 }

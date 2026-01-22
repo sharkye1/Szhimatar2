@@ -1,22 +1,28 @@
 import React, { useState } from 'react';
+import { open } from '@tauri-apps/api/dialog';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { VideoSettings as VideoSettingsType } from '../types/index';
-import { getVideoMetadata } from '../utils/ffmpeg';
+import { VideoSettings as VideoSettingsType, WatermarkSettings as WatermarkSettingsType } from '../types/index';
 import '../styles/VideoSettings.css';
 
 interface VideoSettingsProps {
   onBack: () => void;
   settings: VideoSettingsType;
   setSettings: React.Dispatch<React.SetStateAction<VideoSettingsType>>;
+  watermarkSettings: WatermarkSettingsType;
+  setWatermarkSettings: React.Dispatch<React.SetStateAction<WatermarkSettingsType>>;
 }
 
-const VideoSettings: React.FC<VideoSettingsProps> = ({ onBack, settings, setSettings }) => {
+const VideoSettings: React.FC<VideoSettingsProps> = ({ 
+  onBack, 
+  settings, 
+  setSettings,
+  watermarkSettings,
+  setWatermarkSettings
+}) => {
   const { t } = useLanguage();
   const { theme } = useTheme();
   const [expandedSection, setExpandedSection] = useState<'crf' | null>(null);
-  const [detectedFps, setDetectedFps] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
 
   // Resolution presets
   const resolutions = [
@@ -55,32 +61,32 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({ onBack, settings, setSett
     { label: '120', value: '120' },
   ];
 
-  const presetDescriptions = {
-    ultrafast: 'Fastest encoding, worst compression',
-    superfast: 'Very fast, poor compression',
-    veryfast: 'Fast, moderate compression',
-    faster: 'Balanced speed',
-    fast: 'Balanced',
-    medium: 'Default (recommended)',
-    slow: 'Slower encoding, better compression',
-    slower: 'Very slow, best compression',
-    veryslow: 'Extremely slow, best compression',
+  const presetDescriptions: Record<string, string> = {
+    ultrafast: t('ffmpegPresets.descriptions.ultrafast'),
+    superfast: t('ffmpegPresets.descriptions.superfast'),
+    veryfast: t('ffmpegPresets.descriptions.veryfast'),
+    faster: t('ffmpegPresets.descriptions.faster'),
+    fast: t('ffmpegPresets.descriptions.fast'),
+    medium: t('ffmpegPresets.descriptions.medium'),
+    slow: t('ffmpegPresets.descriptions.slow'),
+    slower: t('ffmpegPresets.descriptions.slower'),
+    veryslow: t('ffmpegPresets.descriptions.veryslow'),
   };
 
-  const handleFpsAutoChange = async (enabled: boolean) => {
+  const getSpeedLabel = (speed: number): string => {
+    if (speed === 0.25) return '0.25x (Ultra Slow)';
+    if (speed === 0.5) return '0.5x (Slow)';
+    if (speed === 0.75) return '0.75x (Slower)';
+    if (speed === 1) return '1x (Normal)';
+    if (speed === 1.25) return '1.25x (Faster)';
+    if (speed === 1.5) return '1.5x (Fast)';
+    if (speed === 1.75) return '1.75x (Very Fast)';
+    if (speed === 2) return '2x (Ultra Fast)';
+    return `${speed}x`;
+  };
+
+  const handleFpsAutoChange = (enabled: boolean) => {
     setSettings({ ...settings, fpsAuto: enabled });
-    if (enabled) {
-      setLoading(true);
-      try {
-        const metadata = await getVideoMetadata('/path/to/video.mp4');
-        setDetectedFps(Math.round(metadata.fps));
-        setSettings(prev => ({ ...prev, fps: String(Math.round(metadata.fps)) }));
-      } catch (error) {
-        console.error('Failed to detect FPS:', error);
-        setDetectedFps(null);
-      }
-      setLoading(false);
-    }
   };
 
   const handleFilterToggle = (filterName: string) => {
@@ -92,13 +98,23 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({ onBack, settings, setSett
     }));
   };
 
-  const getSpeedLabel = (speed: number): string => {
-    const percent = `${(speed * 100).toFixed(0)}%`;
-    if (speed < 1) return `${percent} (${t('videoSettings.speedLabel.slowMotion')})`;
-    if (speed === 1) return `${percent} (${t('videoSettings.speedLabel.normal')})`;
-    return `${percent} (${t('videoSettings.speedLabel.fastForward')})`;
-  };
+  const handleSelectWatermarkImage = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{
+          name: 'Image',
+          extensions: ['png', 'jpg', 'jpeg', 'gif', 'bmp']
+        }]
+      });
 
+      if (selected && typeof selected === 'string') {
+        setWatermarkSettings(prev => ({ ...prev, imagePath: selected }));
+      }
+    } catch (error) {
+      console.error('Failed to select image:', error);
+    }
+  };
   return (
     <div className="settings-window fade-in" style={{ background: theme.colors.background, color: theme.colors.text }}>
       <header className="settings-header" style={{ background: theme.colors.surface, borderColor: theme.colors.border }}>
@@ -146,7 +162,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({ onBack, settings, setSett
               value={settings.fps}
               onChange={(e) => setSettings({ ...settings, fps: e.target.value })}
               style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
-              disabled={settings.fpsAuto && loading}
+              disabled={false}
             >
               {fps_options.map(opt => (
                 <option key={opt.value} value={opt.value}>{opt.label} {t('videoSettings.fpsShort')}</option>
@@ -159,16 +175,10 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({ onBack, settings, setSett
                 type="checkbox"
                 checked={settings.fpsAuto}
                 onChange={(e) => handleFpsAutoChange(e.target.checked)}
-                disabled={loading}
+                disabled={false}
               />
               <span>{t('videoSettings.autoFps')}</span>
             </label>
-            {loading && <span className="loading-text">{t('videoSettings.detecting')}</span>}
-            {detectedFps && (
-              <span className="detected-text" style={{ color: theme.colors.success }}>
-                ✓ {detectedFps} {t('videoSettings.fpsShort')}
-              </span>
-            )}
           </div>
         </div>
 
@@ -235,7 +245,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({ onBack, settings, setSett
               style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
             >
               {Object.entries(presetDescriptions).map(([key, _desc]) => (
-                <option key={key} value={key}>{key}</option>
+                <option key={key} value={key}>{t(`ffmpegPresets.${key}`)}</option>
               ))}
             </select>
             <div className="preset-description">{t('videoSettings.presetHint')}</div>
@@ -313,6 +323,68 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({ onBack, settings, setSett
               </label>
             ))}
           </div>
+        </div>
+
+        {/* Watermark */}
+        <div className="watermark-section" style={{ marginTop: '30px', paddingTop: '20px', borderTop: `1px solid ${theme.colors.border}` }}>
+          <h3>{t('watermark.title')}</h3>
+          
+          <div className="setting-group">
+            <label>{t('watermark.selectImage')}</label>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <button onClick={handleSelectWatermarkImage} style={{ background: theme.colors.primary, color: '#fff', padding: '8px 16px', borderRadius: '6px' }}>
+                {t('buttons.browse')}
+              </button>
+              {watermarkSettings.imagePath && (
+                <span style={{ color: theme.colors.textSecondary, fontSize: '14px', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {watermarkSettings.imagePath}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="setting-group">
+            <label>{t('watermark.position')}</label>
+            <select value={watermarkSettings.position} onChange={(e) => setWatermarkSettings(prev => ({ ...prev, position: e.target.value as WatermarkSettingsType['position'] }))}
+                    style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}>
+              <option value="topLeft">{t('watermark.positions.topLeft')}</option>
+              <option value="topRight">{t('watermark.positions.topRight')}</option>
+              <option value="bottomLeft">{t('watermark.positions.bottomLeft')}</option>
+              <option value="bottomRight">{t('watermark.positions.bottomRight')}</option>
+              <option value="center">{t('watermark.positions.center')}</option>
+            </select>
+          </div>
+
+          <div className="setting-group">
+            <label>{t('watermark.opacity')} (%)</label>
+            <input type="range" value={watermarkSettings.opacity} onChange={(e) => setWatermarkSettings(prev => ({ ...prev, opacity: Number(e.target.value) }))} 
+                   min="0" max="100" />
+            <span style={{ color: theme.colors.textSecondary }}>{watermarkSettings.opacity}%</span>
+          </div>
+
+          {watermarkSettings.imagePath && (
+            <div className="setting-group">
+              <label>{t('watermark.preview')}</label>
+              <div style={{ 
+                background: theme.colors.surface, 
+                borderColor: theme.colors.border,
+                padding: '20px',
+                borderRadius: '8px',
+                border: '1px solid',
+                textAlign: 'center'
+              }}>
+                <img 
+                  src={`file://${watermarkSettings.imagePath}`} 
+                  alt="Watermark preview" 
+                  style={{ 
+                    maxWidth: '100%', 
+                    maxHeight: '200px',
+                    opacity: watermarkSettings.opacity / 100
+                  }} 
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
