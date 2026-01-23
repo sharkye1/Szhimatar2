@@ -6,6 +6,7 @@ import { useSettings, ScreenAnimationType } from '../contexts/SettingsContext';
 import { FfmpegManager } from '../components/FfmpegManager';
 import { VideoGuide } from '../components/VideoGuide';
 import { APP_VERSION } from '../version';
+import { UpdateService, UpdateState } from '../services/UpdateService';
 import '../styles/SettingsWindow.css';
 
 interface GeneralSettingsProps {
@@ -32,10 +33,24 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
     loading: boolean;
   }>({ enabled: false, exe_valid: false, loading: true });
 
+  // Update state
+  const [updateState, setUpdateState] = useState<UpdateState>(UpdateService.getState());
+  const [showRestartPrompt, setShowRestartPrompt] = useState(false);
+
   useEffect(() => {
     loadSettings();
     loadLogsPath();
     checkContextMenuStatus();
+    
+    // Subscribe to update state changes
+    const unsubscribe = UpdateService.subscribe(setUpdateState);
+    
+    // Initialize update service (silent check on mount)
+    UpdateService.checkSilently();
+    
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const loadSettings = async () => {
@@ -144,6 +159,22 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
       console.error('Failed to open logs folder:', error);
       alert(t('logs.errorOpening'));
     }
+  };
+
+  // Update handlers
+  const handleCheckUpdate = async () => {
+    await UpdateService.checkForUpdates();
+  };
+
+  const handleInstallUpdate = async () => {
+    const needsRestart = await UpdateService.installUpdate();
+    if (needsRestart) {
+      setShowRestartPrompt(true);
+    }
+  };
+
+  const handleRestartApp = async () => {
+    await UpdateService.relaunchApp();
   };
 
   const saveSettings = async () => {
@@ -394,7 +425,150 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
 
         <div className="setting-group">
           <label>{t('app.version')}</label>
-          <div style={{ color: theme.colors.textSecondary }}>v{APP_VERSION}</div>
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column',
+            gap: 12,
+            padding: 12,
+            background: theme.colors.surface,
+            borderRadius: 8,
+            border: `1px solid ${theme.colors.border}`,
+          }}>
+            {/* Current version */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: theme.colors.textSecondary }}>v{APP_VERSION}</span>
+              
+              {/* Check for updates button */}
+              <button
+                onClick={handleCheckUpdate}
+                disabled={updateState.status === 'checking' || updateState.status === 'downloading'}
+                style={{
+                  background: 'transparent',
+                  color: theme.colors.primary,
+                  border: 'none',
+                  cursor: updateState.status === 'checking' || updateState.status === 'downloading' 
+                    ? 'not-allowed' : 'pointer',
+                  fontSize: 13,
+                  opacity: updateState.status === 'checking' ? 0.7 : 1,
+                  padding: '4px 8px',
+                }}
+              >
+                {updateState.status === 'checking' 
+                  ? t('update.checking')
+                  : t('update.checkForUpdates')}
+              </button>
+            </div>
+
+            {/* Update available card */}
+            {updateState.status === 'update-available' && updateState.info && (
+              <div style={{
+                padding: 12,
+                background: theme.colors.primary + '15',
+                borderRadius: 6,
+                border: `1px solid ${theme.colors.primary}40`,
+              }}>
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center',
+                  marginBottom: 8,
+                }}>
+                  <div>
+                    <span style={{ color: theme.colors.textSecondary }}>
+                      v{updateState.info.currentVersion}
+                    </span>
+                    <span style={{ margin: '0 8px', color: theme.colors.primary }}>→</span>
+                    <span style={{ color: theme.colors.primary, fontWeight: 600 }}>
+                      v{updateState.info.newVersion}
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleInstallUpdate}
+                    style={{
+                      background: theme.colors.primary,
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: 4,
+                      padding: '6px 12px',
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      fontWeight: 500,
+                    }}
+                  >
+                    {t('update.install')}
+                  </button>
+                </div>
+                {updateState.info.releaseNotes && (
+                  <div style={{ 
+                    fontSize: 12, 
+                    color: theme.colors.textSecondary,
+                    maxHeight: 60,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}>
+                    {updateState.info.releaseNotes.slice(0, 150)}
+                    {updateState.info.releaseNotes.length > 150 && '...'}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Downloading progress */}
+            {(updateState.status === 'downloading' || updateState.status === 'installing') && (
+              <div style={{
+                padding: 12,
+                background: theme.colors.surface,
+                borderRadius: 6,
+                border: `1px solid ${theme.colors.border}`,
+              }}>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 8,
+                  color: theme.colors.primary,
+                }}>
+                  <span style={{ 
+                    display: 'inline-block',
+                    width: 14,
+                    height: 14,
+                    border: `2px solid ${theme.colors.primary}`,
+                    borderTopColor: 'transparent',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite',
+                  }} />
+                  {updateState.status === 'downloading' 
+                    ? t('update.downloading')
+                    : t('update.installing')}
+                </div>
+              </div>
+            )}
+
+            {/* Up to date message */}
+            {updateState.status === 'up-to-date' && (
+              <div style={{ 
+                fontSize: 13, 
+                color: theme.colors.success,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}>
+                ✓ {t('update.upToDate')}
+              </div>
+            )}
+
+            {/* Error message */}
+            {updateState.status === 'error' && updateState.error && (
+              <div style={{ 
+                fontSize: 13, 
+                color: theme.colors.error,
+                padding: 8,
+                background: theme.colors.error + '15',
+                borderRadius: 4,
+              }}>
+                {updateState.error}
+              </div>
+            )}
+          </div>
         </div>
 
       <div className="settings-footer" style={{ borderColor: theme.colors.border }}>
@@ -498,6 +672,75 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
                 }}
               >
                 {t('logs.cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Restart Prompt Modal */}
+      {showRestartPrompt && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: theme.colors.background,
+              borderRadius: 12,
+              padding: 24,
+              maxWidth: 400,
+              width: '90%',
+              border: `2px solid ${theme.colors.success}`,
+            }}
+          >
+            <h2 style={{ marginTop: 0, color: theme.colors.success }}>
+              ✓ {t('update.installed')}
+            </h2>
+            <p style={{ lineHeight: 1.6, color: theme.colors.text }}>
+              {t('update.restartMessage')}
+            </p>
+
+            <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+              <button
+                onClick={handleRestartApp}
+                style={{
+                  flex: 1,
+                  background: theme.colors.success,
+                  color: '#fff',
+                  padding: '12px',
+                  border: 'none',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                }}
+              >
+                {t('update.restartNow')}
+              </button>
+              <button
+                onClick={() => setShowRestartPrompt(false)}
+                style={{
+                  flex: 1,
+                  background: theme.colors.secondary,
+                  color: '#fff',
+                  padding: '12px',
+                  border: 'none',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                }}
+              >
+                {t('update.restartLater')}
               </button>
             </div>
           </div>

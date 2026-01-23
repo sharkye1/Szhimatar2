@@ -299,6 +299,8 @@
     },
     "clearCompleted": "Viŝi kompletiĝintajn",
     "deleteFromQueue": "Forigi el atendovico",
+    "show": "Montri",
+    "showInExplorer": "Montri en dosieradministrilo",
     "completedWithSize": "Finita"
   },
   "gpu": {
@@ -372,5 +374,17 @@
     "errorAdding": "Eraro aldonante al kunteksta menuo",
     "errorRemoving": "Eraro forigante el kunteksta menuo",
     "windowsOnly": "Kunteksta menuo disponeblas nur en Windows"
+  },
+  "update": {
+    "checkForUpdates": "Kontroli ĝisdatigojn",
+    "checking": "Kontrolante...",
+    "downloading": "Ŝargas ĝisdatigon...",
+    "installing": "Instalante...",
+    "upToDate": "Vi havas la plej novan version",
+    "install": "Ĝisdatigi",
+    "installed": "Ĝisdatigo instalita",
+    "restartMessage": "Restartigu la aplikajon por apliki la ĝisdatigon.",
+    "restartNow": "Restartigi nun",
+    "restartLater": "Poste"
   }
 }

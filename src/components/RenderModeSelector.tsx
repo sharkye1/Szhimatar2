@@ -8,10 +8,11 @@
  * - Pulsating glow and plasma bridge effects
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../contexts/LanguageContext';
+import DuoEasterEggOverlay from './DuoEasterEggOverlay';
 import './RenderModeSelector.css';
 
 // ============================================================================
@@ -100,6 +101,13 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
   });
   const [isHovered, setIsHovered] = useState<'cpu' | 'gpu' | 'duo' | null>(null);
 
+  // Easter Egg: Click counter state
+  const [duoClickCount, setDuoClickCount] = useState(0);
+  const [lastDuoClickTime, setLastDuoClickTime] = useState(0);
+  const [easterEggActive, setEasterEggActive] = useState(false);
+  const [easterEggOrigin, setEasterEggOrigin] = useState({ x: 0, y: 0 });
+  const duoButtonRef = useRef<HTMLButtonElement>(null);
+
   // Detect hardware on mount
   useEffect(() => {
     const detectHardware = async () => {
@@ -142,10 +150,58 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
     }
   }, [gpuAvailable, onModeChange]);
 
-  const handleDuoClick = useCallback(() => {
+  const handleDuoClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    // Normal mode change (always execute first)
     if (gpuAvailable) {
       onModeChange('duo');
     }
+
+    // Easter Egg: Track rapid clicks on DUO button
+    const now = Date.now();
+    
+    // CRITICAL: Get button rect BEFORE any setState calls
+    // React events are pooled and cleared after handler completes
+    // If we try to access event.currentTarget inside setState callback, it will be null
+    const button = event.currentTarget;
+    const buttonRect = button.getBoundingClientRect();
+    const buttonCenter = {
+      x: buttonRect.left + buttonRect.width / 2,
+      y: buttonRect.top + buttonRect.height / 2,
+    };
+
+    // Use functional updates to avoid stale closure issues
+    setLastDuoClickTime((prevTime) => {
+      const timeSinceLastClick = now - prevTime;
+
+      // Reset counter if more than 2 seconds passed
+      if (timeSinceLastClick > 2000) {
+        setDuoClickCount(1);
+        return now;
+      }
+
+      // Increment counter using functional update
+      setDuoClickCount((prevCount) => {
+        const newCount = prevCount + 1;
+
+        // Trigger easter egg on 15th click
+        if (newCount >= 15) {
+          console.log('EASTER EGG TRIGGERED');
+
+          // Set origin position (already calculated from event above)
+          setEasterEggOrigin(buttonCenter);
+          
+          // Then activate easter egg
+          setEasterEggActive(true);
+          
+          // Reset counter to prevent repeated triggers
+          return 0;
+        }
+
+        return newCount;
+      });
+
+      return now;
+    });
   }, [gpuAvailable, onModeChange]);
 
   // Animation intensity based on rendering state
@@ -215,8 +271,10 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
 
       {/* Duo Button (Center) */}
       <motion.button
+        ref={duoButtonRef}
         className={`mode-button duo-button ${isDuoActive ? 'active' : ''} ${isHovered === 'duo' ? 'hovered' : ''}`}
         onClick={handleDuoClick}
+        
         onMouseEnter={() => setIsHovered('duo')}
         onMouseLeave={() => setIsHovered(null)}
         disabled={duoDisabled}
@@ -254,6 +312,13 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
         </div>
         {isGpuActive && <div className="active-indicator" />}
       </motion.button>
+
+      {/* Easter Egg: DUO Power Unleashed overlay */}
+      <DuoEasterEggOverlay
+        active={easterEggActive}
+        originPosition={easterEggOrigin}
+        onComplete={() => setEasterEggActive(false)}
+      />
     </div>
   );
 };

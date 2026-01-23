@@ -216,6 +216,15 @@ const MainWindow: React.FC<MainWindowProps> = ({
     invoke('write_log', { message: `Applied preset: ${preset.name}` });
   };
 
+  const handleShowInExplorer = async (filePath: string) => {
+    try {
+      await invoke('show_in_explorer', { filePath });
+    } catch (error) {
+      console.error('Failed to show file in explorer:', error);
+      // Optionally show a notification to user
+    }
+  };
+
   return ( 
     <div className="main-window fade-in" style={{ background: theme.colors.background, color: theme.colors.text }}>
       <header className="header" style={{ background: theme.colors.surface, borderColor: theme.colors.border }}>
@@ -377,6 +386,38 @@ const MainWindow: React.FC<MainWindowProps> = ({
                             </span>
                           )}
   
+                          {/* Show in Explorer button for completed tasks */}
+                          {item.status === 'completed' && item.outputPath && (
+                            <button
+                              onClick={() => handleShowInExplorer(item.outputPath)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '4px 8px',
+                                background: `${theme.colors.success}15`,
+                                border: `1px solid ${theme.colors.success}40`,
+                                borderRadius: '6px',
+                                color: theme.colors.success,
+                                cursor: 'pointer',
+                                fontSize: '0.75rem',
+                                fontWeight: '500',
+                                transition: 'all 0.15s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = `${theme.colors.success}30`;
+                                e.currentTarget.style.borderColor = theme.colors.success;
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = `${theme.colors.success}15`;
+                                e.currentTarget.style.borderColor = `${theme.colors.success}40`;
+                              }}
+                              title={t('queue.showInExplorer') || 'Show in Explorer'}
+                            >
+                              📁 {t('queue.show') || 'Show'}
+                            </button>
+                          )}
+
                           {/* Delete button - larger and more visible */}
                           {(item.status === 'pending' || item.status === 'completed' || item.status === 'error' || item.status === 'stopped') && (
                             <button

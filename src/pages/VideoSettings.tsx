@@ -86,7 +86,8 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
   };
 
   const handleFpsAutoChange = (enabled: boolean) => {
-    setSettings({ ...settings, fpsAuto: enabled });
+    console.log('[VideoSettings] fpsAuto changed to:', enabled);
+    setSettings(prev => ({ ...prev, fpsAuto: enabled }));
   };
 
   const handleFilterToggle = (filterName: string) => {
@@ -130,7 +131,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
           <label>{t('video.codec')}</label>
           <select
             value={settings.codec}
-            onChange={(e) => setSettings({ ...settings, codec: e.target.value })}
+            onChange={(e) => setSettings(prev => ({ ...prev, codec: e.target.value }))}
             style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
           >
             <option value="h264">{t('videoSettings.codecs.h264')}</option>
@@ -146,7 +147,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
           <input
             type="number"
             value={settings.bitrate}
-            onChange={(e) => setSettings({ ...settings, bitrate: e.target.value })}
+            onChange={(e) => setSettings(prev => ({ ...prev, bitrate: e.target.value }))}
             style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
             min="0.5"
             max="100"
@@ -160,7 +161,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
             <label>{t('videoSettings.fps')}</label>
             <select
               value={settings.fps}
-              onChange={(e) => setSettings({ ...settings, fps: e.target.value })}
+              onChange={(e) => setSettings(prev => ({ ...prev, fps: e.target.value }))}
               style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
               disabled={false}
             >
@@ -188,7 +189,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
             <label>{t('videoSettings.resolution')}</label>
             <select
               value={settings.resolution}
-              onChange={(e) => setSettings({ ...settings, resolution: e.target.value })}
+              onChange={(e) => setSettings(prev => ({ ...prev, resolution: e.target.value }))}
               style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
             >
               {resolutions.map(res => (
@@ -200,7 +201,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
             <label>{t('videoSettings.aspectRatio')}</label>
             <select
               value={settings.aspectRatio}
-              onChange={(e) => setSettings({ ...settings, aspectRatio: e.target.value })}
+              onChange={(e) => setSettings(prev => ({ ...prev, aspectRatio: e.target.value }))}
               style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
             >
               {aspectRatios.map(ar => (
@@ -226,7 +227,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
             <input
               type="range"
               value={settings.crf}
-              onChange={(e) => setSettings({ ...settings, crf: e.target.value })}
+              onChange={(e) => setSettings(prev => ({ ...prev, crf: e.target.value }))}
               min="0"
               max="51"
               step="1"
@@ -241,7 +242,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
             <label>{t('videoSettings.preset')}</label>
             <select
               value={settings.preset}
-              onChange={(e) => setSettings({ ...settings, preset: e.target.value })}
+              onChange={(e) => setSettings(prev => ({ ...prev, preset: e.target.value }))}
               style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
             >
               {Object.entries(presetDescriptions).map(([key, _desc]) => (
@@ -266,7 +267,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
             <input
               type="range"
               value={settings.speed}
-              onChange={(e) => setSettings({ ...settings, speed: parseFloat(e.target.value) })}
+              onChange={(e) => setSettings(prev => ({ ...prev, speed: parseFloat(e.target.value) }))}
               min="0.25"
               max="2"
               step="0.25"
@@ -284,7 +285,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
             <label>{t('videoSettings.rotation')}</label>
             <select
               value={settings.rotation}
-              onChange={(e) => setSettings({ ...settings, rotation: e.target.value as any })}
+              onChange={(e) => setSettings(prev => ({ ...prev, rotation: e.target.value as any }))}
               style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
             >
               <option value="none">{t('videoSettings.rotationOptions.none')}</option>
@@ -298,7 +299,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
             <label>{t('videoSettings.flip')}</label>
             <select
               value={settings.flip}
-              onChange={(e) => setSettings({ ...settings, flip: e.target.value as any })}
+              onChange={(e) => setSettings(prev => ({ ...prev, flip: e.target.value as any }))}
               style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
             >
               <option value="none">{t('videoSettings.flipOptions.none')}</option>

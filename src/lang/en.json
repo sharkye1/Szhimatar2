@@ -299,6 +299,8 @@
     },
     "clearCompleted": "Clear completed",
     "deleteFromQueue": "Delete from queue",
+    "show": "Show",
+    "showInExplorer": "Show in Explorer",
     "completedWithSize": "Done"
   },
   "gpu": {
@@ -372,5 +374,17 @@
     "errorAdding": "Error adding to context menu",
     "errorRemoving": "Error removing from context menu",
     "windowsOnly": "Context menu is only available on Windows"
+  },
+  "update": {
+    "checkForUpdates": "Check for updates",
+    "checking": "Checking...",
+    "downloading": "Downloading update...",
+    "installing": "Installing...",
+    "upToDate": "You have the latest version",
+    "install": "Update",
+    "installed": "Update installed",
+    "restartMessage": "Restart the application to apply the update.",
+    "restartNow": "Restart now",
+    "restartLater": "Later"
   }
 }

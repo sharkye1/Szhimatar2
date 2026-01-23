@@ -410,6 +410,73 @@ fn open_logs_folder() -> Result<(), String> {
     Ok(())
 }
 
+/// Show file in system file manager with file selected
+#[tauri::command]
+fn show_in_explorer(file_path: String) -> Result<(), String> {
+    use std::path::Path;
+    
+    let path = Path::new(&file_path);
+    
+    // Check if file exists
+    if !path.exists() {
+        return Err(format!("File not found: {}", file_path));
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        // Use explorer.exe /select to highlight the file
+        Command::new("explorer")
+            .args(["/select,", &file_path])
+            .spawn()
+            .map_err(|e| format!("Failed to open explorer: {}", e))?;
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        // Use 'open -R' to reveal file in Finder
+        Command::new("open")
+            .args(["-R", &file_path])
+            .spawn()
+            .map_err(|e| format!("Failed to open Finder: {}", e))?;
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        // Try various Linux file managers
+        // Most support --show-file or similar
+        let managers = [
+            ("nautilus", vec!["--select", &file_path]),
+            ("dolphin", vec!["--select", &file_path]),
+            ("nemo", vec![&file_path]),
+            ("thunar", vec![&file_path]),
+        ];
+        
+        let mut success = false;
+        for (manager, args) in &managers {
+            if Command::new(manager)
+                .args(args.as_slice())
+                .spawn()
+                .is_ok()
+            {
+                success = true;
+                break;
+            }
+        }
+        
+        if !success {
+            // Fallback: open containing directory
+            if let Some(parent) = path.parent() {
+                Command::new("xdg-open")
+                    .arg(parent)
+                    .spawn()
+                    .map_err(|e| format!("Failed to open file manager: {}", e))?;
+            }
+        }
+    }
+    
+    Ok(())
+}
+
 
 // ============================================================================
 // FFMPEG INTEGRATION
@@ -1767,6 +1834,7 @@ fn main() {
             get_logs_path,
             clear_logs,
             open_logs_folder,
+            show_in_explorer,
             // FFmpeg commands
             check_ffmpeg_status,
             search_ffmpeg_fast,

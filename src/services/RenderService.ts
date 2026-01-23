@@ -100,17 +100,20 @@ export class FFmpegCommandBuilder {
   private audioSettings: AudioSettings;
   private watermarkSettings?: WatermarkSettings;
   private preferGpu: boolean;
+  private outputPath: string;
 
   constructor(
     videoSettings: VideoSettings,
     audioSettings: AudioSettings,
     watermarkSettings?: WatermarkSettings,
-    preferGpu: boolean = false
+    preferGpu: boolean = false,
+    outputPath: string = ''
   ) {
     this.videoSettings = videoSettings;
     this.audioSettings = audioSettings;
     this.watermarkSettings = watermarkSettings;
     this.preferGpu = preferGpu;
+    this.outputPath = outputPath;
   }
 
   /**
@@ -204,9 +207,11 @@ export class FFmpegCommandBuilder {
         }
       }
       
-      // For NVENC, ensure pixel format compatibility
-      if (isNvenc) {
-        // NVENC works best with yuv420p or nv12
+      // Ensure pixel format compatibility for all H.264/H.265 encoders
+      // Both NVENC and libx264/libx265 require yuv420p for maximum compatibility
+      // This fixes "Option not found" errors when source has non-standard pixel format
+      const codec = this.videoSettings.codec.toLowerCase();
+      if (codec === 'h264' || codec === 'h265' || codec === 'hevc') {
         videoFilters.push('format=yuv420p');
       }
     }
@@ -360,8 +365,23 @@ export class FFmpegCommandBuilder {
       args.push('-af', audioFilters.join(','));
     }
 
-    // Movflags for web compatibility
-    args.push('-movflags', '+faststart');
+    // Movflags for web compatibility - ONLY for MP4/MOV/M4V containers
+    // Using this flag with WebM/MKV causes "Option not found" error
+    if (this.outputPath) {
+      const ext = this.outputPath.toLowerCase().split('.').pop() || '';
+      const supportsMovflags = ['mp4', 'mov', 'm4v', 'm4a'].includes(ext);
+      if (supportsMovflags) {
+        args.push('-movflags', '+faststart');
+      }
+    } else {
+      // Fallback: check codec to guess container
+      // VP9/VP8/AV1 typically use WebM which doesn't support movflags
+      const codec = this.videoSettings.codec.toLowerCase();
+      const isWebmCodec = ['vp9', 'vp8', 'av1'].includes(codec);
+      if (!isWebmCodec) {
+        args.push('-movflags', '+faststart');
+      }
+    }
 
     return args;
   }
@@ -735,7 +755,7 @@ class RenderServiceImpl {
     this.outputSuffix = outputSuffix || this.outputSuffix;
     this.selectedPresetName = presetName || null;
     
-    console.log('[RenderService] Settings updated', presetName ? `(preset: ${presetName})` : '');
+    console.log('[RenderService] Settings updated', presetName ? `(preset: ${presetName})` : '', `| fpsAuto: ${videoSettings.fpsAuto}, fps: ${videoSettings.fps}`);
   }
 
   /**
@@ -1017,6 +1037,7 @@ class RenderServiceImpl {
     try {
       // Build FFmpeg arguments
       // AUTO FPS DETECTION: Detect FPS for each video if fpsAuto is enabled
+      console.log(`[RenderService] Starting render for ${job.fileName} | fpsAuto: ${this.videoSettings?.fpsAuto}, fps: ${this.videoSettings?.fps}`);
       let effectiveVideoSettings = this.videoSettings!;
       if (this.videoSettings?.fpsAuto) {
         try {
@@ -1054,7 +1075,8 @@ class RenderServiceImpl {
         effectiveVideoSettings,
         this.audioSettings!,
         this.watermarkSettings,
-        preferGpu
+        preferGpu,
+        job.outputPath
       );
 
       // Validate settings

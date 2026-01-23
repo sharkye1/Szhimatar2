@@ -299,6 +299,8 @@
     },
     "clearCompleted": "清除已完成",
     "deleteFromQueue": "从队列删除",
+    "show": "显示",
+    "showInExplorer": "在资源管理器中显示",
     "completedWithSize": "完成"
   },
   "gpu": {
@@ -372,5 +374,17 @@
     "errorAdding": "添加到右键菜单时出错",
     "errorRemoving": "从右键菜单移除时出错",
     "windowsOnly": "右键菜单仅在 Windows 上可用"
+  },
+  "update": {
+    "checkForUpdates": "检查更新",
+    "checking": "检查中...",
+    "downloading": "下载更新中...",
+    "installing": "安装中...",
+    "upToDate": "已是最新版本",
+    "install": "更新",
+    "installed": "更新已安装",
+    "restartMessage": "重启应用程序以应用更新。",
+    "restartNow": "立即重启",
+    "restartLater": "稍后"
   }
 }

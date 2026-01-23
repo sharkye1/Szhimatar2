@@ -150,7 +150,7 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
             <input
               type="checkbox"
               checked={settings.autoSelect}
-              onChange={(e) => setSettings({ ...settings, autoSelect: e.target.checked })}
+              onChange={(e) => setSettings(prev => ({ ...prev, autoSelect: e.target.checked }))}
             />
             <span>{t('audioSettings.autoSelect')}</span>
           </label>
@@ -183,7 +183,7 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
             </label>
             <select
               value={settings.bitrate}
-              onChange={(e) => setSettings({ ...settings, bitrate: e.target.value })}
+              onChange={(e) => setSettings(prev => ({ ...prev, bitrate: e.target.value }))}
               style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
               disabled={codecOptions.bitrateDisabled}
             >
@@ -200,7 +200,7 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
             <label>{t('audio.channels')}</label>
             <select
               value={settings.channels}
-              onChange={(e) => setSettings({ ...settings, channels: e.target.value })}
+              onChange={(e) => setSettings(prev => ({ ...prev, channels: e.target.value }))}
               style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
               disabled={codecOptions.channelsDisabled}
             >
@@ -225,7 +225,7 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
             </label>
             <select
               value={settings.sampleRate}
-              onChange={(e) => setSettings({ ...settings, sampleRate: e.target.value })}
+              onChange={(e) => setSettings(prev => ({ ...prev, sampleRate: e.target.value }))}
               style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
               disabled={codecOptions.sampleRateDisabled}
             >
@@ -244,7 +244,7 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
               <input
                 type="range"
                 value={settings.volume}
-                onChange={(e) => setSettings({ ...settings, volume: e.target.value })}
+                onChange={(e) => setSettings(prev => ({ ...prev, volume: e.target.value }))}
                 min="0"
                 max="200"
                 step="1"
@@ -262,7 +262,7 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
               <input
                 type="range"
                 value={settings.gain}
-                onChange={(e) => setSettings({ ...settings, gain: e.target.value })}
+                onChange={(e) => setSettings(prev => ({ ...prev, gain: e.target.value }))}
                 min="-20"
                 max="20"
                 step="1"
@@ -282,7 +282,7 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
               <input
                 type="checkbox"
                 checked={settings.normalization}
-                onChange={(e) => setSettings({ ...settings, normalization: e.target.checked })}
+                onChange={(e) => setSettings(prev => ({ ...prev, normalization: e.target.checked }))}
                 disabled={settings.codec === 'copy'}
               />
               <span>{t('audioSettings.normalization')}</span>
@@ -296,7 +296,7 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
               <input
                 type="range"
                 value={settings.pitch}
-                onChange={(e) => setSettings({ ...settings, pitch: parseInt(e.target.value) })}
+                onChange={(e) => setSettings(prev => ({ ...prev, pitch: parseInt(e.target.value) }))}
                 min="-12"
                 max="12"
                 step="1"
@@ -325,7 +325,7 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
             <input
               type="range"
               value={settings.noiseReduction}
-              onChange={(e) => setSettings({ ...settings, noiseReduction: e.target.value })}
+              onChange={(e) => setSettings(prev => ({ ...prev, noiseReduction: e.target.value }))}
               min="0"
               max="1"
               step="0.1"

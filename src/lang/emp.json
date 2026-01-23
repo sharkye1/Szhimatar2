@@ -299,6 +299,8 @@
     },
     "clearCompleted": "",
     "deleteFromQueue": "",
+    "show": "",
+    "showInExplorer": "",
     "completedWithSize": ""
   },
   "gpu": {
@@ -372,5 +374,17 @@
     "errorAdding": "",
     "errorRemoving": "",
     "windowsOnly": ""
+  },
+  "update": {
+    "checkForUpdates": "",
+    "checking": "",
+    "downloading": "",
+    "installing": "",
+    "upToDate": "",
+    "install": "",
+    "installed": "",
+    "restartMessage": "",
+    "restartNow": "",
+    "restartLater": ""
   }
 }

@@ -101,3 +101,14 @@
   font-size: 14px;
   font-weight: 500;
 }
+
+/* Spinner animation for update progress */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}

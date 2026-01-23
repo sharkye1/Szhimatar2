@@ -299,6 +299,8 @@
     },
     "clearCompleted": "Očistiti gotove",
     "deleteFromQueue": "Udaliti iz čereda",
+    "show": "Pokazać",
+    "showInExplorer": "Pokazać u pravadniku",
     "completedWithSize": "Gotovo"
   },
   "gpu": {
@@ -372,5 +374,17 @@
     "errorAdding": "Pomylka dodavannja do kontekstnogo menu",
     "errorRemoving": "Pomylka udalennja iz kontekstnogo menu",
     "windowsOnly": "Kontekstno menu dostupno tilko na Windows"
+  },
+  "update": {
+    "checkForUpdates": "Proveriti obnova",
+    "checking": "Proverka...",
+    "downloading": "Zagruza obnovy...",
+    "installing": "Instalacija...",
+    "upToDate": "Imate najnovšu verziju",
+    "install": "Obnoviti",
+    "installed": "Obnova instalirana",
+    "restartMessage": "Perezapustite aplikaciju za primjenje obnovy.",
+    "restartNow": "Perezapustiti sejmas",
+    "restartLater": "Pozdneje"
   }
 }
