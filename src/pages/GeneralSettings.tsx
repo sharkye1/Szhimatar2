@@ -167,14 +167,15 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
   };
 
   const handleInstallUpdate = async () => {
-    const needsRestart = await UpdateService.installUpdate();
-    if (needsRestart) {
+    const downloaded = await UpdateService.installUpdate();
+    if (downloaded) {
       setShowRestartPrompt(true);
     }
   };
 
   const handleRestartApp = async () => {
-    await UpdateService.relaunchApp();
+    // Apply update and restart
+    await UpdateService.applyUpdate();
   };
 
   const saveSettings = async () => {
@@ -514,7 +515,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
             )}
 
             {/* Downloading progress */}
-            {(updateState.status === 'downloading' || updateState.status === 'installing') && (
+            {updateState.status === 'downloading' && (
               <div style={{
                 padding: 12,
                 background: theme.colors.surface,
@@ -536,9 +537,63 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
                     borderRadius: '50%',
                     animation: 'spin 1s linear infinite',
                   }} />
-                  {updateState.status === 'downloading' 
-                    ? t('update.downloading')
-                    : t('update.installing')}
+                  {t('update.downloading')}
+                  {updateState.progress && updateState.progress.percent > 0 && (
+                    <span style={{ marginLeft: 8 }}>
+                      {updateState.progress.percent}%
+                    </span>
+                  )}
+                </div>
+                {/* Progress bar */}
+                {updateState.progress && updateState.progress.total > 0 && (
+                  <div style={{
+                    marginTop: 8,
+                    height: 4,
+                    background: theme.colors.border,
+                    borderRadius: 2,
+                    overflow: 'hidden',
+                  }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${updateState.progress.percent}%`,
+                      background: theme.colors.primary,
+                      transition: 'width 0.3s ease',
+                    }} />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Ready to install */}
+            {updateState.status === 'ready-to-install' && (
+              <div style={{
+                padding: 12,
+                background: theme.colors.success + '15',
+                borderRadius: 6,
+                border: `1px solid ${theme.colors.success}40`,
+              }}>
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  color: theme.colors.success,
+                }}>
+                  <span>✓ {t('update.readyToInstall')}</span>
+                  <button
+                    onClick={() => setShowRestartPrompt(true)}
+                    style={{
+                      background: theme.colors.success,
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: 4,
+                      padding: '6px 12px',
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      fontWeight: 500,
+                    }}
+                  >
+                    {t('update.restartNow')}
+                  </button>
                 </div>
               </div>
             )}

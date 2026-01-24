@@ -1,0 +1,6 @@
+<VisualElements
+    ShowNameOnSquare150x150Logo="on"
+    Square150x150Logo="assets\icon_150.png"
+    Square70x70Logo="assets\icon_70.png"
+    ForegroundText="light"
+    BackgroundColor="#2B2B2B"/>

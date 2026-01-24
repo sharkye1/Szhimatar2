@@ -29,6 +29,7 @@ src-tauri/target/
 src-tauri/.cargo/
 Cargo.lock
 src-tauri/Cargo.lock
+.tauri/
 
 # Compiled binaries and libraries
 *.exe

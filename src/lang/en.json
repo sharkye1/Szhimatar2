@@ -285,7 +285,8 @@
       "all": "All",
       "completed": "Completed",
       "error": "Errors",
-      "rendering": "Rendering"
+      "rendering": "Rendering",
+      "stopped": "Stopped manually"
     }
   },
   "queue": {
@@ -380,6 +381,7 @@
     "checking": "Checking...",
     "downloading": "Downloading update...",
     "installing": "Installing...",
+    "readyToInstall": "Ready to install",
     "upToDate": "You have the latest version",
     "install": "Update",
     "installed": "Update installed",

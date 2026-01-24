@@ -8,21 +8,20 @@
     },
     "package": {
         "productName": "Szhimatar",
-        "version": "1.0.0"
+        "version": "1.0.1"
     },
     "tauri": {
-        "updater": {
-            "active": true,
-            "dialog": false,
-            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE0MjQwODEzMDA4QTc1OTkKUldTWmRZb0FFd2drcEYwRnArYW1kQWhISTlkUm56RWpLQ3FSTUpjL0d5U2tOVE9nN1piWHFUelgK",
-            "endpoints": [
-                "https://github.com/sharkye1/Szhimatar2/releases/latest/download/latest.json"
-            ]
-        },
         "allowlist": {
             "all": false,
             "process": {
                 "relaunch": true
+            },
+            "http": {
+                "all": true,
+                "scope": [
+                    "https://github.com/sharkye1/Szhimatar2/releases/latest/download/*",
+                    "https://objects.githubusercontent.com/**"
+                ]
             },
             "shell": {
                 "all": false,
@@ -88,7 +87,13 @@
             "active": true,
             "targets": "all",
             "identifier": "com.szhimatar.app",
-            "icon": []
+            "icon": [],
+            "resources": [
+                "assets/Szhimatar.VisualElementsManifest.xml",
+                "assets/Szhimatar_windows-x86_64.VisualElementsManifest.xml",
+                "assets/icon_150.png",
+                "assets/icon_70.png"
+            ]
         },
         "security": {
             "csp": null
@@ -98,7 +103,7 @@
                 "fullscreen": false,
                 "resizable": true,
                 "title": "Szhimatar",
-                "width": 1200,
+                "width": 800,
                 "height": 800,
                 "minWidth": 800,
                 "minHeight": 600,

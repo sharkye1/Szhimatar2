@@ -285,7 +285,8 @@
       "all": "Vsě",
       "completed": "Gotove",
       "error": "Grěšky",
-      "rendering": "Renderujuće"
+      "rendering": "Renderujuće",
+      "stopped": "Stopped manually"
     }
   },
   "queue": {
@@ -380,6 +381,7 @@
     "checking": "Proverka...",
     "downloading": "Zagruza obnovy...",
     "installing": "Instalacija...",
+    "readyToInstall": "Gotovo do instalacije",
     "upToDate": "Imate najnovšu verziju",
     "install": "Obnoviti",
     "installed": "Obnova instalirana",

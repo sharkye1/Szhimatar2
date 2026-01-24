@@ -285,7 +285,8 @@
       "all": "",
       "completed": "",
       "error": "",
-      "rendering": ""
+      "rendering": "",
+      "stopped": "Stopped manually"
     }
   },
   "queue": {
@@ -380,6 +381,7 @@
     "checking": "",
     "downloading": "",
     "installing": "",
+    "readyToInstall": "",
     "upToDate": "",
     "install": "",
     "installed": "",

@@ -1,27 +1,46 @@
 /**
- * UpdateService - Tauri Updater integration
+ * UpdateService - Simple Update System (No Signing Required)
  * 
- * Provides auto-update functionality using Tauri's built-in updater.
- * Uses GitHub Releases as the update source.
+ * Downloads updates directly from GitHub Releases.
+ * Supports .exe and .zip files with optional SHA256 hash verification.
  */
 
-import { checkUpdate, installUpdate, onUpdaterEvent } from '@tauri-apps/api/updater';
-import { relaunch } from '@tauri-apps/api/process';
+import { invoke } from '@tauri-apps/api/tauri';
+import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { getVersion } from '@tauri-apps/api/app';
+import { fetch as tauriFetch, ResponseType } from '@tauri-apps/api/http';
+
+// Update endpoint - latest.json location
+const UPDATE_ENDPOINT = 'https://github.com/sharkye1/Szhimatar2/releases/latest/download/latest.json';
 
 export type UpdateStatus = 
   | 'idle'
   | 'checking'
   | 'update-available'
   | 'downloading'
-  | 'installing'
+  | 'ready-to-install'
   | 'up-to-date'
   | 'error';
+
+export interface UpdateManifest {
+  version: string;
+  notes: string;
+  pub_date?: string;
+  platforms: {
+    [key: string]: {
+      url: string;
+      hash?: string;  // Optional SHA256 hash for integrity check
+    };
+  };
+}
 
 export interface UpdateInfo {
   currentVersion: string;
   newVersion: string;
   releaseNotes?: string;
   releaseDate?: string;
+  downloadUrl: string;
+  hash?: string;
 }
 
 export interface UpdateProgress {
@@ -48,52 +67,33 @@ class UpdateServiceClass {
   };
 
   private listeners: Set<UpdateListener> = new Set();
-  private unlistenUpdaterEvent: (() => void) | null = null;
+  private progressUnlisten: UnlistenFn | null = null;
   private isInitialized = false;
 
   /**
-   * Initialize the update service and set up event listeners
+   * Initialize the update service
    */
   async initialize(): Promise<void> {
     if (this.isInitialized) return;
 
     try {
-      // Listen for updater events
-      this.unlistenUpdaterEvent = await onUpdaterEvent(({ error, status }) => {
-        console.log('[UpdateService] Updater event:', status, error);
-
-        if (error) {
+      // Listen for download progress events from Rust
+      this.progressUnlisten = await listen<{ downloaded: number; total: number }>(
+        'update-download-progress',
+        (event) => {
+          const { downloaded, total } = event.payload;
+          const percent = total > 0 ? Math.round((downloaded / total) * 100) : 0;
+          
           this.updateState({
-            status: 'error',
-            error: this.formatError(error),
+            progress: { downloaded, total, percent },
           });
-          return;
         }
-
-        switch (status) {
-          case 'PENDING':
-            this.updateState({ status: 'downloading' });
-            break;
-          case 'DONE':
-            this.updateState({ status: 'installing' });
-            break;
-          case 'UPTODATE':
-            this.updateState({ status: 'up-to-date' });
-            break;
-          case 'ERROR':
-            this.updateState({
-              status: 'error',
-              error: error || 'Unknown error during update',
-            });
-            break;
-        }
-      });
+      );
 
       this.isInitialized = true;
-      console.log('[UpdateService] Initialized');
+      console.log('[UpdateService] Initialized (simple mode, no signing)');
     } catch (error) {
       console.error('[UpdateService] Failed to initialize:', error);
-      // Don't crash the app if updater fails to initialize
     }
   }
 
@@ -101,9 +101,9 @@ class UpdateServiceClass {
    * Clean up event listeners
    */
   destroy(): void {
-    if (this.unlistenUpdaterEvent) {
-      this.unlistenUpdaterEvent();
-      this.unlistenUpdaterEvent = null;
+    if (this.progressUnlisten) {
+      this.progressUnlisten();
+      this.progressUnlisten = null;
     }
     this.listeners.clear();
     this.isInitialized = false;
@@ -114,7 +114,6 @@ class UpdateServiceClass {
    */
   subscribe(listener: UpdateListener): () => void {
     this.listeners.add(listener);
-    // Immediately call with current state
     listener(this.state);
     
     return () => {
@@ -130,8 +129,42 @@ class UpdateServiceClass {
   }
 
   /**
+   * Get current platform key for latest.json
+   */
+  private getPlatformKey(): string {
+    // Detect platform
+    const platform = navigator.platform.toLowerCase();
+    
+    if (platform.includes('win')) {
+      return 'windows-x86_64';
+    } else if (platform.includes('mac')) {
+      return 'darwin-x86_64';
+    } else if (platform.includes('linux')) {
+      return 'linux-x86_64';
+    }
+    
+    return 'windows-x86_64'; // Default
+  }
+
+  /**
+   * Compare semantic versions
+   * Returns true if newVersion > currentVersion
+   */
+  private isNewerVersion(currentVersion: string, newVersion: string): boolean {
+    const current = currentVersion.replace(/^v/, '').split('.').map(Number);
+    const next = newVersion.replace(/^v/, '').split('.').map(Number);
+
+    for (let i = 0; i < Math.max(current.length, next.length); i++) {
+      const c = current[i] || 0;
+      const n = next[i] || 0;
+      if (n > c) return true;
+      if (n < c) return false;
+    }
+    return false;
+  }
+
+  /**
    * Check for available updates
-   * Safe to call - won't crash on network errors
    */
   async checkForUpdates(): Promise<UpdateInfo | null> {
     if (this.state.status === 'checking' || this.state.status === 'downloading') {
@@ -145,34 +178,56 @@ class UpdateServiceClass {
     });
 
     try {
-      const { shouldUpdate, manifest } = await checkUpdate();
+      // Fetch latest.json via Tauri's native HTTP client to avoid CORS
+      const response = await tauriFetch<UpdateManifest>(UPDATE_ENDPOINT, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' },
+        responseType: ResponseType.JSON,
+      });
 
-      if (shouldUpdate && manifest) {
-        const info: UpdateInfo = {
-          currentVersion: await this.getCurrentVersion(),
-          newVersion: manifest.version,
-          releaseNotes: manifest.body || undefined,
-          releaseDate: manifest.date || undefined,
-        };
+      if (!response.ok) {
+        throw new Error(`Failed to fetch update manifest: ${response.status}`);
+      }
 
-        this.updateState({
-          status: 'update-available',
-          info,
-          error: null,
-        });
+      const manifest: UpdateManifest = response.data;
+      const platformKey = this.getPlatformKey();
+      const platformData = manifest.platforms[platformKey];
 
-        console.log('[UpdateService] Update available:', info.newVersion);
-        return info;
-      } else {
-        this.updateState({
-          status: 'up-to-date',
-          info: null,
-          error: null,
-        });
-
-        console.log('[UpdateService] Already up to date');
+      if (!platformData) {
+        console.log(`[UpdateService] No update available for platform: ${platformKey}`);
+        this.updateState({ status: 'up-to-date' });
         return null;
       }
+
+      // Get current version
+      const currentVersion = await this.getCurrentVersion();
+      
+      // Check if update is needed
+      if (!this.isNewerVersion(currentVersion, manifest.version)) {
+        console.log(`[UpdateService] Up to date (current: ${currentVersion}, latest: ${manifest.version})`);
+        this.updateState({ status: 'up-to-date' });
+        return null;
+      }
+
+      // Update available!
+      const info: UpdateInfo = {
+        currentVersion,
+        newVersion: manifest.version,
+        releaseNotes: manifest.notes,
+        releaseDate: manifest.pub_date,
+        downloadUrl: platformData.url,
+        hash: platformData.hash,
+      };
+
+      this.updateState({
+        status: 'update-available',
+        info,
+        error: null,
+      });
+
+      console.log('[UpdateService] Update available:', manifest.version);
+      return info;
+
     } catch (error) {
       const errorMessage = this.formatError(error);
       console.error('[UpdateService] Check failed:', errorMessage);
@@ -187,12 +242,16 @@ class UpdateServiceClass {
   }
 
   /**
-   * Download and install the update
-   * Returns true if relaunch is needed
+   * Download and prepare the update
    */
-  async installUpdate(): Promise<boolean> {
-    if (this.state.status !== 'update-available') {
-      console.warn('[UpdateService] No update available to install');
+  async downloadUpdate(): Promise<boolean> {
+    if (!this.state.info) {
+      console.warn('[UpdateService] No update info available');
+      return false;
+    }
+
+    if (this.state.status === 'downloading') {
+      console.warn('[UpdateService] Already downloading');
       return false;
     }
 
@@ -202,19 +261,32 @@ class UpdateServiceClass {
     });
 
     try {
-      // Install update (downloads and applies)
-      await installUpdate();
+      const { downloadUrl, hash } = this.state.info;
+
+      // Call Rust command to download update
+      const result = await invoke<{ success: boolean; path: string; error?: string }>(
+        'download_update',
+        {
+          url: downloadUrl,
+          expectedHash: hash || null,
+        }
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'Download failed');
+      }
 
       this.updateState({
-        status: 'installing',
+        status: 'ready-to-install',
         progress: { downloaded: 100, total: 100, percent: 100 },
       });
 
-      console.log('[UpdateService] Update installed, ready to relaunch');
+      console.log('[UpdateService] Update downloaded to:', result.path);
       return true;
+
     } catch (error) {
       const errorMessage = this.formatError(error);
-      console.error('[UpdateService] Install failed:', errorMessage);
+      console.error('[UpdateService] Download failed:', errorMessage);
 
       this.updateState({
         status: 'error',
@@ -227,17 +299,65 @@ class UpdateServiceClass {
   }
 
   /**
-   * Relaunch the application to apply the update
+   * Apply the downloaded update (replace exe and restart)
    */
-  async relaunchApp(): Promise<void> {
+  async applyUpdate(): Promise<boolean> {
+    if (this.state.status !== 'ready-to-install') {
+      console.warn('[UpdateService] Update not ready to install');
+      return false;
+    }
+
     try {
-      console.log('[UpdateService] Relaunching application...');
-      await relaunch();
+      // Call Rust command to apply update
+      const result = await invoke<{ success: boolean; error?: string }>(
+        'apply_update'
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to apply update');
+      }
+
+      console.log('[UpdateService] Update applied, restarting...');
+      
+      // Restart the application
+      await invoke('restart_app');
+      
+      return true;
+
     } catch (error) {
-      console.error('[UpdateService] Relaunch failed:', error);
+      const errorMessage = this.formatError(error);
+      console.error('[UpdateService] Apply failed:', errorMessage);
+
       this.updateState({
         status: 'error',
-        error: 'Failed to relaunch application. Please restart manually.',
+        error: errorMessage,
+      });
+
+      return false;
+    }
+  }
+
+  /**
+   * Combined: Download and install update
+   */
+  async installUpdate(): Promise<boolean> {
+    const downloaded = await this.downloadUpdate();
+    if (!downloaded) return false;
+
+    return true; // Ready to install, user needs to confirm restart
+  }
+
+  /**
+   * Restart the application
+   */
+  async restartApp(): Promise<void> {
+    try {
+      await invoke('restart_app');
+    } catch (error) {
+      console.error('[UpdateService] Restart failed:', error);
+      this.updateState({
+        status: 'error',
+        error: 'Failed to restart. Please restart manually.',
       });
     }
   }
@@ -256,7 +376,6 @@ class UpdateServiceClass {
 
   /**
    * Check for updates silently on app start
-   * Won't show errors to user, just logs them
    */
   async checkSilently(): Promise<void> {
     try {
@@ -264,7 +383,7 @@ class UpdateServiceClass {
       const result = await this.checkForUpdates();
       
       if (!result) {
-        // Reset to idle if no update (don't show "up-to-date" on startup)
+        // Reset to idle if no update
         setTimeout(() => {
           if (this.state.status === 'up-to-date') {
             this.updateState({ status: 'idle' });
@@ -272,8 +391,7 @@ class UpdateServiceClass {
         }, 3000);
       }
     } catch (error) {
-      console.log('[UpdateService] Silent check failed (network?):', error);
-      // Reset to idle on silent check failure
+      console.log('[UpdateService] Silent check failed:', error);
       this.updateState({ status: 'idle', error: null });
     }
   }
@@ -298,7 +416,6 @@ class UpdateServiceClass {
 
   private async getCurrentVersion(): Promise<string> {
     try {
-      const { getVersion } = await import('@tauri-apps/api/app');
       return await getVersion();
     } catch {
       return 'unknown';
@@ -306,13 +423,13 @@ class UpdateServiceClass {
   }
 
   private formatError(error: unknown): string {
+    // Check if error is string
     if (typeof error === 'string') {
-      // Clean up common error messages
       if (error.includes('network') || error.includes('fetch')) {
-        return 'Network error. Check your internet connection.';
+        return 'Ошибка сети. Проверьте подключение к интернету.';
       }
-      if (error.includes('signature')) {
-        return 'Update signature verification failed.';
+      if (error.includes('hash') || error.includes('integrity')) {
+        return 'Ошибка проверки целостности файла.';
       }
       return error;
     }
@@ -321,9 +438,9 @@ class UpdateServiceClass {
       return error.message;
     }
     
-    return 'Unknown error occurred';
+    return 'Неизвестная ошибка';
   }
 }
-
+ 
 // Singleton instance
 export const UpdateService = new UpdateServiceClass();

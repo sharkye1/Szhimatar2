@@ -159,12 +159,12 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
     // Easter Egg: Track rapid clicks on DUO button
     const now = Date.now();
     
-    // CRITICAL: Get button rect BEFORE any setState calls
-    // React events are pooled and cleared after handler completes
-    // If we try to access event.currentTarget inside setState callback, it will be null
+    // CRITICAL FIX: Event Pooling - React 17+ doesn't pool events, but we copy anyway for safety
+    // Extract button center BEFORE any setState calls to avoid stale closure issues
     const button = event.currentTarget;
     const buttonRect = button.getBoundingClientRect();
-    const buttonCenter = {
+    // Copy into plain object to avoid event target becoming stale
+    const originPosition = {
       x: buttonRect.left + buttonRect.width / 2,
       y: buttonRect.top + buttonRect.height / 2,
     };
@@ -187,8 +187,8 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
         if (newCount >= 15) {
           console.log('EASTER EGG TRIGGERED');
 
-          // Set origin position (already calculated from event above)
-          setEasterEggOrigin(buttonCenter);
+          // Set origin position (already calculated from event above - safe from pooling)
+          setEasterEggOrigin(originPosition);
           
           // Then activate easter egg
           setEasterEggActive(true);

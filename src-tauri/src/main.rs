@@ -7,6 +7,7 @@ use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use walkdir::WalkDir;
+use tauri::Manager;
 
 #[cfg(windows)]
 use winreg::enums::*;
@@ -1793,6 +1794,254 @@ fn remove_context_menu() -> Result<(), String> {
     }
 }
 
+// ============================================================================
+// SIMPLE UPDATE SYSTEM (NO SIGNING)
+// ============================================================================
+
+use std::io::{Read, Write};
+use sha2::{Sha256, Digest};
+
+/// Get updates directory path
+fn get_updates_dir() -> PathBuf {
+    get_app_data_dir().join("updates")
+}
+
+/// Download update file from URL with progress reporting
+#[tauri::command]
+async fn download_update(
+    app_handle: tauri::AppHandle,
+    url: String,
+    expected_hash: Option<String>,
+) -> Result<serde_json::Value, String> {
+    use std::io::Write;
+    
+    // Create updates directory
+    let updates_dir = get_updates_dir();
+    fs::create_dir_all(&updates_dir).map_err(|e| format!("Failed to create updates dir: {}", e))?;
+    
+    // Determine filename from URL
+    let filename = url.split('/').last().unwrap_or("update.exe");
+    let download_path = updates_dir.join(filename);
+    
+    // Download file using blocking client in spawn_blocking
+    let url_clone = url.clone();
+    let download_path_clone = download_path.clone();
+    let expected_hash_clone = expected_hash.clone();
+    let app_handle_clone = app_handle.clone();
+    
+    let result = tokio::task::spawn_blocking(move || {
+        // Create HTTP client
+        let client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(300))
+            .build()
+            .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+        
+        // Start download
+        let response = client.get(&url_clone)
+            .send()
+            .map_err(|e| format!("Download request failed: {}", e))?;
+        
+        if !response.status().is_success() {
+            return Err(format!("Download failed with status: {}", response.status()));
+        }
+        
+        let total_size = response.content_length().unwrap_or(0);
+        let mut downloaded: u64 = 0;
+        
+        // Create file
+        let mut file = std::fs::File::create(&download_path_clone)
+            .map_err(|e| format!("Failed to create file: {}", e))?;
+        
+        // Create hasher for integrity check
+        let mut hasher = Sha256::new();
+        
+        // Read and write in chunks with progress
+        let mut reader = response;
+        let mut buffer = [0u8; 8192];
+        
+        loop {
+            let bytes_read = reader.read(&mut buffer)
+                .map_err(|e| format!("Failed to read response: {}", e))?;
+            
+            if bytes_read == 0 {
+                break;
+            }
+            
+            file.write_all(&buffer[..bytes_read])
+                .map_err(|e| format!("Failed to write file: {}", e))?;
+            
+            hasher.update(&buffer[..bytes_read]);
+            
+            downloaded += bytes_read as u64;
+            
+            // Emit progress event
+            let _ = app_handle_clone.emit_all("update-download-progress", serde_json::json!({
+                "downloaded": downloaded,
+                "total": total_size
+            }));
+        }
+        
+        file.flush().map_err(|e| format!("Failed to flush file: {}", e))?;
+        drop(file);
+        
+        // Verify hash if provided
+        if let Some(expected) = expected_hash_clone {
+            let hash = hex::encode(hasher.finalize());
+            if hash.to_lowercase() != expected.to_lowercase() {
+                // Delete file if hash doesn't match
+                let _ = std::fs::remove_file(&download_path_clone);
+                return Err(format!("Hash mismatch: expected {}, got {}", expected, hash));
+            }
+        }
+        
+        Ok(download_path_clone.to_string_lossy().to_string())
+    }).await.map_err(|e| format!("Task error: {}", e))?;
+    
+    match result {
+        Ok(path) => {
+            // If it's a zip file, extract it
+            if filename.ends_with(".zip") {
+                extract_update_zip(&PathBuf::from(&path))?;
+            }
+            
+            Ok(serde_json::json!({
+                "success": true,
+                "path": path
+            }))
+        }
+        Err(e) => Ok(serde_json::json!({
+            "success": false,
+            "error": e
+        }))
+    }
+}
+
+/// Extract zip file to updates directory
+fn extract_update_zip(zip_path: &PathBuf) -> Result<(), String> {
+    let file = std::fs::File::open(zip_path)
+        .map_err(|e| format!("Failed to open zip: {}", e))?;
+    
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| format!("Failed to read zip: {}", e))?;
+    
+    let updates_dir = get_updates_dir();
+    
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)
+            .map_err(|e| format!("Failed to read zip entry: {}", e))?;
+        
+        let name = file.name().to_string();
+        
+        // Only extract .exe files
+        if name.ends_with(".exe") {
+            let outpath = updates_dir.join(
+                std::path::Path::new(&name).file_name().unwrap_or_default()
+            );
+            
+            let mut outfile = std::fs::File::create(&outpath)
+                .map_err(|e| format!("Failed to create extracted file: {}", e))?;
+            
+            std::io::copy(&mut file, &mut outfile)
+                .map_err(|e| format!("Failed to extract file: {}", e))?;
+        }
+    }
+    
+    // Remove zip after extraction
+    let _ = std::fs::remove_file(zip_path);
+    
+    Ok(())
+}
+
+/// Apply downloaded update - creates a batch script and restarts
+#[tauri::command]
+fn apply_update() -> Result<serde_json::Value, String> {
+    let updates_dir = get_updates_dir();
+    
+    // Find the new exe
+    let new_exe = std::fs::read_dir(&updates_dir)
+        .map_err(|e| format!("Failed to read updates dir: {}", e))?
+        .filter_map(|e| e.ok())
+        .find(|e| {
+            e.path().extension()
+                .map(|ext| ext == "exe")
+                .unwrap_or(false)
+        })
+        .ok_or("No update executable found")?;
+    
+    let new_exe_path = new_exe.path();
+    
+    // Get current exe path
+    let current_exe = std::env::current_exe()
+        .map_err(|e| format!("Failed to get current exe: {}", e))?;
+
+    // Create and run update script, then exit
+    #[cfg(target_os = "windows")]
+    {
+        let batch_path = updates_dir.join("update.bat");
+
+        // Clean paths to support Cyrillic: remove UNC prefix
+        let src = new_exe_path.to_string_lossy().replace("\\\\?\\", "");
+        let dst = current_exe.to_string_lossy().replace("\\\\?\\", "");
+
+        // Minimal batch script, CRLF line endings, no leading spaces
+        let batch_content = format!(
+            "@echo off\r\n\
+chcp 65001 > nul\r\n\
+timeout /t 3 /nobreak > nul\r\n\
+taskkill /F /IM Szhimatar.exe /T > nul 2>&1\r\n\
+copy /y \"{}\" \"{}\"\r\n\
+start \"\" \"{}\"\r\n\
+del \"%~f0\"",
+            src, dst, dst
+        );
+
+        std::fs::write(&batch_path, batch_content.as_bytes())
+            .map_err(|e| format!("Failed to create update script: {}", e))?;
+
+        std::process::Command::new("cmd")
+            .args(["/C", &batch_path.to_string_lossy()])
+            .spawn()
+            .map_err(|e| format!("Failed to start update script: {}", e))?;
+
+        std::process::exit(0);
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    {
+        let script_path = updates_dir.join("update.sh");
+        let script_content = format!(
+            r#"#!/bin/bash
+sleep 2
+cp -f "{}" "{}"
+chmod +x "{}"
+"{}" &
+rm -f "$0"
+"#,
+            new_exe_path.display(),
+            current_exe.display(),
+            current_exe.display(),
+            current_exe.display()
+        );
+        
+        std::fs::write(&script_path, script_content)
+            .map_err(|e| format!("Failed to create update script: {}", e))?;
+        
+        std::process::Command::new("bash")
+            .arg(&script_path)
+            .spawn()
+            .map_err(|e| format!("Failed to start update script: {}", e))?;
+        
+        std::process::exit(0);
+    }
+}
+
+/// Restart the application
+#[tauri::command]
+fn restart_app(app_handle: tauri::AppHandle) {
+    // Exit current process - the update script will start new one
+    app_handle.exit(0);
+}
+
 /// Get files passed via command line arguments
 #[tauri::command]
 fn get_cli_files() -> Vec<String> {
@@ -1866,6 +2115,10 @@ fn main() {
             add_context_menu,
             remove_context_menu,
             get_cli_files,
+            // Update commands
+            download_update,
+            apply_update,
+            restart_app,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

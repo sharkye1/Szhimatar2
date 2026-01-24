@@ -285,7 +285,8 @@
       "all": "全部",
       "completed": "已完成",
       "error": "错误",
-      "rendering": "渲染中"
+      "rendering": "渲染中",
+      "stopped": "Stopped manually"
     }
   },
   "queue": {
@@ -380,6 +381,7 @@
     "checking": "检查中...",
     "downloading": "下载更新中...",
     "installing": "安装中...",
+    "readyToInstall": "准备安装",
     "upToDate": "已是最新版本",
     "install": "更新",
     "installed": "更新已安装",

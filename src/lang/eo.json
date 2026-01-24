@@ -285,7 +285,8 @@
       "all": "Ĉiuj",
       "completed": "Kompletiĝintaj",
       "error": "Eraroj",
-      "rendering": "Renderantaj"
+      "rendering": "Renderantaj",
+      "stopped": "Stopped manually"
     }
   },
   "queue": {
@@ -380,6 +381,7 @@
     "checking": "Kontrolante...",
     "downloading": "Ŝargas ĝisdatigon...",
     "installing": "Instalante...",
+    "readyToInstall": "Preta por instali",
     "upToDate": "Vi havas la plej novan version",
     "install": "Ĝisdatigi",
     "installed": "Ĝisdatigo instalita",
