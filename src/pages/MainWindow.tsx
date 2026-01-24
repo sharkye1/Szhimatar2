@@ -66,6 +66,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
     errorJobs,
     pendingJobs,
     addFiles,
+    addToQueue,
     removeJob,
     clearCompleted,
     start,
@@ -386,6 +387,74 @@ const MainWindow: React.FC<MainWindowProps> = ({
                             </span>
                           )}
   
+                          {/* Re-render buttons for completed tasks */}
+                          {item.status === 'completed' && (
+                            <>
+                              <button
+                                onClick={() => addToQueue(item.inputPath, item.outputPath)}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '4px 8px',
+                                  background: `${theme.colors.success}15`,
+                                  border: `1px solid ${theme.colors.success}40`,
+                                  borderRadius: '6px',
+                                  color: theme.colors.success,
+                                  cursor: 'pointer',
+                                  fontSize: '0.75rem',
+                                  fontWeight: '500',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = `${theme.colors.success}30`;
+                                  e.currentTarget.style.borderColor = theme.colors.success;
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = `${theme.colors.success}15`;
+                                  e.currentTarget.style.borderColor = `${theme.colors.success}40`;
+                                }}
+                                title={t('history.re_render_overwrite') || 'Re-render (overwrite)'}
+                              >
+                                ↻
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const lastDot = item.outputPath.lastIndexOf('.');
+                                  const outputPathNew = lastDot > 0 
+                                    ? item.outputPath.substring(0, lastDot) + '_2' + item.outputPath.substring(lastDot)
+                                    : item.outputPath + '_2';
+                                  addToQueue(item.inputPath, outputPathNew);
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '4px 8px',
+                                  background: `${theme.colors.primary}15`,
+                                  border: `1px solid ${theme.colors.primary}40`,
+                                  borderRadius: '6px',
+                                  color: theme.colors.primary,
+                                  cursor: 'pointer',
+                                  fontSize: '0.75rem',
+                                  fontWeight: '500',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = `${theme.colors.primary}30`;
+                                  e.currentTarget.style.borderColor = theme.colors.primary;
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = `${theme.colors.primary}15`;
+                                  e.currentTarget.style.borderColor = `${theme.colors.primary}40`;
+                                }}
+                                title={t('history.re_render_new') || 'Re-render (new version)'}
+                              >
+                                ↻2
+                              </button>
+                            </>
+                          )}
+
                           {/* Show in Explorer button for completed tasks */}
                           {item.status === 'completed' && item.outputPath && (
                             <button
