@@ -54,32 +54,19 @@ export function useStatistics(): UseStatisticsReturn {
   const [stats, setStats] = useState<Statistics>(StatisticsService.getStats());
   const [isLoaded, setIsLoaded] = useState<boolean>(StatisticsService.isLoaded());
 
-  console.log('[useStatistics] Initial state:', {
-    isLoaded: StatisticsService.isLoaded(),
-    rendersCount: StatisticsService.getStats().renders.length,
-  });
-
   // Subscribe to StatisticsService updates
   useEffect(() => {
-    console.log('[useStatistics] Setting up subscription');
-    
     const unsubscribe = StatisticsService.subscribe((newStats) => {
-      console.log('[useStatistics] Got update from StatisticsService:', {
-        rendersCount: newStats.renders.length,
-      });
       setStats({ ...newStats });
     });
 
     // Load if not already loaded
     if (!StatisticsService.isLoaded()) {
-      console.log('[useStatistics] Service not loaded, loading...');
       StatisticsService.load().then(() => {
-        console.log('[useStatistics] Load completed');
         setStats(StatisticsService.getStats());
         setIsLoaded(true);
       });
     } else {
-      console.log('[useStatistics] Service already loaded, using existing data');
       setStats(StatisticsService.getStats());
       setIsLoaded(true);
     }

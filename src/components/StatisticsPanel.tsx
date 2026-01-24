@@ -39,28 +39,6 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
     return r.status === filter;
   });
 
-  // Debug logging
-  React.useEffect(() => {
-    console.log('[StatisticsPanel] Component mounted/updated', {
-      isLoaded,
-      rendersCount: renders.length,
-      filter,
-      activeRendersCount: activeRenders.length,
-      filteredRendersCount: filteredRenders.length,
-      statusCounts: renders.reduce((acc, r) => {
-        acc[r.status] = (acc[r.status] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>),
-    });
-  }, [isLoaded, renders.length, filter, activeRenders.length, filteredRenders.length]);
-
-  console.log('[StatisticsPanel] render() called with:', {
-    isLoaded,
-    rendersCount: renders.length,
-    filteredRendersCount: filteredRenders.length,
-    filter,
-  });
-
   // Get status display
   const getStatusDisplay = (record: RenderStatRecord) => {
     const statusMap: Record<string, { text: string; color: string; icon: string }> = {
@@ -129,7 +107,6 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
   };
 
   if (!isLoaded) {
-    console.log('[StatisticsPanel] Still loading...');
     return (
       <div className="statistics-panel" style={{ background: theme.colors.surface }}>
         <div className="stats-loading" style={{ color: theme.colors.textSecondary }}>
@@ -287,18 +264,9 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
         {filteredRenders.length === 0 ? (
           <div className="empty-state" style={{ color: theme.colors.textSecondary }}>
             {t('stats.noRenders') || 'No renders in history'}
-            {renders.length > 0 && (
-              <div style={{ fontSize: '12px', marginTop: '8px', color: '#999' }}>
-                (Note: {renders.length} renders loaded, but filtered renders: {filteredRenders.length}, Filter: {filter})
-              </div>
-            )}
           </div>
         ) : (
-          <>
-            <div style={{ fontSize: '12px', color: '#999', padding: '8px', backgroundColor: 'rgba(0,0,0,0.1)', marginBottom: '8px' }}>
-              DEBUG: Showing {filteredRenders.length} of {renders.length} renders
-            </div>
-            {filteredRenders.map(render => {
+          filteredRenders.map(render => {
             const status = getStatusDisplay(render);
             return (
               <div
@@ -350,10 +318,6 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
                   </div>
                 </div>
                 <div className="history-actions">
-                  <span style={{ fontSize: '10px', color: '#999', marginRight: '4px' }}>
-                    [{render.status}]
-                  </span>
-                  {/* Show re-render buttons for completed renders */}
                   {render.status === 'completed' && (
                     <>
                       <button
@@ -361,14 +325,14 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
                         className="re-render-btn overwrite"
                         title={t('history.re_render_overwrite') || 'Re-render (overwrite)'}
                       >
-                        R1
+                        ↻
                       </button>
                       <button
                         onClick={() => handleReRenderNew(render)}
                         className="re-render-btn new"
                         title={t('history.re_render_new') || 'Re-render (new version)'}
                       >
-                        R2
+                        ↻2
                       </button>
                     </>
                   )}
@@ -383,8 +347,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
                 </div>
               </div>
             );
-            })}
-            </>
+          })
         )}
       </div>
 
