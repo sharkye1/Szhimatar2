@@ -1,6 +1,6 @@
 {
     "name": "szhimatar",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "description": "Offline video compressor with modern UI",
     "type": "module",
     "scripts": {
