@@ -388,5 +388,9 @@
     "restartMessage": "重启应用程序以应用更新。",
     "restartNow": "立即重启",
     "restartLater": "稍后"
+  },
+  "history": {
+    "re_render_overwrite": "Re-render and overwrite",
+    "re_render_new": "Re-render as new version"
   }
 }

@@ -388,5 +388,9 @@
     "restartMessage": "Restartigu la aplikajon por apliki la ĝisdatigon.",
     "restartNow": "Restartigi nun",
     "restartLater": "Poste"
+  },
+  "history": {
+    "re_render_overwrite": "Re-render and overwrite",
+    "re_render_new": "Re-render as new version"
   }
 }

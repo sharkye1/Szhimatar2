@@ -376,6 +376,10 @@
     "errorRemoving": "💥 Ошибка удаления!",
     "windowsOnly": "🚫 Только для Windows!"
   },
+  "history": {
+    "re_render_overwrite": "💣 Взорвать ещё раз",
+    "re_render_new": "🎆 Новый взрыв"
+  },
   "update": {
     "checkForUpdates": "🔍 Найти взрывные обновления",
     "checking": "💣 Ищем...",

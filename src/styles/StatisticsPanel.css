@@ -244,6 +244,38 @@
     margin-top: 6px;
 }
 
+.history-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: 12px;
+    flex-shrink: 0;
+}
+
+.re-render-btn {
+    background: none;
+    border: none;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: 4px;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    color: inherit;
+    font-weight: 600;
+}
+
+.re-render-btn:hover {
+    opacity: 1;
+}
+
+.re-render-btn.overwrite {
+    color: #4CAF50;
+}
+
+.re-render-btn.new {
+    color: #2196F3;
+}
+
 .delete-btn {
     background: none;
     border: none;

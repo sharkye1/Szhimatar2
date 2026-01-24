@@ -376,6 +376,10 @@
     "errorRemoving": "Pomylka udalennja iz kontekstnogo menu",
     "windowsOnly": "Kontekstno menu dostupno tilko na Windows"
   },
+  "history": {
+    "re_render_overwrite": "Ponovi i prepiši",
+    "re_render_new": "Ponovi kao novu verziju"
+  },
   "update": {
     "checkForUpdates": "Proveriti obnova",
     "checking": "Proverka...",

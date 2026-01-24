@@ -905,6 +905,46 @@ class RenderServiceImpl {
   }
 
   /**
+   * Add file to render queue with explicit output path (for re-renders)
+   */
+  public async addToQueueWithOutput(inputPath: string, outputPath: string): Promise<RenderJob> {
+    const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const fileName = inputPath.split(/[\\/]/).pop() || inputPath;
+
+    // Get video duration
+    let durationSeconds = 0;
+    try {
+      durationSeconds = await invoke<number>('get_video_duration', { inputPath });
+    } catch (error) {
+      console.warn('[RenderService] Could not get duration for:', inputPath, error);
+    }
+
+    const job: RenderJob = {
+      id: jobId,
+      inputPath,
+      outputPath,
+      fileName,
+      status: 'pending',
+      progress: 0,
+      eta: 0,
+      etaFormatted: '--:--:--',
+      durationSeconds,
+      currentTime: 0,
+      fps: 0,
+      speed: 0,
+      bitrate: '',
+      frame: 0,
+      outputSize: '—',
+      outputSizeBytes: 0,
+    };
+
+    this.jobs.set(jobId, job);
+    this.scheduler.enqueue(jobId);
+    this.notifyListeners();
+    return job;
+  }
+
+  /**
    * Remove job from queue
    */
   public removeFromQueue(jobId: string): boolean {

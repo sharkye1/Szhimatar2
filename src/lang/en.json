@@ -376,6 +376,10 @@
     "errorRemoving": "Error removing from context menu",
     "windowsOnly": "Context menu is only available on Windows"
   },
+  "history": {
+    "re_render_overwrite": "Re-render and overwrite",
+    "re_render_new": "Re-render as new version"
+  },
   "update": {
     "checkForUpdates": "Check for updates",
     "checking": "Checking...",

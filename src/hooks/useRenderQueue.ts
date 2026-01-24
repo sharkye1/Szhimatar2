@@ -39,6 +39,7 @@ export interface UseRenderQueueReturn {
   
   // Actions
   addFiles: (filePaths: string[]) => Promise<RenderJob[]>;
+  addToQueue: (inputPath: string, outputPath: string) => Promise<RenderJob>;
   removeJob: (jobId: string) => boolean;
   clearCompleted: () => void;
   start: () => Promise<void>;
@@ -89,6 +90,10 @@ export function useRenderQueue(): UseRenderQueueReturn {
   // Actions
   const addFiles = useCallback(async (filePaths: string[]): Promise<RenderJob[]> => {
     return RenderService.addToQueue(filePaths);
+  }, []);
+
+  const addToQueue = useCallback(async (inputPath: string, outputPath: string): Promise<RenderJob> => {
+    return (RenderService as any).addToQueueWithOutput(inputPath, outputPath);
   }, []);
 
   const removeJob = useCallback((jobId: string): boolean => {
@@ -155,6 +160,7 @@ export function useRenderQueue(): UseRenderQueueReturn {
     
     // Actions
     addFiles,
+    addToQueue,
     removeJob,
     clearCompleted,
     start,

@@ -376,6 +376,10 @@
     "errorRemoving": "",
     "windowsOnly": ""
   },
+  "history": {
+    "re_render_overwrite": "",
+    "re_render_new": ""
+  },
   "update": {
     "checkForUpdates": "",
     "checking": "",

@@ -7,6 +7,7 @@ import { save } from '@tauri-apps/api/dialog';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import useStatistics from '../hooks/useStatistics';
+import useRenderQueue from '../hooks/useRenderQueue';
 import type { RenderStatRecord } from '../services/StatisticsService';
 import '../styles/StatisticsPanel.css';
 
@@ -27,6 +28,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
     deleteRender,
     formatDuration,
   } = useStatistics();
+  const { addToQueue } = useRenderQueue();
 
   const [showConfirmClear, setShowConfirmClear] = useState(false);
   const [filter, setFilter] = useState<'all' | 'completed' | 'error' | 'rendering' | 'stopped'>('all');
@@ -70,6 +72,32 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
   const handleClear = async () => {
     await clearHistory();
     setShowConfirmClear(false);
+  };
+
+  // Handle re-render overwrite (use same output path)
+  const handleReRenderOverwrite = async (render: RenderStatRecord) => {
+    try {
+      await addToQueue(render.inputPath, render.outputPath);
+      console.log('[StatisticsPanel] Re-render queued (overwrite):', render.inputPath);
+    } catch (error) {
+      console.error('[StatisticsPanel] Re-render failed:', error);
+    }
+  };
+
+  // Handle re-render new version (add _2 to filename before extension)
+  const handleReRenderNew = async (render: RenderStatRecord) => {
+    try {
+      // Parse filename: "path/to/file.ext" -> "path/to/file_2.ext"
+      const lastDot = render.outputPath.lastIndexOf('.');
+      const outputPathNew = lastDot > 0 
+        ? render.outputPath.substring(0, lastDot) + '_2' + render.outputPath.substring(lastDot)
+        : render.outputPath + '_2';
+      
+      await addToQueue(render.inputPath, outputPathNew);
+      console.log('[StatisticsPanel] Re-render queued (new version):', render.inputPath, '→', outputPathNew);
+    } catch (error) {
+      console.error('[StatisticsPanel] Re-render failed:', error);
+    }
   };
 
   // Format date
@@ -289,14 +317,34 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
                     )}
                   </div>
                 </div>
-                <button
-                  onClick={() => deleteRender(render.id)}
-                  className="delete-btn"
-                  style={{ color: theme.colors.error }}
-                  title={t('stats.delete') || 'Delete'}
-                >
-                  ×
-                </button>
+                <div className="history-actions">
+                  {render.status === 'completed' && (
+                    <>
+                      <button
+                        onClick={() => handleReRenderOverwrite(render)}
+                        className="re-render-btn overwrite"
+                        title={t('history.re_render_overwrite') || 'Re-render (overwrite)'}
+                      >
+                        ↻
+                      </button>
+                      <button
+                        onClick={() => handleReRenderNew(render)}
+                        className="re-render-btn new"
+                        title={t('history.re_render_new') || 'Re-render (new version)'}
+                      >
+                        ↻2
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => deleteRender(render.id)}
+                    className="delete-btn"
+                    style={{ color: theme.colors.error }}
+                    title={t('stats.delete') || 'Delete'}
+                  >
+                    ×
+                  </button>
+                </div>
               </div>
             );
           })
