@@ -56,6 +56,9 @@
       "vertical": "垂直翻转"
     },
     "filters": "滤镜",
+    "resampling": "重采样",
+    "smoothnessIntensity": "平滑强度",
+    "resamplingWarning": "注意：重采样会显著增加渲染时间并提高CPU负载",
     "filterNames": {
       "deinterlace": "去隔行扫描（消除可能的闪烁）",
       "denoise": "降噪（消除颗粒感）",

@@ -8,7 +8,7 @@
     },
     "package": {
         "productName": "Szhimatar",
-        "version": "1.0.2"
+        "version": "1.0.3"
     },
     "tauri": {
         "allowlist": {
@@ -103,7 +103,7 @@
                 "fullscreen": false,
                 "resizable": true,
                 "title": "Szhimatar",
-                "width": 800,
+                "width": 900,
                 "height": 800,
                 "minWidth": 800,
                 "minHeight": 600,

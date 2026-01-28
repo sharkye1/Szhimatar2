@@ -19,6 +19,51 @@ import type {
 import '../styles/MainWindow.css';
 console.log("Импорты завершены")
 
+const FolderSyncIcon: React.FC<{ color: string }> = ({ color }) => (
+  <svg
+    aria-hidden
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    style={{ display: 'block' }}
+  >
+    <path
+      d="M3 6h6l2 2h9v8a2 2 0 0 1-2 2H3V6Z"
+      stroke={color}
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+    <path
+      d="M9.5 12.5a3.5 3.5 0 1 1 6.94 1"
+      stroke={color}
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+    <path
+      d="M15.5 15.5V17m0 0h1.5M15.5 17h-1.5"
+      stroke={color}
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+    <path
+      d="M8.5 10.5V9m0 0H7M8.5 9h1.5"
+      stroke={color}
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      fill="none"
+    />
+  </svg>
+);
+
 type Screen = 'main' | 'video' | 'audio' | 'general';
 
 interface MainWindowProps {
@@ -81,6 +126,13 @@ const MainWindow: React.FC<MainWindowProps> = ({
   } = useRenderQueue();
 
   const [showStats, setShowStats] = useState(false);
+
+  const handleToggleSaveInSourceDirectory = useCallback(() => {
+    setMainScreenSettings((prev) => ({
+      ...prev,
+      saveInSourceDirectory: !prev.saveInSourceDirectory,
+    }));
+  }, [setMainScreenSettings]);
 
   // Handler for setting specific render mode
   const handleSetRenderMode = useCallback((mode: 'cpu' | 'gpu' | 'duo') => {
@@ -262,40 +314,61 @@ const MainWindow: React.FC<MainWindowProps> = ({
           <button onClick={handleSelectFiles} style={{ background: theme.colors.primary, color: '#fff' }}>
             📁 {t('main.selectFiles')}
           </button>
+          <div className="output-controls" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              onClick={handleSelectOutputFolder}
+              style={{
+                background: theme.colors.primary,
+                color: '#fff',
+                opacity: mainScreenSettings.saveInSourceDirectory ? 0.5 : 1,
+                cursor: mainScreenSettings.saveInSourceDirectory ? 'not-allowed' : 'pointer',
+              }}
+              disabled={mainScreenSettings.saveInSourceDirectory}
+            >
+              💾 {t('main.outputFolder')}
+            </button>
 
-          <button onClick={handleSelectOutputFolder} style={{ background: theme.colors.primary, color: '#fff' }}>
-            💾 {t('main.outputFolder')}
-          </button>
+            <motion.button
+              type="button"
+              aria-pressed={mainScreenSettings.saveInSourceDirectory}
+              onClick={handleToggleSaveInSourceDirectory}
+              title={t('main.saveInSourceDirectory')}
+              initial={false}
+              animate={{
+                backgroundColor: mainScreenSettings.saveInSourceDirectory ? theme.colors.primary : 'transparent',
+                color: mainScreenSettings.saveInSourceDirectory ? '#fff' : theme.colors.textSecondary,
+                scale: mainScreenSettings.saveInSourceDirectory ? 1.05 : 1,
+              }}
+              transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+              style={{
+                border: `1px solid ${theme.colors.border}`,
+                borderRadius: '6px',
+                padding: '8px 10px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                minWidth: 40,
+              }}
+            >
+              <FolderSyncIcon color={mainScreenSettings.saveInSourceDirectory ? '#fff' : theme.colors.text} />
+            </motion.button>
+          </div>
+
           {mainScreenSettings.customOutputPath && (
             <div className="output-path" style={{ color: theme.colors.textSecondary }}>
               {mainScreenSettings.customOutputPath}
             </div>
           )}
 
-          {/* Save in source directory checkbox */}
-          <div className="save-location-option" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 0' }}>
-            <input
-              type="checkbox"
-              id="saveInSource"
-              checked={mainScreenSettings.saveInSourceDirectory}
-              onChange={(e) => setMainScreenSettings({
-                ...mainScreenSettings,
-                saveInSourceDirectory: e.target.checked,
-              })}
+          {/* CPU/GPU/Duo Toggle - Advanced visual selector */}
+          <div style={{ padding: '8px 0' }}>
+            <RenderModeSelector
+              mode={renderMode}
+              onModeChange={handleSetRenderMode}
+              gpuAvailable={gpuAvailable}
+              isRendering={isProcessing}
             />
-            <label htmlFor="saveInSource" style={{ color: theme.colors.text, cursor: 'pointer' }}>
-              {t('main.saveInSourceDirectory')}
-            </label>
-
-            {/* CPU/GPU/Duo Toggle - Advanced visual selector */}
-            <div style={{ marginLeft: '16px' }}>
-              <RenderModeSelector
-                mode={renderMode}
-                onModeChange={handleSetRenderMode}
-                gpuAvailable={gpuAvailable}
-                isRendering={isProcessing}
-              />
-            </div>
           </div>
           
         </div>

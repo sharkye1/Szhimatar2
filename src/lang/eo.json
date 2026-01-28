@@ -56,6 +56,9 @@
       "vertical": "Renversi vertikale"
     },
     "filters": "Filtriloj",
+    "resampling": "Resampling",
+    "smoothnessIntensity": "Glateco-intenseco",
+    "resamplingWarning": "Averto: Resampling signife pliigas prilaboran tempon kaj CPU-ŝarĝon",
     "filterNames": {
       "deinterlace": "Malinterliniigi (forigas eblajn tremojn)",
       "denoise": "Malbruigi (forigas grajnecon)",

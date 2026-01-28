@@ -228,6 +228,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
               <option value="dark-red">Dark Red</option>
               <option value="blue-ocean">Blue Ocean</option>
               <option value="dark-blue">Dark Blue</option>
+              <option value="dark-gray">Dark Gray</option>
               <option value="dark-orange">Dark Orange</option>
               <option value="dark-green">Dark Green</option>
               <option value="purple-pink">Purple Pink (modified)</option>

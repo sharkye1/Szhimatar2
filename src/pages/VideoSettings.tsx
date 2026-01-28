@@ -183,6 +183,43 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
           </div>
         </div>
 
+        {/* Resampling Toggle and Intensity */}
+        <div className="setting-group">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+
+            <label className="checkbox-label" title={t('videoSettings.resamplingWarning')}>
+              <input
+                type="checkbox"
+                checked={!!settings.resamplingEnabled}
+                onChange={(e) => setSettings(prev => ({ ...prev, resamplingEnabled: e.target.checked }))}
+              />
+              <span>{t('videoSettings.resampling')}</span>
+            </label>
+          </div>
+          {settings.resamplingEnabled && (
+            <div style={{ marginTop: '8px' }}>
+              <label style={{ display: 'block' }}>{t('videoSettings.smoothnessIntensity')}</label>
+              <input
+                type="range"
+                min={1}
+                max={10}
+                step={1}
+                value={settings.resamplingIntensity ?? 5}
+                onChange={(e) => setSettings(prev => ({ ...prev, resamplingIntensity: parseInt(e.target.value, 10) }))}
+                style={{ width: '100%' }}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: theme.colors.textSecondary }}>
+                <span>1</span>
+                <span>{settings.resamplingIntensity ?? 5}</span>
+                <span>10</span>
+              </div>
+              <div style={{ marginTop: '6px', fontSize: '12px', color: theme.colors.warning }}>
+                ⚠ {t('videoSettings.resamplingWarning')}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Resolution & Aspect Ratio */}
         <div className="setting-row">
           <div className="setting-group flex-1">

@@ -167,6 +167,28 @@ export class FFmpegCommandBuilder {
         audioFilters.push(`atempo=${this.videoSettings.speed}`);
       }
 
+      // Resampling (frame interpolation) using minterpolate
+      if (this.videoSettings.resamplingEnabled) {
+        // Target FPS: use selected fps value (or fallback to 60), and clamp to 120 for filter
+        const requestedFps = !this.videoSettings.fpsAuto && this.videoSettings.fps
+          ? Math.max(1, Math.min(240, parseFloat(this.videoSettings.fps)))
+          : 60;
+        const targetFpsForFilter = Math.min(requestedFps, 120);
+        const intensity = Math.max(1, Math.min(10, this.videoSettings.resamplingIntensity ?? 5));
+        let mi: string;
+        if (intensity <= 3) {
+          // Very fast motion blur-like blending (scd not needed for blend mode)
+          mi = `minterpolate=fps=${targetFpsForFilter}:mi_mode=blend`;
+        } else if (intensity <= 6) {
+          // MCI with bilateral motion search + fast Diamond Search for speed optimization
+          mi = `minterpolate=fps=${targetFpsForFilter}:mi_mode=mci:me_mode=bilat:me=ds:mb_size=16:search_param=4:scd_threshold=40`;
+        } else {
+          // MCI with bidir motion search + fast Diamond Search for better quality with optimization
+          mi = `minterpolate=fps=${targetFpsForFilter}:mi_mode=mci:me_mode=bidir:me=ds:mb_size=16:search_param=4:scd_threshold=40`;
+        }
+        videoFilters.push(mi);
+      }
+
       // Rotation
       if (this.videoSettings.rotation && this.videoSettings.rotation !== 'none') {
         const rotationMap: Record<string, string> = {
@@ -176,15 +198,6 @@ export class FFmpegCommandBuilder {
         };
         if (rotationMap[this.videoSettings.rotation]) {
           videoFilters.push(rotationMap[this.videoSettings.rotation]);
-        }
-      }
-
-      // Flip
-      if (this.videoSettings.flip && this.videoSettings.flip !== 'none') {
-        if (this.videoSettings.flip === 'horizontal') {
-          videoFilters.push('hflip');
-        } else if (this.videoSettings.flip === 'vertical') {
-          videoFilters.push('vflip');
         }
       }
 
@@ -358,7 +371,9 @@ export class FFmpegCommandBuilder {
     // ========== APPLY FILTERS ==========
     
     if (videoFilters.length > 0 && this.videoSettings.codec !== 'copy') {
-      args.push('-vf', videoFilters.join(','));
+      const vfStr = videoFilters.join(',');
+      console.log('[FFmpegCommandBuilder] Final -vf:', vfStr);
+      args.push('-vf', vfStr);
     }
 
     if (audioFilters.length > 0 && this.audioSettings.codec !== 'copy') {
@@ -559,6 +574,9 @@ export class FFmpegCommandBuilder {
         errors.push('Rotation not supported with codec "copy"');
       }
       if (this.videoSettings.flip !== 'none') {
+        if (this.videoSettings.resamplingEnabled) {
+          errors.push('Resampling not supported with codec "copy"');
+        }
         errors.push('Flip not supported with codec "copy"');
       }
       if (this.watermarkSettings?.enabled) {

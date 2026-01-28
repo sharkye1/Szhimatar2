@@ -56,6 +56,9 @@
       "vertical": ""
     },
     "filters": "",
+    "resampling": "",
+    "smoothnessIntensity": "",
+    "resamplingWarning": "",
     "filterNames": {
       "deinterlace": "",
       "denoise": "",

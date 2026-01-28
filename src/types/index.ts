@@ -21,6 +21,8 @@ export interface VideoSettings {
   rotation: 'none' | '90' | '180' | '270';
   flip: 'none' | 'horizontal' | 'vertical';
   filters: VideoFilter[];     // Array of enabled filters
+  resamplingEnabled?: boolean;    // Frame interpolation toggle
+  resamplingIntensity?: number;   // 1-10
 }
 
 export interface VideoFilter {
@@ -46,6 +48,8 @@ export const DEFAULT_VIDEO_SETTINGS: VideoSettings = {
     { name: 'denoise', enabled: false },
     { name: 'sharpen', enabled: false },
   ],
+  resamplingEnabled: false,
+  resamplingIntensity: 5,
 };
 
 export interface AudioEffect {

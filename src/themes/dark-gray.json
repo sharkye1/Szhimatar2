@@ -1,0 +1,16 @@
+{
+    "name": "dark-gray",
+    "colors": {
+        "background": "#111418",
+        "surface": "#161a1f",
+        "primary": "#6f7278",
+        "secondary": "#4e5258",
+        "text": "#e5e7eb",
+        "textSecondary": "#b3b7bd",
+        "border": "#252a31",
+        "success": "#6f7278",
+        "warning": "#6f7278",
+        "error": "#6f7278",
+        "hover": "#1d2126"
+    }
+}

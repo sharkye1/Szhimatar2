@@ -7,7 +7,7 @@
     "selectFiles": "Select Files",
     "selectFolder": "Select Folder",
     "outputFolder": "Output Folder",
-    "saveInSourceDirectory": "Save in source file directory",
+    "saveInSourceDirectory": "Same as source",
     "queue": "Queue",
     "start": "Start",
     "pause": "Pause",
@@ -56,6 +56,9 @@
       "vertical": "Flip Vertically"
     },
     "filters": "Filters",
+    "resampling": "Resampling",
+    "smoothnessIntensity": "Smoothness Intensity",
+    "resamplingWarning": "Warning: This function is non-stable. Resampling significantly increases render time and CPU load",
     "filterNames": {
       "deinterlace": "Deinterlace (removes possible flickering)",
       "denoise": "Denoise (removes graininess)",

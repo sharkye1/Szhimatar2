@@ -4,4 +4,4 @@
  * Do not edit manually
  */
 
-export const APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.0.2';
+export const APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.0.3';

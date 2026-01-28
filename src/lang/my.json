@@ -56,6 +56,9 @@
       "vertical": "Obratiti vertikálně"
     },
     "filters": "Filtry",
+    "resampling": "Resampling",
+    "smoothnessIntensity": "Intenzivnost gladkosti",
+    "resamplingWarning": "Vnimanje: Resampling značajno povyšaje čas rendera i opterećenje CPU",
     "filterNames": {
       "deinterlace": "Deinterlacing (ubiraje moguče migotanje)",
       "denoise": "Ubiranje šuma (ubiraje zrnitost)",
