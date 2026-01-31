@@ -220,6 +220,7 @@
   },
   "settings": {
     "title": "Agordoj",
+    "update_available": "Ĝisdatigo Disponebla",
     "theme": "Etoso",
     "language": "Lingvo",
     "ffmpegPath": "FFmpeg-vojo",
@@ -400,11 +401,13 @@
     "videoMode": "Video-Reĝimo",
     "selectVideo": "Elektu videon por antaŭrigardi",
     "generating": "Generante antaŭrigardon...",
-    "noPreview": "Neniu antaŭrigardo disponebla",
+    "noPreview": "Neniu antaŭrigardo disponebla ankoraŭ",
     "retry": "Reprovi",
     "original": "Originalo",
     "processed": "Procesita",
-    "refresh": "Refreŝigi Antaŭrigardon"
+    "refresh": "Refreŝigi Antaŭrigardon",
+    "lowBitrateWarning": "Low bitrate for high FPS. Recommend ≥6M for NVENC to avoid compression artifacts.",
+    "videoLoadError": "Malsukcesis ŝarĝi video-antaŭrigardon. Reprovu."
   },
   "history": {
     "re_render_overwrite": "Re-bildigi kaj anstataŭigi",

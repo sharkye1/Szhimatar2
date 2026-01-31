@@ -220,6 +220,7 @@
   },
   "settings": {
     "title": "Nastavenja",
+    "update_available": "Dostupno Ažuriranje",
     "theme": "Tema",
     "language": "Jazyk",
     "ffmpegPath": "FFmpeg put",
@@ -408,6 +409,8 @@
     "retry": "Ponoviti",
     "original": "Original",
     "processed": "Obrabotano",
-    "refresh": "Obnoviti Predogled"
+    "refresh": "Obnoviti Predogled",
+    "lowBitrateWarning": "Low bitrate for high FPS. Recommend ≥6M for NVENC to avoid compression artifacts.",
+    "videoLoadError": "Nemožno zašaržiti predogled. Ponoviti."
   }
 }

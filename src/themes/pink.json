@@ -1,0 +1,16 @@
+{
+    "name": "pink",
+    "colors": {
+        "background": "#fff0f5",
+        "surface": "#ffe4ec",
+        "primary": "#ff69b4",
+        "secondary": "#f8a5c2",
+        "text": "#4a2040",
+        "textSecondary": "#8b5a7a",
+        "border": "#ffb6c1",
+        "success": "#ff85a2",
+        "warning": "#ffb3ba",
+        "error": "#ff6b8a",
+        "hover": "#ffd1dc"
+    }
+}

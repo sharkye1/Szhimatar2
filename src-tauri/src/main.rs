@@ -2078,6 +2078,10 @@ struct PreviewSettings {
     filters: Vec<String>,
     resampling_enabled: bool,
     resampling_intensity: u8,
+    // NEW: Sync with final render parameters
+    bitrate: Option<String>,       // e.g. "2.6" for 2.6M
+    preset: Option<String>,        // e.g. "slow", "medium", "p7"
+    prefer_gpu: Option<bool>,      // Use NVENC if available
 }
 
 /// Extract a single frame from video at given time with current settings applied
@@ -2173,6 +2177,7 @@ async fn get_preview_frame(
 }
 
 /// Extract a short video clip (3 seconds) from video at given time with settings applied
+/// Uses IDENTICAL encoding parameters as final render for honest preview
 /// Returns path to temporary video file
 #[tauri::command]
 async fn get_preview_video(
@@ -2186,12 +2191,33 @@ async fn get_preview_video(
         return Err("FFmpeg not configured".to_string());
     }
 
-    // Create temp file for output
+    // Create temp file for output with unique timestamp to bust cache
     let temp_dir = std::env::temp_dir();
-    let temp_file = temp_dir.join(format!("szhimatar_preview_{}.mp4", std::process::id()));
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let temp_file = temp_dir.join(format!("szhimatar_preview_{}.mp4", timestamp));
 
-    // Build filter chain
+    // Cleanup old preview files (ignore errors - file may be in use)
+    if let Ok(entries) = std::fs::read_dir(&temp_dir) {
+        for entry in entries.flatten() {
+            if let Some(name) = entry.file_name().to_str() {
+                if name.starts_with("szhimatar_preview_") && name.ends_with(".mp4") {
+                    let _ = std::fs::remove_file(entry.path()); // Ignore errors
+                }
+            }
+        }
+    }
+
+    // Build filter chain - FPS FIRST to ensure it's applied
     let mut filters: Vec<String> = Vec::new();
+    
+    // FPS filter FIRST - more reliable than -r parameter
+    if !settings.fps.is_empty() {
+        let fps: u32 = settings.fps.parse().unwrap_or(30);
+        filters.push(format!("fps={}", fps));
+    }
     
     // Resolution scaling
     if !settings.resolution.is_empty() && settings.resolution != "original" {
@@ -2199,7 +2225,7 @@ async fn get_preview_video(
         if parts.len() == 2 {
             let w: i32 = parts[0].parse().unwrap_or(1920);
             let h: i32 = parts[1].parse().unwrap_or(1080);
-            // Ensure even dimensions
+            // Ensure even dimensions (required for NVENC)
             let w_even = (w / 2) * 2;
             let h_even = (h / 2) * 2;
             filters.push(format!("scale={}:{}", w_even, h_even));
@@ -2222,28 +2248,145 @@ async fn get_preview_video(
         filters.push(format!("minterpolate=fps={}:mi_mode=blend", target_fps));
     }
 
-    // Ensure yuv420p for compatibility
+    // Ensure yuv420p for compatibility (MUST be last in filter chain)
     filters.push("format=yuv420p".to_string());
+
+    // Determine encoder based on codec and GPU preference
+    let use_nvenc = settings.prefer_gpu.unwrap_or(false) && 
+        (settings.codec == "h264" || settings.codec == "h265" || settings.codec == "hevc");
+    
+    let encoder = if use_nvenc {
+        if settings.codec == "h265" || settings.codec == "hevc" {
+            "hevc_nvenc"
+        } else {
+            "h264_nvenc"
+        }
+    } else {
+        match settings.codec.as_str() {
+            "h265" | "hevc" => "libx265",
+            _ => "libx264"
+        }
+    };
 
     // Build FFmpeg command with fast seeking (-ss before -i)
     let mut cmd_args: Vec<String> = vec![
         "-ss".to_string(), format!("{:.3}", time_seconds),
         "-i".to_string(), input_path.clone(),
         "-t".to_string(), format!("{:.1}", duration.min(5.0)), // Max 5 seconds for preview
+        "-c:v".to_string(), encoder.to_string(),
     ];
 
-    // Video codec and quality
-    cmd_args.extend([
-        "-c:v".to_string(), "libx264".to_string(),
-        "-preset".to_string(), "ultrafast".to_string(),
-        "-crf".to_string(), settings.crf.clone(),
-    ]);
+    // ========== IDENTICAL RATE CONTROL AS FINAL RENDER ==========
+    let has_bitrate = settings.bitrate.as_ref().map(|b| !b.is_empty() && b != "auto").unwrap_or(false);
+    let has_crf = !settings.crf.is_empty() && settings.crf != "auto";
 
-    // FPS
-    if !settings.fps.is_empty() {
-        let fps: u32 = settings.fps.parse().unwrap_or(30);
-        cmd_args.extend(["-r".to_string(), fps.to_string()]);
+    if use_nvenc {
+        // NVENC rate control - MUST match RenderService.ts logic exactly
+        if has_bitrate {
+            let bitrate_val: f64 = settings.bitrate.as_ref()
+                .and_then(|b| b.parse::<f64>().ok())
+                .unwrap_or(5.0)
+                .max(0.1)
+                .min(100.0);
+            
+            // VBR mode with target bitrate
+            // Use SMALL bufsize (500k) to make bitrate limit strict - shows honest artifacts
+            cmd_args.extend([
+                "-rc".to_string(), "vbr".to_string(),
+                "-b:v".to_string(), format!("{}M", bitrate_val),
+                "-maxrate".to_string(), format!("{}M", bitrate_val),
+                "-bufsize".to_string(), "500k".to_string(),
+            ]);
+            
+            // If CRF is also set, use CQ as quality floor
+            if has_crf {
+                let cq: i32 = settings.crf.parse().unwrap_or(23).max(0).min(51);
+                cmd_args.extend([
+                    "-cq".to_string(), cq.to_string(),
+                    "-qmin".to_string(), cq.to_string(),
+                    "-qmax".to_string(), cq.to_string(),
+                ]);
+            }
+        } else if has_crf {
+            // CQ (Constant Quality) mode - NVENC equivalent of CRF
+            let cq: i32 = settings.crf.parse().unwrap_or(23).max(0).min(51);
+            cmd_args.extend([
+                "-rc".to_string(), "constqp".to_string(),
+                "-cq".to_string(), cq.to_string(),
+                "-qp".to_string(), cq.to_string(),
+            ]);
+        } else {
+            // Default: CQ 23
+            cmd_args.extend([
+                "-rc".to_string(), "constqp".to_string(),
+                "-cq".to_string(), "23".to_string(),
+                "-qp".to_string(), "23".to_string(),
+            ]);
+        }
+        
+        // NVENC-specific optimizations (same as final render)
+        cmd_args.extend([
+            "-spatial-aq".to_string(), "1".to_string(),
+            "-temporal-aq".to_string(), "1".to_string(),
+        ]);
+        
+        // Map preset for NVENC
+        let preset = settings.preset.as_ref().map(|p| p.as_str()).unwrap_or("medium");
+        let nvenc_preset = match preset {
+            "ultrafast" => "p1",
+            "superfast" => "p2", 
+            "veryfast" => "p3",
+            "faster" | "fast" => "p4",
+            "medium" => "p5",
+            "slow" => "p6",
+            "slower" | "veryslow" | "placebo" => "p7",
+            p if p.starts_with("p") => p,
+            _ => "p4"
+        };
+        cmd_args.extend([
+            "-preset".to_string(), nvenc_preset.to_string(),
+            "-tune".to_string(), "hq".to_string(),
+        ]);
+        
+    } else {
+        // CPU encoders (libx264/libx265)
+        if has_bitrate && has_crf {
+            // CRF with bitrate cap - use SMALL bufsize for strict limit
+            let crf: i32 = settings.crf.parse().unwrap_or(23).max(0).min(51);
+            let bitrate_val: f64 = settings.bitrate.as_ref()
+                .and_then(|b| b.parse::<f64>().ok())
+                .unwrap_or(5.0);
+            cmd_args.extend([
+                "-crf".to_string(), crf.to_string(),
+                "-maxrate".to_string(), format!("{}M", bitrate_val),
+                "-bufsize".to_string(), "500k".to_string(),
+            ]);
+        } else if has_bitrate {
+            // Bitrate only - strict limit with small buffer
+            let bitrate_val: f64 = settings.bitrate.as_ref()
+                .and_then(|b| b.parse::<f64>().ok())
+                .unwrap_or(5.0);
+            cmd_args.extend([
+                "-b:v".to_string(), format!("{}M", bitrate_val),
+                "-maxrate".to_string(), format!("{}M", bitrate_val),
+                "-bufsize".to_string(), "500k".to_string(),
+            ]);
+        } else if has_crf {
+            let crf: i32 = settings.crf.parse().unwrap_or(23).max(0).min(51);
+            cmd_args.extend(["-crf".to_string(), crf.to_string()]);
+        } else {
+            cmd_args.extend(["-crf".to_string(), "23".to_string()]);
+        }
+        
+        // CPU preset - use same as final (not ultrafast!)
+        let preset = settings.preset.as_ref().map(|p| p.as_str()).unwrap_or("medium");
+        let valid_presets = ["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"];
+        let cpu_preset = if valid_presets.contains(&preset) { preset } else { "medium" };
+        cmd_args.extend(["-preset".to_string(), cpu_preset.to_string()]);
     }
+
+    // NOTE: FPS is now set via fps filter in -vf chain (more reliable than -r)
+    // Remove duplicate -r parameter that was here
 
     // Apply filters
     if !filters.is_empty() {
@@ -2251,12 +2394,21 @@ async fn get_preview_video(
         cmd_args.push(filters.join(","));
     }
 
-    // Audio - copy for speed or disable
+    // Audio - disable for preview (speed)
+    // Output settings
     cmd_args.extend([
-        "-an".to_string(), // No audio for preview
+        "-an".to_string(),
+        "-pix_fmt".to_string(), "yuv420p".to_string(),
+        "-movflags".to_string(), "+faststart".to_string(),
         "-y".to_string(),
         temp_file.to_string_lossy().to_string(),
     ]);
+
+    // Log FULL command for debugging - visible in Tauri console
+    let full_cmd = format!("[PREVIEW CMD FULL]: {} {}", config.ffmpeg_path, cmd_args.join(" "));
+    println!("{}", full_cmd);
+    // Also log to stderr so it appears in DevTools
+    eprintln!("{}", full_cmd);
 
     // Run FFmpeg
     #[cfg(target_os = "windows")]
@@ -2280,6 +2432,24 @@ async fn get_preview_video(
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!("FFmpeg error: {}", stderr));
     }
+
+    // Validate output file exists and has content
+    let metadata = std::fs::metadata(&temp_file)
+        .map_err(|e| format!("Preview file not created: {}", e))?;
+    
+    if metadata.len() == 0 {
+        return Err("Preview generation failed: output file is empty".to_string());
+    }
+
+    // Small delay to ensure file is fully flushed to disk and OS releases handles
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    
+    // Verify file is still accessible after delay
+    let final_size = std::fs::metadata(&temp_file)
+        .map(|m| m.len())
+        .unwrap_or(0);
+    
+    println!("[Preview] Output file ready: {} bytes at {}", final_size, temp_file.display());
 
     Ok(temp_file.to_string_lossy().to_string())
 }

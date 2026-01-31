@@ -15,6 +15,7 @@ tauri = { version = "1.5", features = [
     "http-all",
     "process-relaunch",
     "shell-execute",
+    "protocol-asset",
     "window-unminimize",
     "window-maximize",
     "window-set-title",

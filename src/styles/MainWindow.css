@@ -4,7 +4,7 @@
   display: flex;
   flex-direction: column;
   animation: fadeInScale 0.3s ease-out;
-  
+
 }
 
 @keyframes fadeInScale {
@@ -16,6 +16,20 @@
   to {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.85;
+    transform: scale(1.02);
   }
 }
 
@@ -170,6 +184,7 @@
 .controls button:disabled:hover {
   transform: none;
 }
+
 /* Statistics overlay */
 .stats-overlay {
   position: fixed;
@@ -188,7 +203,7 @@
   max-height: 90vh;
   border: 1px solid;
   border-radius: 14px;
-  box-shadow: 0 18px 60px rgba(0,0,0,0.35);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -219,7 +234,7 @@
 }
 
 .stats-modal-close:hover {
-  background: rgba(255,255,255,0.06);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 @media (max-width: 768px) {

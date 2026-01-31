@@ -1153,8 +1153,17 @@ class RenderServiceImpl {
       }
 
       const ffmpegArgs = builder.buildArgs();
-      console.log('[RenderService] FFmpeg args:', ffmpegArgs);
-      console.log('[RenderService] Settings summary:', builder.getSettingsDescription());
+      
+      // CRITICAL: Log FINAL command for comparison with preview
+      console.log('[FINAL CMD] FFmpeg args:', ffmpegArgs.join(' '));
+      console.log('[FINAL CMD] Settings summary:', builder.getSettingsDescription());
+      console.log('[FINAL CMD] Rate control params:', {
+        codec: effectiveVideoSettings.codec,
+        crf: effectiveVideoSettings.crf,
+        bitrate: effectiveVideoSettings.bitrate,
+        preset: effectiveVideoSettings.preset,
+        preferGpu: preferGpu,
+      });
 
       // Log to file
       await invoke('write_render_log', {

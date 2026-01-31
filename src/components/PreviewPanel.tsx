@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/tauri';
+import { invoke, convertFileSrc } from '@tauri-apps/api/tauri';
 import { motion } from 'framer-motion';
 import { useLanguage } from '../contexts/LanguageContext';
 import './PreviewPanel.css';
@@ -73,6 +73,10 @@ interface PreviewSettings {
   filters: string[];
   resampling_enabled: boolean;
   resampling_intensity: number;
+  // NEW: Sync with final render parameters
+  bitrate?: string;        // e.g. "2.6" for 2.6M
+  preset?: string;         // e.g. "slow", "medium", "p7"
+  prefer_gpu?: boolean;    // Use NVENC if available
 }
 
 interface VideoPreviewInfo {
@@ -82,19 +86,69 @@ interface VideoPreviewInfo {
 }
 
 interface PreviewPanelProps {
-  inputPath: string;
-  settings: PreviewSettings;
+  inputPath?: string;       // Legacy prop name
+  videoPath?: string;       // New prop name (alias for inputPath)
+  settings?: PreviewSettings;
+  videoSettings?: {         // Alternative settings format from VideoSettings page
+    codec: string;
+    crf: string;
+    fps: string;
+    resolution: string;
+    bitrate?: string;       // Bitrate in Mbps (e.g. "2.6")
+    preset?: string;        // Encoding preset
+    filters: { name: string; enabled: boolean }[];
+    resamplingEnabled?: boolean;
+    resamplingIntensity?: number;
+  };
+  preferGpu?: boolean;      // Use GPU encoding for preview
   isVisible: boolean;
-  onToggleVisibility: () => void;
+  onToggleVisibility?: () => void;  // Legacy callback
+  onToggle?: () => void;            // New callback (alias)
+  embedded?: boolean;               // If true, render inline instead of fixed position
 }
 
 const PreviewPanel: React.FC<PreviewPanelProps> = ({
   inputPath,
+  videoPath,
   settings,
+  videoSettings,
+  preferGpu = false,
   isVisible,
   onToggleVisibility,
+  onToggle,
+  embedded = false,
 }) => {
   const { t } = useLanguage();
+  
+  // Normalize props
+  const filePath = videoPath || inputPath || '';
+  const toggleVisibility = onToggle || onToggleVisibility || (() => {});
+  
+  // Convert videoSettings to PreviewSettings format if needed
+  // CRITICAL: Include ALL encoding parameters for honest preview
+  const previewSettings: PreviewSettings = settings || {
+    codec: videoSettings?.codec || 'h264',
+    crf: videoSettings?.crf || '23',
+    fps: videoSettings?.fps || '30',
+    resolution: videoSettings?.resolution || '1920x1080',
+    filters: videoSettings?.filters?.filter(f => f.enabled).map(f => f.name) || [],
+    resampling_enabled: videoSettings?.resamplingEnabled || false,
+    resampling_intensity: videoSettings?.resamplingIntensity || 0,
+    // NEW: Pass encoding parameters for matching final render quality
+    bitrate: videoSettings?.bitrate || undefined,
+    preset: videoSettings?.preset || 'medium',
+    prefer_gpu: preferGpu,
+  };
+  
+  // Check for low bitrate warning (90fps + 1080p + < 6M bitrate)
+  const showBitrateWarning = (() => {
+    const fps = parseInt(previewSettings.fps) || 30;
+    const resolution = previewSettings.resolution;
+    const bitrate = parseFloat(previewSettings.bitrate || '0');
+    const is1080pOrHigher = resolution.includes('1080') || resolution.includes('1440') || resolution.includes('2160');
+    return fps >= 60 && is1080pOrHigher && bitrate > 0 && bitrate < 6;
+  })();
+  
   const [mode, setMode] = useState<'frame' | 'video'>('frame');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,10 +159,37 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
   const [currentTime, setCurrentTime] = useState(0);
   const [dividerPosition, setDividerPosition] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
+  const [videoErrorCount, setVideoErrorCount] = useState(0);
   
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  // CRITICAL: Track the fingerprint of the last EXECUTED render to break infinite loop
+  const lastExecutedFingerprintRef = useRef<string>('');
+  const isGeneratingRef = useRef<boolean>(false);
+
+  // Create stable fingerprint from current settings (does NOT include isLoading/error state)
+  const createSettingsFingerprint = useCallback(() => {
+    return JSON.stringify({
+      codec: previewSettings.codec,
+      crf: previewSettings.crf,
+      fps: previewSettings.fps,
+      resolution: previewSettings.resolution,
+      filters: previewSettings.filters,
+      resampling_enabled: previewSettings.resampling_enabled,
+      resampling_intensity: previewSettings.resampling_intensity,
+      bitrate: previewSettings.bitrate,
+      preset: previewSettings.preset,
+      prefer_gpu: previewSettings.prefer_gpu,
+      mode: mode,
+      time: currentTime,
+      filePath: filePath,
+    });
+  }, [previewSettings.codec, previewSettings.crf, previewSettings.fps,
+      previewSettings.resolution, previewSettings.filters,
+      previewSettings.resampling_enabled, previewSettings.resampling_intensity,
+      previewSettings.bitrate, previewSettings.preset, previewSettings.prefer_gpu,
+      mode, currentTime, filePath]);
 
   // Cleanup base64 URLs on unmount or when changing frames to prevent memory leaks
   useEffect(() => {
@@ -138,7 +219,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
   // Load video info when input path changes
   useEffect(() => {
-    if (!inputPath) {
+    if (!filePath) {
       setVideoInfo(null);
       setOriginalFrame(null);
       setProcessedFrame(null);
@@ -148,7 +229,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     const loadVideoInfo = async () => {
       try {
         const info = await invoke<VideoPreviewInfo>('get_video_info_for_preview', {
-          inputPath,
+          inputPath: filePath,
         });
         setVideoInfo(info);
         setCurrentTime(0);
@@ -159,12 +240,30 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     };
 
     loadVideoInfo();
-  }, [inputPath]);
+  }, [filePath]);
 
-  // Generate preview with 5-second debounce
-  const generatePreview = useCallback(async () => {
-    if (!inputPath || !videoInfo) return;
+  // Generate preview - called by debounced effect or manually
+  const generatePreview = useCallback(async (forceRender = false) => {
+    if (!filePath || !videoInfo) return;
+    
+    // Prevent concurrent renders
+    if (isGeneratingRef.current && !forceRender) {
+      console.log('[Preview] Already generating, skipping');
+      return;
+    }
 
+    // Create fingerprint for comparison
+    const fingerprint = createSettingsFingerprint();
+
+    // CRITICAL: Skip if fingerprint matches last executed render (unless forced)
+    if (!forceRender && lastExecutedFingerprintRef.current === fingerprint) {
+      console.log('[Preview] Skipping - fingerprint unchanged:', fingerprint.substring(0, 80));
+      return;
+    }
+
+    console.log('[Preview] Starting render with fingerprint:', fingerprint.substring(0, 80));
+    
+    isGeneratingRef.current = true;
     setIsLoading(true);
     setError(null);
 
@@ -172,7 +271,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       if (mode === 'frame') {
         // Get original frame (no processing)
         const original = await invoke<string>('get_preview_frame', {
-          inputPath,
+          inputPath: filePath,
           timeSeconds: currentTime,
           settings: {
             codec: '',
@@ -186,40 +285,84 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         });
         setOriginalFrame(`data:image/jpeg;base64,${original}`);
 
-        // Get processed frame
+        // Get processed frame with FULL settings
         const processed = await invoke<string>('get_preview_frame', {
-          inputPath,
+          inputPath: filePath,
           timeSeconds: currentTime,
-          settings,
+          settings: previewSettings,
         });
         setProcessedFrame(`data:image/jpeg;base64,${processed}`);
       } else {
-        // Video mode
+        // Video mode - uses IDENTICAL encoding parameters as final render
+        // Log exact settings being sent to Rust/FFmpeg
+        console.log('[PREVIEW CMD] Sending to FFmpeg:', JSON.stringify(previewSettings, null, 2));
+        
         const videoPath = await invoke<string>('get_preview_video', {
-          inputPath,
+          inputPath: filePath,
           timeSeconds: currentTime,
           duration: 3.0,
-          settings,
+          settings: previewSettings,
         });
-        setPreviewVideoPath(videoPath);
+        
+        // Validate file exists and has content
+        if (!videoPath || videoPath.trim() === '') {
+          throw new Error('Preview generation failed: empty path');
+        }
+        
+        // Small delay to ensure file is fully written and OS releases lock
+        await new Promise(resolve => setTimeout(resolve, 150));
+        
+        // Convert file path to asset URL for Tauri WebView
+        // NOTE: Don't use query params with asset:// - they cause ERR_CONNECTION_REFUSED
+        const videoUrl = convertFileSrc(videoPath);
+        console.log('[Preview] Setting video URL:', videoUrl);
+        
+        // Reset error count on new video
+        setVideoErrorCount(0);
+        setPreviewVideoPath(videoUrl);
       }
+      
+      // CRITICAL: Save fingerprint AFTER successful render
+      lastExecutedFingerprintRef.current = fingerprint;
+      console.log('[Preview] Render complete, saved fingerprint');
+      
     } catch (err) {
       console.error('Preview generation failed:', err);
       setError(String(err));
     } finally {
+      isGeneratingRef.current = false;
       setIsLoading(false);
     }
-  }, [inputPath, currentTime, settings, mode, videoInfo]);
+  }, [filePath, currentTime, mode, videoInfo, createSettingsFingerprint, previewSettings]);
 
   // Debounced preview generation on settings change
+  // CRITICAL: Check fingerprint BEFORE setting up timer to break infinite loop
   useEffect(() => {
-    if (!isVisible || !inputPath) return;
+    if (!isVisible || !filePath || !videoInfo) return;
 
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
+    // FIRST: Create fingerprint and check if it matches last executed
+    const fingerprint = createSettingsFingerprint();
+    if (lastExecutedFingerprintRef.current === fingerprint) {
+      // Don't log every time - this is expected behavior
+      return; // Don't even set up debounce timer
     }
 
+    // Log what changed for debugging
+    console.log('[Debounce] Resetting timer due to fingerprint change');
+    console.log('[Debounce] Old:', lastExecutedFingerprintRef.current.substring(0, 60) + '...');
+    console.log('[Debounce] New:', fingerprint.substring(0, 60) + '...');
+    
+    // FIRST clear any existing timer
+    if (debounceRef.current) {
+      console.log('[Debounce] Clearing previous timer');
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+
+    // THEN set new timer
+    console.log('[Debounce] Starting 5-second timer...');
     debounceRef.current = setTimeout(() => {
+      console.log('[Debounce] Timer fired! Generating preview now.');
       generatePreview();
     }, 5000); // 5-second debounce
 
@@ -228,19 +371,20 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         clearTimeout(debounceRef.current);
       }
     };
-  }, [settings, isVisible, inputPath]);
+  }, [isVisible, filePath, videoInfo, createSettingsFingerprint, generatePreview]);
 
-  // Generate preview immediately when time changes
+  // Generate preview immediately when time changes (keyframe navigation)
   useEffect(() => {
-    if (!isVisible || !inputPath || !videoInfo) return;
+    if (!isVisible || !filePath || !videoInfo) return;
     
     // Cancel previous debounce
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
 
+    // Time change always triggers immediate render
     generatePreview();
-  }, [currentTime]);
+  }, [currentTime, isVisible, filePath, videoInfo, generatePreview]);
 
   // Divider drag handlers
   const handleDividerMouseDown = (e: React.MouseEvent) => {
@@ -279,11 +423,15 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // In embedded mode, don't show toggle button when hidden
   if (!isVisible) {
+    if (embedded) {
+      return null; // VideoSettings handles the toggle button
+    }
     return (
       <motion.button
         className="preview-toggle-btn"
-        onClick={onToggleVisibility}
+        onClick={toggleVisibility}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         title={t('preview.show') || 'Show Preview'}
@@ -295,10 +443,10 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
   return (
     <motion.div
-      className="preview-panel"
-      initial={{ opacity: 0, x: 20 }}
+      className={`preview-panel ${embedded ? 'preview-panel-embedded' : ''}`}
+      initial={{ opacity: 0, x: embedded ? 0 : 20 }}
       animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 20 }}
+      exit={{ opacity: 0, x: embedded ? 0 : 20 }}
     >
       {/* Header */}
       <div className="preview-header">
@@ -320,7 +468,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
           </button>
           <button
             className="preview-mode-btn"
-            onClick={onToggleVisibility}
+            onClick={toggleVisibility}
             title={t('preview.hide') || 'Hide Preview'}
           >
             <EyeOffIcon />
@@ -328,9 +476,16 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         </div>
       </div>
 
+      {/* Low Bitrate Warning */}
+      {showBitrateWarning && (
+        <div className="preview-warning">
+          ⚠️ {t('preview.lowBitrateWarning') || `Low bitrate (${previewSettings.bitrate}M) for ${previewSettings.fps}fps @ ${previewSettings.resolution}. Recommend ≥6M for NVENC to avoid artifacts.`}
+        </div>
+      )}
+
       {/* Content */}
       <div className="preview-content">
-        {!inputPath ? (
+        {!filePath ? (
           <div className="preview-placeholder">
             <ImageIcon size={48} />
             <p>{t('preview.selectVideo') || 'Select a video to preview'}</p>
@@ -343,7 +498,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
         ) : error ? (
           <div className="preview-error">
             <p>{error}</p>
-            <button onClick={generatePreview}>
+            <button onClick={() => generatePreview(true)}>
               <RefreshIcon />
               {t('preview.retry') || 'Retry'}
             </button>
@@ -386,11 +541,28 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
           <div className="preview-video-container">
             <video
               ref={videoRef}
-              src={`asset://localhost/${previewVideoPath.replace(/\\/g, '/')}`}
+              src={previewVideoPath}
               controls
               loop
               autoPlay
               muted
+              onError={(e) => {
+                const newCount = videoErrorCount + 1;
+                setVideoErrorCount(newCount);
+                console.error(`[Preview] Video load error #${newCount}:`, e);
+                
+                // Stop retrying after 3 errors to prevent spam
+                if (newCount >= 3) {
+                  console.warn('[Preview] Too many video errors, showing placeholder');
+                  setError(t('preview.videoLoadError') || 'Failed to load video preview');
+                  setPreviewVideoPath(null);
+                }
+              }}
+              onLoadedData={() => {
+                // Reset error count on successful load
+                setVideoErrorCount(0);
+                console.log('[Preview] Video loaded successfully');
+              }}
             />
           </div>
         ) : (
@@ -408,52 +580,18 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
             {formatTime(currentTime)} / {formatTime(videoInfo.duration)}
           </div>
           
-          <div className="preview-slider-container">
-            <input
-              type="range"
-              min={0}
-              max={videoInfo.duration}
-              step={0.1}
-              value={currentTime}
-              onChange={(e) => setCurrentTime(parseFloat(e.target.value))}
-              className="preview-slider"
-            />
-            
-            {/* Keyframe markers */}
-            <div className="preview-keyframes">
-              {keyframes.map((time, index) => (
-                <button
-                  key={index}
-                  className="preview-keyframe-btn"
-                  style={{ left: `${(time / videoInfo.duration) * 100}%` }}
-                  onClick={() => setCurrentTime(time)}
-                  title={`${['0%', '50%', '90%'][index]} - ${formatTime(time)}`}
-                >
-                  <div className="preview-keyframe-marker" />
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* Slider and keyframe temporarily deleted */}
 
-          <div className="preview-keyframe-buttons">
-            {['0%', '50%', '90%'].map((label, index) => (
-              <button
-                key={label}
-                onClick={() => setCurrentTime(keyframes[index])}
-                className="preview-keyframe-quick-btn"
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          
+          
         </div>
       )}
 
       {/* Refresh button */}
       <button
         className="preview-refresh-btn"
-        onClick={generatePreview}
-        disabled={isLoading || !inputPath}
+        onClick={() => generatePreview(true)}
+        disabled={isLoading || !filePath}
       >
         <RefreshIcon className={isLoading ? 'spin' : ''} />
         {t('preview.refresh') || 'Refresh'}

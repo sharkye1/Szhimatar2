@@ -9,6 +9,7 @@ import RenderModeSelector from '../components/RenderModeSelector';
 import PreviewPanel from '../components/PreviewPanel';
 import useRenderQueue from '../hooks/useRenderQueue';
 import StatisticsPanel from '../components/StatisticsPanel';
+import { UpdateService, UpdateState } from '../services/UpdateService';
 import type { RenderJob } from '../services/RenderService';
 import type {
   AppPreset,
@@ -129,8 +130,25 @@ const MainWindow: React.FC<MainWindowProps> = ({
   const [showStats, setShowStats] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [selectedPreviewPath, setSelectedPreviewPath] = useState<string>('');
+  const [updateAvailable, setUpdateAvailable] = useState(false);
 
-  // Update preview path when first file is added to queue
+  // Check for updates after 2 seconds
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      try {
+        await UpdateService.initialize();
+        const info = await UpdateService.checkForUpdates();
+        if (info) {
+          setUpdateAvailable(true);
+          console.log('[MainWindow] Update available:', info.newVersion);
+        }
+      } catch (error) {
+        console.log('[MainWindow] Update check failed:', error);
+      }
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, []);
   useEffect(() => {
     if (jobs.length > 0 && !selectedPreviewPath) {
       setSelectedPreviewPath(jobs[0].inputPath);
@@ -299,8 +317,15 @@ const MainWindow: React.FC<MainWindowProps> = ({
           <button onClick={() => onNavigate('audio')} style={{ background: theme.colors.primary, color: '#fff' }}>
             🔊 {t('audio.title')}
           </button>
-          <button onClick={() => onNavigate('general')} style={{ background: theme.colors.secondary, color: '#fff' }}>
-            ⚙️ {t('settings.title')}
+          <button 
+            onClick={() => onNavigate('general')} 
+            style={{ 
+              background: updateAvailable ? theme.colors.success : theme.colors.secondary, 
+              color: '#fff',
+              animation: updateAvailable ? 'pulse 2s infinite' : 'none'
+            }}
+          >
+            {updateAvailable ? '🔄' : '⚙️'} {updateAvailable ? t('settings.update_available') : t('settings.title')}
           </button>
           <button onClick={() => setShowStats(true)} style={{ background: theme.colors.primary, color: '#fff' }}>
             📊 {t('stats.title') || 'Statistics'}

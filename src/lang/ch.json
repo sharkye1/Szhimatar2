@@ -220,6 +220,7 @@
   },
   "settings": {
     "title": "设置",
+    "update_available": "可用更新",
     "theme": "主题",
     "language": "语言",
     "ffmpegPath": "FFmpeg路径",
@@ -404,7 +405,9 @@
     "retry": "重试",
     "original": "原始",
     "processed": "处理后",
-    "refresh": "刷新预览"
+    "refresh": "刷新预览",
+    "lowBitrateWarning": "Low bitrate for high FPS. Recommend ≥6M for NVENC to avoid compression artifacts.",
+    "videoLoadError": "无法加载视频预览。请刷新。"
   },
   "history": {
     "re_render_overwrite": "重新渲染并覆盖",

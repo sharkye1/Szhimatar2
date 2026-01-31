@@ -220,6 +220,7 @@
   },
   "settings": {
     "title": "",
+    "update_available": "",
     "theme": "",
     "language": "",
     "ffmpegPath": "",
@@ -408,6 +409,8 @@
     "retry": "",
     "original": "",
     "processed": "",
-    "refresh": ""
+    "refresh": "",
+    "lowBitrateWarning": "",
+    "videoLoadError": ""
   }
 }

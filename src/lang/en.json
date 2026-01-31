@@ -220,6 +220,7 @@
   },
   "settings": {
     "title": "Settings",
+    "update_available": "Update Available",
     "theme": "Theme",
     "language": "Language",
     "ffmpegPath": "FFmpeg Path",
@@ -404,11 +405,13 @@
     "videoMode": "Video Mode",
     "selectVideo": "Select a video to preview",
     "generating": "Generating preview...",
-    "noPreview": "No preview available",
+    "noPreview": "No preview available yet",
     "retry": "Retry",
     "original": "Original",
     "processed": "Processed",
-    "refresh": "Refresh Preview"
+    "refresh": "Refresh Preview",
+    "lowBitrateWarning": "Low bitrate for high FPS. Recommend ≥6M for NVENC to avoid compression artifacts.",
+    "videoLoadError": "Failed to load video preview. Try refreshing."
   },
   "history": {
     "re_render_overwrite": "Re-render and overwrite",

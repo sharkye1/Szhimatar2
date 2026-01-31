@@ -51,6 +51,14 @@
                 "open": true,
                 "save": true
             },
+            "protocol": {
+                "asset": true,
+                "assetScope": [
+                    "$TEMP/**",
+                    "$APPDATA/**",
+                    "**"
+                ]
+            },
             "fs": {
                 "all": true,
                 "readFile": true,
@@ -103,7 +111,7 @@
                 "fullscreen": false,
                 "resizable": true,
                 "title": "Szhimatar",
-                "width": 900,
+                "width": 950,
                 "height": 800,
                 "minWidth": 800,
                 "minHeight": 600,
