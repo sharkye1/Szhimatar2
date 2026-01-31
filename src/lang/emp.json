@@ -395,5 +395,19 @@
     "restartMessage": "",
     "restartNow": "",
     "restartLater": ""
+  },
+  "preview": {
+    "title": "",
+    "show": "",
+    "hide": "",
+    "frameMode": "",
+    "videoMode": "",
+    "selectVideo": "",
+    "generating": "",
+    "noPreview": "",
+    "retry": "",
+    "original": "",
+    "processed": "",
+    "refresh": ""
   }
 }

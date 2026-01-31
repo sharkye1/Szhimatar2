@@ -1,0 +1,503 @@
+/* Preview Panel - Szhimatar Style */
+
+.preview-toggle-btn {
+    position: fixed;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    border-radius: 12px;
+    background: var(--settings-panel-bg, #1e1e1e);
+    border: 1px solid var(--border-color, #333);
+    color: var(--text-color, #fff);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 100;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.preview-toggle-btn:hover {
+    background: var(--hover-color, #2a2a2a);
+    border-color: var(--accent-color, #3b82f6);
+    transform: translateY(-50%) scale(1.05);
+}
+
+/* Main Preview Panel */
+.preview-panel {
+    position: fixed;
+    right: 20px;
+    top: 70px;
+    bottom: 70px;
+    width: 380px;
+    min-width: 300px;
+    max-width: 450px;
+    background: var(--settings-panel-bg, #1a1a1a);
+    border: 1px solid var(--border-color, #333);
+    border-radius: 14px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 100;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* Header */
+.preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--bg-color, #151515);
+    border-bottom: 1px solid var(--border-color, #333);
+    flex-shrink: 0;
+}
+
+.preview-header h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-color, #fff);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.preview-header-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.preview-mode-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-secondary, #888);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.preview-mode-btn:hover {
+    background: var(--hover-color, #2a2a2a);
+    color: var(--text-color, #fff);
+}
+
+.preview-mode-btn.active {
+    background: var(--accent-color, #3b82f6);
+    color: #fff;
+    border-color: var(--accent-color, #3b82f6);
+}
+
+/* Preview Content Container */
+.preview-content {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: #000;
+    aspect-ratio: 16 / 9;
+    min-height: 180px;
+}
+
+/* Placeholder / Loading / Error States */
+.preview-placeholder,
+.preview-loading,
+.preview-error {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--text-secondary, #666);
+    background: var(--bg-color, #111);
+}
+
+.preview-placeholder svg,
+.preview-loading svg {
+    opacity: 0.4;
+}
+
+.preview-placeholder p,
+.preview-loading p,
+.preview-error p {
+    margin: 0;
+    font-size: 13px;
+    text-align: center;
+    padding: 0 20px;
+    max-width: 200px;
+}
+
+.preview-error {
+    color: #ef4444;
+}
+
+.preview-error button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    background: var(--accent-color, #3b82f6);
+    border: none;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.preview-error button:hover {
+    filter: brightness(1.15);
+}
+
+/* Split View Container */
+.preview-split-view {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    user-select: none;
+    background: #000;
+}
+
+/* Original Layer (Before) - Full Width Background */
+.preview-original {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+.preview-original img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+/* Processed Layer (After) - Clipped Overlay */
+.preview-processed {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    /* clip-path is set dynamically via style prop */
+}
+
+.preview-processed img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+/* Labels */
+.preview-label {
+    position: absolute;
+    bottom: 12px;
+    padding: 5px 12px;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+    pointer-events: none;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.preview-original .preview-label {
+    left: 12px;
+}
+
+.preview-processed .preview-label {
+    right: 12px;
+}
+
+/* Draggable Divider */
+.preview-divider {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent-color, #3b82f6);
+    cursor: ew-resize;
+    z-index: 10;
+    transform: translateX(-50%);
+    transition: width 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+}
+
+.preview-divider:hover,
+.preview-divider.dragging {
+    width: 5px;
+    box-shadow: 0 0 16px rgba(59, 130, 246, 0.7);
+}
+
+.preview-divider-handle {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 32px;
+    height: 32px;
+    background: var(--accent-color, #3b82f6);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+    border: 2px solid #fff;
+}
+
+.preview-divider-handle svg {
+    margin: -4px;
+}
+
+/* Video Container */
+.preview-video-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+}
+
+.preview-video-container video {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 4px;
+}
+
+/* Timeline Section */
+.preview-timeline {
+    padding: 14px 16px;
+    background: var(--bg-color, #151515);
+    border-top: 1px solid var(--border-color, #333);
+    flex-shrink: 0;
+}
+
+.preview-time-display {
+    font-size: 12px;
+    color: var(--text-secondary, #888);
+    text-align: center;
+    margin-bottom: 10px;
+    font-variant-numeric: tabular-nums;
+    font-family: 'SF Mono', 'Consolas', monospace;
+}
+
+.preview-slider-container {
+    position: relative;
+    margin-bottom: 12px;
+    padding: 8px 0;
+}
+
+.preview-slider {
+    width: 100%;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--border-color, #333);
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+}
+
+.preview-slider::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(to right,
+            var(--accent-color, #3b82f6) 0%,
+            var(--accent-color, #3b82f6) var(--progress, 0%),
+            var(--border-color, #333) var(--progress, 0%),
+            var(--border-color, #333) 100%);
+}
+
+.preview-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--accent-color, #3b82f6);
+    border-radius: 50%;
+    cursor: pointer;
+    border: 3px solid #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    margin-top: -5px;
+    transition: transform 0.15s ease;
+}
+
+.preview-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+.preview-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: var(--accent-color, #3b82f6);
+    border-radius: 50%;
+    cursor: pointer;
+    border: 3px solid #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Keyframe Markers */
+.preview-keyframes {
+    position: absolute;
+    top: 8px;
+    left: 0;
+    right: 0;
+    height: 6px;
+    pointer-events: none;
+}
+
+.preview-keyframe-btn {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    pointer-events: auto;
+    z-index: 5;
+}
+
+.preview-keyframe-marker {
+    width: 10px;
+    height: 10px;
+    background: var(--accent-color, #3b82f6);
+    border: 2px solid #fff;
+    border-radius: 2px;
+    transform: rotate(45deg);
+    margin: auto;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+    transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.preview-keyframe-btn:hover .preview-keyframe-marker {
+    transform: rotate(45deg) scale(1.25);
+    background: #60a5fa;
+}
+
+/* Keyframe Quick Buttons */
+.preview-keyframe-buttons {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.preview-keyframe-quick-btn {
+    flex: 1;
+    padding: 8px 0;
+    background: var(--hover-color, #252525);
+    border: 1px solid var(--border-color, #333);
+    border-radius: 6px;
+    color: var(--text-secondary, #888);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.preview-keyframe-quick-btn:hover {
+    background: var(--accent-color, #3b82f6);
+    border-color: var(--accent-color, #3b82f6);
+    color: #fff;
+}
+
+/* Refresh Button */
+.preview-refresh-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 0 16px 16px;
+    padding: 12px 16px;
+    background: var(--accent-color, #3b82f6);
+    border: none;
+    border-radius: 10px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.preview-refresh-btn:hover:not(:disabled) {
+    filter: brightness(1.15);
+    transform: translateY(-1px);
+}
+
+.preview-refresh-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Spin Animation */
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+/* Responsive Design */
+@media (max-width: 1400px) {
+    .preview-panel {
+        width: 340px;
+    }
+}
+
+@media (max-width: 1200px) {
+    .preview-panel {
+        width: 300px;
+        min-width: 280px;
+    }
+
+    .preview-header {
+        padding: 10px 14px;
+    }
+
+    .preview-timeline {
+        padding: 12px 14px;
+    }
+}
+
+@media (max-width: 900px) {
+    .preview-panel {
+        display: none;
+    }
+
+    .preview-toggle-btn {
+        display: none;
+    }
+}

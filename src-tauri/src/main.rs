@@ -2065,6 +2065,293 @@ fn get_cli_files() -> Vec<String> {
         .collect()
 }
 
+// ============================================================================
+// PREVIEW COMMANDS
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize)]
+struct PreviewSettings {
+    codec: String,
+    crf: String,
+    fps: String,
+    resolution: String,
+    filters: Vec<String>,
+    resampling_enabled: bool,
+    resampling_intensity: u8,
+}
+
+/// Extract a single frame from video at given time with current settings applied
+/// Returns base64-encoded JPEG image
+#[tauri::command]
+async fn get_preview_frame(
+    input_path: String,
+    time_seconds: f64,
+    settings: PreviewSettings,
+) -> Result<String, String> {
+    let config = load_ffmpeg_config();
+    if config.ffmpeg_path.trim().is_empty() {
+        return Err("FFmpeg not configured".to_string());
+    }
+
+    // Create temp file for output
+    let temp_dir = std::env::temp_dir();
+    let temp_file = temp_dir.join(format!("szhimatar_preview_{}.jpg", std::process::id()));
+
+    // Build filter chain
+    let mut filters: Vec<String> = Vec::new();
+    
+    // Resolution scaling
+    if !settings.resolution.is_empty() && settings.resolution != "original" {
+        let parts: Vec<&str> = settings.resolution.split('x').collect();
+        if parts.len() == 2 {
+            filters.push(format!("scale={}:{}", parts[0], parts[1]));
+        }
+    }
+
+    // User-enabled filters
+    for filter in &settings.filters {
+        match filter.as_str() {
+            "deinterlace" => filters.push("yadif".to_string()),
+            "denoise" => filters.push("hqdn3d=4:3:6:4.5".to_string()),
+            "sharpen" => filters.push("unsharp=5:5:1.0:5:5:0.0".to_string()),
+            _ => {}
+        }
+    }
+
+    // Build FFmpeg command with fast seeking (-ss before -i)
+    let mut cmd_args: Vec<String> = vec![
+        "-ss".to_string(), format!("{:.3}", time_seconds),
+        "-i".to_string(), input_path.clone(),
+        "-vframes".to_string(), "1".to_string(),
+    ];
+
+    if !filters.is_empty() {
+        cmd_args.push("-vf".to_string());
+        cmd_args.push(filters.join(","));
+    }
+
+    // Quality settings for preview
+    cmd_args.extend([
+        "-q:v".to_string(), "2".to_string(),
+        "-y".to_string(),
+        temp_file.to_string_lossy().to_string(),
+    ]);
+
+    // Run FFmpeg
+    #[cfg(target_os = "windows")]
+    let output = {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        Command::new(&config.ffmpeg_path)
+            .creation_flags(CREATE_NO_WINDOW)
+            .args(&cmd_args)
+            .output()
+            .map_err(|e| format!("Failed to run FFmpeg: {}", e))?
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    let output = Command::new(&config.ffmpeg_path)
+        .args(&cmd_args)
+        .output()
+        .map_err(|e| format!("Failed to run FFmpeg: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("FFmpeg error: {}", stderr));
+    }
+
+    // Read file and encode to base64
+    let image_data = fs::read(&temp_file)
+        .map_err(|e| format!("Failed to read preview image: {}", e))?;
+    
+    // Cleanup temp file
+    let _ = fs::remove_file(&temp_file);
+
+    // Return base64 encoded
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    Ok(STANDARD.encode(&image_data))
+}
+
+/// Extract a short video clip (3 seconds) from video at given time with settings applied
+/// Returns path to temporary video file
+#[tauri::command]
+async fn get_preview_video(
+    input_path: String,
+    time_seconds: f64,
+    duration: f64,
+    settings: PreviewSettings,
+) -> Result<String, String> {
+    let config = load_ffmpeg_config();
+    if config.ffmpeg_path.trim().is_empty() {
+        return Err("FFmpeg not configured".to_string());
+    }
+
+    // Create temp file for output
+    let temp_dir = std::env::temp_dir();
+    let temp_file = temp_dir.join(format!("szhimatar_preview_{}.mp4", std::process::id()));
+
+    // Build filter chain
+    let mut filters: Vec<String> = Vec::new();
+    
+    // Resolution scaling
+    if !settings.resolution.is_empty() && settings.resolution != "original" {
+        let parts: Vec<&str> = settings.resolution.split('x').collect();
+        if parts.len() == 2 {
+            let w: i32 = parts[0].parse().unwrap_or(1920);
+            let h: i32 = parts[1].parse().unwrap_or(1080);
+            // Ensure even dimensions
+            let w_even = (w / 2) * 2;
+            let h_even = (h / 2) * 2;
+            filters.push(format!("scale={}:{}", w_even, h_even));
+        }
+    }
+
+    // User-enabled filters
+    for filter in &settings.filters {
+        match filter.as_str() {
+            "deinterlace" => filters.push("yadif".to_string()),
+            "denoise" => filters.push("hqdn3d=4:3:6:4.5".to_string()),
+            "sharpen" => filters.push("unsharp=5:5:1.0:5:5:0.0".to_string()),
+            _ => {}
+        }
+    }
+
+    // Resampling filter (simplified for preview - always use blend for speed)
+    if settings.resampling_enabled {
+        let target_fps: u32 = settings.fps.parse().unwrap_or(60).min(60);
+        filters.push(format!("minterpolate=fps={}:mi_mode=blend", target_fps));
+    }
+
+    // Ensure yuv420p for compatibility
+    filters.push("format=yuv420p".to_string());
+
+    // Build FFmpeg command with fast seeking (-ss before -i)
+    let mut cmd_args: Vec<String> = vec![
+        "-ss".to_string(), format!("{:.3}", time_seconds),
+        "-i".to_string(), input_path.clone(),
+        "-t".to_string(), format!("{:.1}", duration.min(5.0)), // Max 5 seconds for preview
+    ];
+
+    // Video codec and quality
+    cmd_args.extend([
+        "-c:v".to_string(), "libx264".to_string(),
+        "-preset".to_string(), "ultrafast".to_string(),
+        "-crf".to_string(), settings.crf.clone(),
+    ]);
+
+    // FPS
+    if !settings.fps.is_empty() {
+        let fps: u32 = settings.fps.parse().unwrap_or(30);
+        cmd_args.extend(["-r".to_string(), fps.to_string()]);
+    }
+
+    // Apply filters
+    if !filters.is_empty() {
+        cmd_args.push("-vf".to_string());
+        cmd_args.push(filters.join(","));
+    }
+
+    // Audio - copy for speed or disable
+    cmd_args.extend([
+        "-an".to_string(), // No audio for preview
+        "-y".to_string(),
+        temp_file.to_string_lossy().to_string(),
+    ]);
+
+    // Run FFmpeg
+    #[cfg(target_os = "windows")]
+    let output = {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        Command::new(&config.ffmpeg_path)
+            .creation_flags(CREATE_NO_WINDOW)
+            .args(&cmd_args)
+            .output()
+            .map_err(|e| format!("Failed to run FFmpeg: {}", e))?
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    let output = Command::new(&config.ffmpeg_path)
+        .args(&cmd_args)
+        .output()
+        .map_err(|e| format!("Failed to run FFmpeg: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("FFmpeg error: {}", stderr));
+    }
+
+    Ok(temp_file.to_string_lossy().to_string())
+}
+
+/// Get video duration using ffprobe
+#[tauri::command]
+async fn get_video_info_for_preview(input_path: String) -> Result<VideoPreviewInfo, String> {
+    let config = load_ffmpeg_config();
+    if config.ffprobe_path.trim().is_empty() {
+        return Err("FFprobe not configured".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    let output = {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        Command::new(&config.ffprobe_path)
+            .creation_flags(CREATE_NO_WINDOW)
+            .args([
+                "-v", "quiet",
+                "-show_entries", "format=duration:stream=width,height,r_frame_rate",
+                "-of", "json",
+                &input_path,
+            ])
+            .output()
+            .map_err(|e| format!("Failed to run ffprobe: {}", e))?
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    let output = Command::new(&config.ffprobe_path)
+        .args([
+            "-v", "quiet",
+            "-show_entries", "format=duration:stream=width,height,r_frame_rate",
+            "-of", "json",
+            &input_path,
+        ])
+        .output()
+        .map_err(|e| format!("Failed to run ffprobe: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value = serde_json::from_str(&stdout)
+        .map_err(|e| format!("Failed to parse ffprobe output: {}", e))?;
+
+    let duration = json["format"]["duration"]
+        .as_str()
+        .and_then(|s| s.parse::<f64>().ok())
+        .unwrap_or(0.0);
+
+    let streams = json["streams"].as_array();
+    let (width, height) = streams
+        .and_then(|s| s.first())
+        .map(|stream| {
+            let w = stream["width"].as_i64().unwrap_or(0) as u32;
+            let h = stream["height"].as_i64().unwrap_or(0) as u32;
+            (w, h)
+        })
+        .unwrap_or((0, 0));
+
+    Ok(VideoPreviewInfo {
+        duration,
+        width,
+        height,
+    })
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct VideoPreviewInfo {
+    duration: f64,
+    width: u32,
+    height: u32,
+}
+
 fn main() {
     // Ensure app directories exist
     if let Err(e) = ensure_app_dirs() {
@@ -2119,6 +2406,10 @@ fn main() {
             download_update,
             apply_update,
             restart_app,
+            // Preview commands
+            get_preview_frame,
+            get_preview_video,
+            get_video_info_for_preview,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

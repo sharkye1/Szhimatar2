@@ -392,8 +392,22 @@
     "restartNow": "Restartigi nun",
     "restartLater": "Poste"
   },
+  "preview": {
+    "title": "Rekta Antaŭrigardo",
+    "show": "Montri Antaŭrigardon",
+    "hide": "Kaŝi Antaŭrigardon",
+    "frameMode": "Kadra Reĝimo",
+    "videoMode": "Video-Reĝimo",
+    "selectVideo": "Elektu videon por antaŭrigardi",
+    "generating": "Generante antaŭrigardon...",
+    "noPreview": "Neniu antaŭrigardo disponebla",
+    "retry": "Reprovi",
+    "original": "Originalo",
+    "processed": "Procesita",
+    "refresh": "Refreŝigi Antaŭrigardon"
+  },
   "history": {
-    "re_render_overwrite": "Re-render and overwrite",
-    "re_render_new": "Re-render as new version"
+    "re_render_overwrite": "Re-bildigi kaj anstataŭigi",
+    "re_render_new": "Re-bildigi kiel nova versio"
   }
 }

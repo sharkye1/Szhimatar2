@@ -6,6 +6,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import PresetManager from '../components/PresetManager';
 import RenderModeSelector from '../components/RenderModeSelector';
+import PreviewPanel from '../components/PreviewPanel';
 import useRenderQueue from '../hooks/useRenderQueue';
 import StatisticsPanel from '../components/StatisticsPanel';
 import type { RenderJob } from '../services/RenderService';
@@ -126,6 +127,15 @@ const MainWindow: React.FC<MainWindowProps> = ({
   } = useRenderQueue();
 
   const [showStats, setShowStats] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [selectedPreviewPath, setSelectedPreviewPath] = useState<string>('');
+
+  // Update preview path when first file is added to queue
+  useEffect(() => {
+    if (jobs.length > 0 && !selectedPreviewPath) {
+      setSelectedPreviewPath(jobs[0].inputPath);
+    }
+  }, [jobs, selectedPreviewPath]);
 
   const handleToggleSaveInSourceDirectory = useCallback(() => {
     setMainScreenSettings((prev) => ({
@@ -721,6 +731,22 @@ const MainWindow: React.FC<MainWindowProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Live Preview Panel */}
+      <PreviewPanel
+        inputPath={selectedPreviewPath}
+        settings={{
+          codec: videoSettings.codec,
+          crf: videoSettings.crf,
+          fps: videoSettings.fps,
+          resolution: videoSettings.resolution,
+          filters: videoSettings.filters.filter(f => f.enabled).map(f => f.name),
+          resampling_enabled: !!videoSettings.resamplingEnabled,
+          resampling_intensity: videoSettings.resamplingIntensity || 5,
+        }}
+        isVisible={showPreview}
+        onToggleVisibility={() => setShowPreview(!showPreview)}
+      />
     </div>
   );
 };

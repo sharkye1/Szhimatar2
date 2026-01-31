@@ -365,3 +365,11 @@
         max-width: 150px;
     }
 }
+
+/* Monospace fonts for statistics details */
+.stat-value,
+.history-output,
+.render-details,
+.history-time {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+}

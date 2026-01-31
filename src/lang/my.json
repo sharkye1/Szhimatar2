@@ -395,5 +395,19 @@
     "restartMessage": "Perezapustite aplikaciju za primjenje obnovy.",
     "restartNow": "Perezapustiti sejmas",
     "restartLater": "Pozdneje"
+  },
+  "preview": {
+    "title": "Živo Predogled",
+    "show": "Pokazati Predogled",
+    "hide": "Skryti Predogled",
+    "frameMode": "Režim Kadra",
+    "videoMode": "Režim Videa",
+    "selectVideo": "Izberite video za predogled",
+    "generating": "Generacija predogleda...",
+    "noPreview": "Predogled nedostupny",
+    "retry": "Ponoviti",
+    "original": "Original",
+    "processed": "Obrabotano",
+    "refresh": "Obnoviti Predogled"
   }
 }

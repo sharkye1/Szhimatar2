@@ -392,8 +392,22 @@
     "restartNow": "立即重启",
     "restartLater": "稍后"
   },
+  "preview": {
+    "title": "实时预览",
+    "show": "显示预览",
+    "hide": "隐藏预览",
+    "frameMode": "帧模式",
+    "videoMode": "视频模式",
+    "selectVideo": "选择视频进行预览",
+    "generating": "生成预览中...",
+    "noPreview": "无可用预览",
+    "retry": "重试",
+    "original": "原始",
+    "processed": "处理后",
+    "refresh": "刷新预览"
+  },
   "history": {
-    "re_render_overwrite": "Re-render and overwrite",
-    "re_render_new": "Re-render as new version"
+    "re_render_overwrite": "重新渲染并覆盖",
+    "re_render_new": "重新渲染为新版本"
   }
 }

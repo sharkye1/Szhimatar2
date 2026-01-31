@@ -395,5 +395,23 @@
     "restartMessage": "Restart the application to apply the update.",
     "restartNow": "Restart now",
     "restartLater": "Later"
+  },
+  "preview": {
+    "title": "Live Preview",
+    "show": "Show Preview",
+    "hide": "Hide Preview",
+    "frameMode": "Frame Mode",
+    "videoMode": "Video Mode",
+    "selectVideo": "Select a video to preview",
+    "generating": "Generating preview...",
+    "noPreview": "No preview available",
+    "retry": "Retry",
+    "original": "Original",
+    "processed": "Processed",
+    "refresh": "Refresh Preview"
+  },
+  "history": {
+    "re_render_overwrite": "Re-render and overwrite",
+    "re_render_new": "Re-render as new version"
   }
 }
