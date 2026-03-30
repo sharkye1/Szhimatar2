@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/tauri';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -32,6 +32,13 @@ function App() {
   const [watermarkSettings, setWatermarkSettings] = useState<WatermarkSettingsType>(DEFAULT_WATERMARK_SETTINGS);
   const [selectedPresetName, setSelectedPresetName] = useState<string>('');
   const [cliFiles, setCliFiles] = useState<string[]>([]);
+
+  // Mouse tracking for glassmorphism light effects
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const root = document.documentElement;
+    root.style.setProperty('--mouse-x', `${e.clientX}px`);
+    root.style.setProperty('--mouse-y', `${e.clientY}px`);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -137,8 +144,30 @@ function App() {
     <ThemeProvider>
       <LanguageProvider>
         <SettingsProvider>
-          {/* Persistent themed frame to prevent white flashes */}
-          <div style={{ width: '100vw', height: '100vh', display: 'flex' }}>
+          {/* Glassmorphism background layer */}
+          <div className="app-background" />
+          
+          {/* Spotlight effect layer */}
+          <div 
+            className="spotlight-layer"
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              width: '100vw',
+              height: '100vh',
+              pointerEvents: 'none',
+              zIndex: 0,
+              background: `radial-gradient(600px circle at var(--mouse-x) var(--mouse-y), rgba(var(--primary-rgb), 0.06), transparent 40%)`,
+            }}
+          />
+          
+          {/* Main app container with mouse tracking */}
+          <div 
+            className="app-root"
+            onMouseMove={handleMouseMove}
+            style={{ width: '100vw', height: '100vh', display: 'flex', position: 'relative', zIndex: 1 }}
+          >
             <AnimatePresence mode="wait" initial={false}>
               {currentScreen === 'main' && (
                 <MotionScreen key="screen-main">

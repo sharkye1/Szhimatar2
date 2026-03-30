@@ -1,4 +1,4 @@
-/* Video Settings Extended Styles */
+/* Video Settings Extended Styles - Glassmorphism */
 
 /* Layout container for settings + preview */
 .video-settings-layout {
@@ -35,7 +35,7 @@
     width: 36px;
     height: 36px;
     border-radius: 8px;
-    border: 1px solid;
+    border: 1px solid rgba(255, 255, 255, 0.1);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -43,11 +43,15 @@
     transition: all 0.2s ease;
     color: #fff;
     margin-left: auto;
+    background: rgba(var(--theme-bg-rgb), 0.2);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
 }
 
 .preview-toggle-header-btn:hover {
-    filter: brightness(1.1);
+    background: rgba(var(--theme-bg-rgb), 0.3);
     transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 /* Responsive: hide preview on small screens */
@@ -143,11 +147,14 @@
 /* CRF Help Section */
 .help-section {
     padding: 12px 16px;
-    border: 1px solid currentColor;
-    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
     margin: 12px 0;
     font-size: 12px;
     animation: slideDown 0.3s ease-out;
+    background: rgba(var(--theme-bg-rgb), 0.1);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
 }
 
 .help-section h4 {

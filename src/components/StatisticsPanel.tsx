@@ -6,6 +6,7 @@ import React, { useState } from 'react';
 import { save } from '@tauri-apps/api/dialog';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { Clock, RotateCw, Check, X, AlertCircle, Square, Download, Trash2, RotateCcw, Film, Volume2, Bookmark } from 'lucide-react';
 import useStatistics from '../hooks/useStatistics';
 import useRenderQueue from '../hooks/useRenderQueue';
 import type { RenderStatRecord } from '../services/StatisticsService';
@@ -41,13 +42,13 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
 
   // Get status display
   const getStatusDisplay = (record: RenderStatRecord) => {
-    const statusMap: Record<string, { text: string; color: string; icon: string }> = {
-      pending: { text: t('stats.pending') || 'Pending', color: theme.colors.textSecondary, icon: '⏳' },
-      rendering: { text: t('stats.rendering') || 'Rendering', color: theme.colors.primary, icon: '🔄' },
-      completed: { text: t('stats.completed') || 'Completed', color: theme.colors.success, icon: '✓' },
-      error: { text: t('stats.error') || 'Error', color: theme.colors.error, icon: '✗' },
-      cancelled: { text: t('stats.cancelled') || 'Cancelled', color: theme.colors.textSecondary, icon: '⊘' },
-      stopped: { text: t('stats.stopped') || 'Stopped', color: theme.colors.warning, icon: '■' },
+    const statusMap: Record<string, { text: string; color: string; icon: React.ReactNode }> = {
+      pending: { text: t('stats.pending') || 'Pending', color: theme.colors.textSecondary, icon: <Clock size={14} strokeWidth={2} /> },
+      rendering: { text: t('stats.rendering') || 'Rendering', color: theme.colors.primary, icon: <RotateCw size={14} strokeWidth={2} /> },
+      completed: { text: t('stats.completed') || 'Completed', color: theme.colors.success, icon: <Check size={14} strokeWidth={2} /> },
+      error: { text: t('stats.error') || 'Error', color: theme.colors.error, icon: <X size={14} strokeWidth={2} /> },
+      cancelled: { text: t('stats.cancelled') || 'Cancelled', color: theme.colors.textSecondary, icon: <AlertCircle size={14} strokeWidth={2} /> },
+      stopped: { text: t('stats.stopped') || 'Stopped', color: theme.colors.warning, icon: <Square size={14} strokeWidth={2} /> },
     };
     return statusMap[record.status] || statusMap.pending;
   };
@@ -108,7 +109,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
 
   if (!isLoaded) {
     return (
-      <div className="statistics-panel" style={{ background: theme.colors.surface }}>
+      <div className="statistics-panel">
         <div className="stats-loading" style={{ color: theme.colors.textSecondary }}>
           {t('stats.loading') || 'Loading statistics...'}
         </div>
@@ -117,7 +118,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
   }
 
   return (
-    <div className="statistics-panel" style={{ background: theme.colors.surface, color: theme.colors.text }}>
+    <div className="statistics-panel" style={{ color: theme.colors.text }}>
       {/* Header */}
       <div className="stats-header" style={{ borderColor: theme.colors.border }}>
         <h2>{t('stats.title') || 'Render Statistics'}</h2>
@@ -246,15 +247,15 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
         <div className="action-buttons">
           <button
             onClick={handleExport}
-            style={{ background: theme.colors.primary, color: '#fff' }}
+            style={{ background: theme.colors.primary, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            📤 {t('stats.export') || 'Export'}
+            <Download size={16} strokeWidth={1.5} /> {t('stats.export') || 'Export'}
           </button>
           <button
             onClick={() => setShowConfirmClear(true)}
-            style={{ background: theme.colors.error, color: '#fff' }}
+            style={{ background: theme.colors.error, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            🗑️ {t('stats.clear') || 'Clear'}
+            <Trash2 size={16} strokeWidth={1.5} /> {t('stats.clear') || 'Clear'}
           </button>
         </div>
       </div>
@@ -306,13 +307,13 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
                     </div>
                   )}
                   <div className="history-settings" style={{ color: theme.colors.textSecondary }}>
-                    <span>📹 {render.video.codec} {render.video.bitrate}M CRF{render.video.crf}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Film size={12} strokeWidth={2} /> {render.video.codec} {render.video.bitrate}M CRF{render.video.crf}</span>
                     <span>•</span>
-                    <span>🔊 {render.audio.codec} {render.audio.bitrate}k</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Volume2 size={12} strokeWidth={2} /> {render.audio.codec} {render.audio.bitrate}k</span>
                     {render.preset && (
                       <>
                         <span>•</span>
-                        <span>📋 {render.preset}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Bookmark size={12} strokeWidth={2} /> {render.preset}</span>
                       </>
                     )}
                   </div>
@@ -324,25 +325,27 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
                         onClick={() => handleReRenderOverwrite(render)}
                         className="re-render-btn overwrite"
                         title={t('history.re_render_overwrite') || 'Re-render (overwrite)'}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                       >
-                        ↻
+                        <RotateCcw size={14} strokeWidth={2} />
                       </button>
                       <button
                         onClick={() => handleReRenderNew(render)}
                         className="re-render-btn new"
                         title={t('history.re_render_new') || 'Re-render (new version)'}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                       >
-                        ↻2
+                        <RotateCcw size={14} strokeWidth={2} />
                       </button>
                     </>
                   )}
                   <button
                     onClick={() => deleteRender(render.id)}
                     className="delete-btn"
-                    style={{ color: theme.colors.error }}
+                    style={{ color: theme.colors.error, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     title={t('stats.delete') || 'Delete'}
                   >
-                    ×
+                    <Trash2 size={14} strokeWidth={2} />
                   </button>
                 </div>
               </div>
@@ -356,7 +359,6 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
         <div className="confirm-overlay" onClick={() => setShowConfirmClear(false)}>
           <div 
             className="confirm-dialog" 
-            style={{ background: theme.colors.surface, borderColor: theme.colors.border }}
             onClick={e => e.stopPropagation()}
           >
             <h3>{t('stats.confirmClear') || 'Clear History?'}</h3>

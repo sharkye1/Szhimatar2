@@ -34,8 +34,8 @@ const WatermarkSettings: React.FC<WatermarkSettingsProps> = ({ onBack, settings,
   };
 
   return (
-    <div className="settings-window fade-in" style={{ background: theme.colors.background, color: theme.colors.text }}>
-      <header className="settings-header" style={{ background: theme.colors.surface, borderColor: theme.colors.border }}>
+    <div className="settings-window fade-in" style={{ color: theme.colors.text }}>
+      <header className="settings-header">
         <button onClick={onBack} className="back-button" style={{ color: theme.colors.primary }}>
           ← {t('buttons.back')}
         </button>
@@ -59,8 +59,7 @@ const WatermarkSettings: React.FC<WatermarkSettingsProps> = ({ onBack, settings,
 
         <div className="setting-group">
           <label>{t('watermark.position')}</label>
-          <select value={settings.position} onChange={(e) => setSettings(prev => ({ ...prev, position: e.target.value as WatermarkSettingsType['position'] }))}
-                  style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}>
+          <select value={settings.position} onChange={(e) => setSettings(prev => ({ ...prev, position: e.target.value as WatermarkSettingsType['position'] }))}>
             <option value="topLeft">{t('watermark.positions.topLeft')}</option>
             <option value="topRight">{t('watermark.positions.topRight')}</option>
             <option value="bottomLeft">{t('watermark.positions.bottomLeft')}</option>
@@ -80,12 +79,12 @@ const WatermarkSettings: React.FC<WatermarkSettingsProps> = ({ onBack, settings,
           <div className="setting-group">
             <label>Preview</label>
             <div style={{ 
-              background: theme.colors.surface, 
-              borderColor: theme.colors.border,
               padding: '20px',
               borderRadius: '8px',
-              border: '1px solid',
-              textAlign: 'center'
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              textAlign: 'center',
+              background: 'rgba(var(--theme-bg-rgb), 0.2)',
+              backdropFilter: 'blur(8px)'
             }}>
               <img 
                 src={`file://${settings.imagePath}`} 

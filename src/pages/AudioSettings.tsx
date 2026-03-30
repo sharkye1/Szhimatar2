@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { AudioSettings as AudioSettingsType } from '../types/index';
+import { AlertTriangle, Info } from 'lucide-react';
 import { 
   getCodecOptions, 
   applyCodecConstraints,
@@ -107,8 +108,8 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
   };
 
   return (
-    <div className="settings-window fade-in" style={{ background: theme.colors.background, color: theme.colors.text }}>
-      <header className="settings-header" style={{ background: theme.colors.surface, borderColor: theme.colors.border }}>
+    <div className="settings-window fade-in" style={{ color: theme.colors.text }}>
+      <header className="settings-header" style={{ borderColor: theme.colors.border }}>
         <button onClick={onBack} className="back-button" style={{ color: theme.colors.primary }}>
           ← {t('buttons.back')}
         </button>
@@ -123,10 +124,13 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
             style={{ 
               background: theme.colors.warning + '20', 
               borderColor: theme.colors.warning,
-              color: theme.colors.warning 
+              color: theme.colors.warning,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
             }}
           >
-            ⚠️ {warning}
+            <AlertTriangle size={16} strokeWidth={2} /> {warning}
           </div>
         )}
 
@@ -137,10 +141,13 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
             style={{ 
               background: theme.colors.primary + '15', 
               borderColor: theme.colors.primary,
-              color: theme.colors.textSecondary 
+              color: theme.colors.textSecondary,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
             }}
           >
-            ℹ️ {t(`audioValidation.codecInfo.${settings.codec}`) || t('audioValidation.codecInfoDefault')}
+            <Info size={16} strokeWidth={2} /> {t(`audioValidation.codecInfo.${settings.codec}`) || t('audioValidation.codecInfoDefault')}
           </div>
         )}
 
@@ -164,7 +171,6 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
             <select
               value={settings.codec}
               onChange={(e) => handleCodecChange(e.target.value)}
-              style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
             >
               {codecs.map(codec => (
                 <option key={codec.value} value={codec.value}>{codec.label}</option>
@@ -184,7 +190,6 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
             <select
               value={settings.bitrate}
               onChange={(e) => setSettings(prev => ({ ...prev, bitrate: e.target.value }))}
-              style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
               disabled={codecOptions.bitrateDisabled}
             >
               {codecOptions.bitrates.map(br => (
@@ -201,7 +206,6 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
             <select
               value={settings.channels}
               onChange={(e) => setSettings(prev => ({ ...prev, channels: e.target.value }))}
-              style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
               disabled={codecOptions.channelsDisabled}
             >
               {codecOptions.channels.map(ch => (
@@ -226,7 +230,6 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
             <select
               value={settings.sampleRate}
               onChange={(e) => setSettings(prev => ({ ...prev, sampleRate: e.target.value }))}
-              style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
               disabled={codecOptions.sampleRateDisabled}
             >
               {codecOptions.sampleRates.map(sr => (
@@ -316,9 +319,9 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
             <button
               className="help-btn"
               onClick={() => setExpandedSection(expandedSection === 'noise' ? null : 'noise')}
-              style={{ color: theme.colors.primary }}
+              style={{ color: theme.colors.primary, display: 'flex', alignItems: 'center' }}
             >
-              ℹ️
+              <Info size={16} strokeWidth={2} />
             </button>
           </div>
           <div className="slider-with-label">
@@ -338,7 +341,7 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
         </div>
 
         {expandedSection === 'noise' && (
-          <div className="help-section" style={{ background: theme.colors.surface, borderColor: theme.colors.border }}>
+          <div className="help-section">
             <p>{t('audioSettings.noiseReductionHint')}</p>
           </div>
         )}
@@ -403,7 +406,7 @@ const AudioSettings: React.FC<AudioSettingsProps> = ({ onBack, settings, setSett
             ))}
           </div>
           {expandedSection === 'effects' && (
-            <div className="help-section" style={{ background: theme.colors.surface, borderColor: theme.colors.border, marginTop: '12px' }}>
+            <div className="help-section" style={{ marginTop: '12px' }}>
               <p>{t('audioSettings.effectsHint')}</p>
             </div>
           )}

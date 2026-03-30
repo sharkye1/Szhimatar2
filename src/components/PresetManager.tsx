@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { Save, Trash2, Zap } from 'lucide-react';
 import type { 
   AppPreset, 
   VideoSettings, 
@@ -199,16 +200,11 @@ const PresetManager: React.FC<PresetManagerProps> = ({
             value={selectedPresetName}
             onChange={(e) => setSelectedPresetName(e.target.value)}
             disabled={isLoading}
-            style={{
-              background: theme.colors.surface,
-              color: theme.colors.text,
-              borderColor: theme.colors.border,
-            }}
           >
             <option value="">{t('presets.selectPreset')}</option>
             {presets.map((p) => (
               <option key={p.name} value={p.name}>
-                {p.isDefault ? `⚡ ${p.name}` : p.name}
+                {p.isDefault ? `✓ ${p.name}` : p.name}
               </option>
             ))}
           </select>
@@ -226,9 +222,9 @@ const PresetManager: React.FC<PresetManagerProps> = ({
             onClick={() => setShowSaveDialog(true)}
             disabled={isLoading}
             className="btn-save"
-            style={{ background: theme.colors.success, color: '#fff' }}
+            style={{ background: theme.colors.success, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            💾 {t('presets.save')}
+            <Save size={16} strokeWidth={1.5} /> {t('presets.save')}
           </button>
 
           {selectedPresetName && !presets.find((p) => p.name === selectedPresetName)?.isDefault && (
@@ -236,9 +232,9 @@ const PresetManager: React.FC<PresetManagerProps> = ({
               onClick={handleMakeDefault}
               disabled={isLoading}
               className="btn-apply"
-              style={{ background: theme.colors.secondary, color: theme.colors.text }}
+              style={{ background: theme.colors.secondary, color: theme.colors.text, display: 'flex', alignItems: 'center', gap: '6px' }}
             >
-              ⚡ {t('presets.makeDefault')}
+              <Zap size={16} strokeWidth={1.5} /> {t('presets.makeDefault')}
             </button>
           )}
 
@@ -246,9 +242,9 @@ const PresetManager: React.FC<PresetManagerProps> = ({
             onClick={() => setShowDeleteDialog(true)}
             disabled={!selectedPresetName || isLoading}
             className="btn-delete"
-            style={{ background: theme.colors.error, color: '#fff' }}
+            style={{ background: theme.colors.error, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            🗑️ {t('presets.delete')}
+            <Trash2 size={16} strokeWidth={1.5} /> {t('presets.delete')}
           </button>
         </div>
       </div>
@@ -259,11 +255,6 @@ const PresetManager: React.FC<PresetManagerProps> = ({
           <div
             className="preset-dialog"
             onClick={(e) => e.stopPropagation()}
-            style={{
-              background: theme.colors.surface,
-              color: theme.colors.text,
-              borderColor: theme.colors.border,
-            }}
           >
             <h3>{t('presets.saveDialogTitle')}</h3>
             <input
@@ -272,11 +263,6 @@ const PresetManager: React.FC<PresetManagerProps> = ({
               value={newPresetName}
               onChange={(e) => setNewPresetName(e.target.value)}
               maxLength={50}
-              style={{
-                background: theme.colors.background,
-                color: theme.colors.text,
-                borderColor: theme.colors.border,
-              }}
             />
             <textarea
               placeholder={t('presets.descriptionPlaceholder')}
@@ -319,11 +305,6 @@ const PresetManager: React.FC<PresetManagerProps> = ({
           <div
             className="preset-dialog preset-dialog-confirm"
             onClick={(e) => e.stopPropagation()}
-            style={{
-              background: theme.colors.surface,
-              color: theme.colors.text,
-              borderColor: theme.colors.border,
-            }}
           >
             <h3>{t('presets.deleteDialogTitle')}</h3>
             <p>{t('presets.deleteConfirmation').replace('{name}', selectedPresetName)}</p>

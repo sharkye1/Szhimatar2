@@ -5,7 +5,9 @@ import { useTheme } from '../contexts/ThemeContext';
 import { VideoSettings as VideoSettingsType, WatermarkSettings as WatermarkSettingsType } from '../types/index';
 import PreviewPanel from '../components/PreviewPanel';
 import useRenderQueue from '../hooks/useRenderQueue';
+import { Info, AlertTriangle } from 'lucide-react';
 import '../styles/VideoSettings.css';
+import '../styles/SettingsWindow.css';
 
 interface VideoSettingsProps {
   onBack: () => void;
@@ -124,8 +126,8 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
     }
   };
   return (
-    <div className="settings-window fade-in" style={{ background: theme.colors.background, color: theme.colors.text }}>
-      <header className="settings-header" style={{ background: theme.colors.surface, borderColor: theme.colors.border }}>
+    <div className="settings-window fade-in" style={{ color: theme.colors.text }}>
+      <header className="settings-header" style={{ borderColor: theme.colors.border }}>
         <button onClick={onBack} className="back-button" style={{ color: theme.colors.primary }}>
           ← {t('buttons.back')}
         </button>
@@ -158,7 +160,6 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
           <select
             value={settings.codec}
             onChange={(e) => setSettings(prev => ({ ...prev, codec: e.target.value }))}
-            style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
           >
             <option value="h264">{t('videoSettings.codecs.h264')}</option>
             <option value="h265">{t('videoSettings.codecs.h265')}</option>
@@ -174,7 +175,6 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
             type="number"
             value={settings.bitrate}
             onChange={(e) => setSettings(prev => ({ ...prev, bitrate: e.target.value }))}
-            style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
             min="0.5"
             max="100"
             step="0.5"
@@ -188,7 +188,6 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
             <select
               value={settings.fps}
               onChange={(e) => setSettings(prev => ({ ...prev, fps: e.target.value }))}
-              style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
               disabled={false}
             >
               {fps_options.map(opt => (
@@ -239,8 +238,8 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                 <span>{settings.resamplingIntensity ?? 5}</span>
                 <span>10</span>
               </div>
-              <div style={{ marginTop: '6px', fontSize: '12px', color: theme.colors.warning }}>
-                ⚠ {t('videoSettings.resamplingWarning')}
+              <div style={{ marginTop: '6px', fontSize: '12px', color: theme.colors.warning, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <AlertTriangle size={12} strokeWidth={2} /> {t('videoSettings.resamplingWarning')}
               </div>
             </div>
           )}
@@ -253,7 +252,6 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
             <select
               value={settings.resolution}
               onChange={(e) => setSettings(prev => ({ ...prev, resolution: e.target.value }))}
-              style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
             >
               {resolutions.map(res => (
                 <option key={res.value} value={res.value}>{res.label}</option>
@@ -265,7 +263,6 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
             <select
               value={settings.aspectRatio}
               onChange={(e) => setSettings(prev => ({ ...prev, aspectRatio: e.target.value }))}
-              style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
             >
               {aspectRatios.map(ar => (
                 <option key={ar.value} value={ar.value}>{ar.label}</option>
@@ -282,9 +279,9 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
               <button
                 className="help-btn"
                 onClick={() => setExpandedSection(expandedSection === 'crf' ? null : 'crf')}
-                style={{ color: theme.colors.primary }}
+                style={{ color: theme.colors.primary, display: 'flex', alignItems: 'center' }}
               >
-                ℹ️
+                <Info size={16} strokeWidth={2} />
               </button>
             </div>
             <input
@@ -306,7 +303,6 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
             <select
               value={settings.preset}
               onChange={(e) => setSettings(prev => ({ ...prev, preset: e.target.value }))}
-              style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
             >
               {Object.entries(presetDescriptions).map(([key, _desc]) => (
                 <option key={key} value={key}>{t(`ffmpegPresets.${key}`)}</option>
@@ -318,7 +314,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
 
         {/* CRF Help */}
         {expandedSection === 'crf' && (
-          <div className="help-section" style={{ background: theme.colors.surface, borderColor: theme.colors.border }}>
+          <div className="help-section">
             <p>{t('videoSettings.crfHint')}</p>
           </div>
         )}
@@ -349,7 +345,6 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
             <select
               value={settings.rotation}
               onChange={(e) => setSettings(prev => ({ ...prev, rotation: e.target.value as any }))}
-              style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
             >
               <option value="none">{t('videoSettings.rotationOptions.none')}</option>
               <option value="90">{t('videoSettings.rotationOptions.deg90')}</option>
@@ -363,7 +358,6 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
             <select
               value={settings.flip}
               onChange={(e) => setSettings(prev => ({ ...prev, flip: e.target.value as any }))}
-              style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
             >
               <option value="none">{t('videoSettings.flipOptions.none')}</option>
               <option value="horizontal">{t('videoSettings.flipOptions.horizontal')}</option>
@@ -409,8 +403,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
 
           <div className="setting-group">
             <label>{t('watermark.position')}</label>
-            <select value={watermarkSettings.position} onChange={(e) => setWatermarkSettings(prev => ({ ...prev, position: e.target.value as WatermarkSettingsType['position'] }))}
-                    style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}>
+            <select value={watermarkSettings.position} onChange={(e) => setWatermarkSettings(prev => ({ ...prev, position: e.target.value as WatermarkSettingsType['position'] }))}>
               <option value="topLeft">{t('watermark.positions.topLeft')}</option>
               <option value="topRight">{t('watermark.positions.topRight')}</option>
               <option value="bottomLeft">{t('watermark.positions.bottomLeft')}</option>
@@ -429,12 +422,9 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
           {watermarkSettings.imagePath && (
             <div className="setting-group">
               <label>{t('watermark.preview')}</label>
-              <div style={{ 
-                background: theme.colors.surface, 
-                borderColor: theme.colors.border,
+              <div className="glass-card" style={{ 
                 padding: '20px',
                 borderRadius: '8px',
-                border: '1px solid',
                 textAlign: 'center'
               }}>
                 <img 

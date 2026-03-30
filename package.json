@@ -1,6 +1,6 @@
 {
     "name": "szhimatar",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "description": "Offline video compressor with modern UI",
     "type": "module",
     "scripts": {
@@ -15,6 +15,7 @@
     "dependencies": {
         "@tauri-apps/api": "^1.5.3",
         "framer-motion": "^12.27.0",
+        "lucide-react": "^0.563.0",
         "react": "^18.2.0",
         "react-dom": "^18.2.0"
     },

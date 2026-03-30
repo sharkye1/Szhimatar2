@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke, convertFileSrc } from '@tauri-apps/api/tauri';
 import { motion } from 'framer-motion';
 import { useLanguage } from '../contexts/LanguageContext';
+import { AlertTriangle } from 'lucide-react';
 import './PreviewPanel.css';
 
 // Simple SVG icons
@@ -478,8 +479,8 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
 
       {/* Low Bitrate Warning */}
       {showBitrateWarning && (
-        <div className="preview-warning">
-          ⚠️ {t('preview.lowBitrateWarning') || `Low bitrate (${previewSettings.bitrate}M) for ${previewSettings.fps}fps @ ${previewSettings.resolution}. Recommend ≥6M for NVENC to avoid artifacts.`}
+        <div className="preview-warning" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <AlertTriangle size={16} strokeWidth={2} /> {t('preview.lowBitrateWarning') || `Low bitrate (${previewSettings.bitrate}M) for ${previewSettings.fps}fps @ ${previewSettings.resolution}. Recommend ≥6M for NVENC to avoid artifacts.`}
         </div>
       )}
 

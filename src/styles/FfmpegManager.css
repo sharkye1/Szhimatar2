@@ -10,19 +10,22 @@
 }
 
 .ffmpeg-status {
-    background: var(--color-surface);
-    border-radius: 8px;
+    background: rgba(var(--theme-bg-rgb), 0.15);
+    backdrop-filter: blur(12px) saturate(1.2);
+    -webkit-backdrop-filter: blur(12px) saturate(1.2);
+    border-radius: 14px;
     padding: 20px;
     margin-bottom: 20px;
-    border: 2px solid transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
 }
 
 .ffmpeg-status.status-success {
-    border-color: #4caf50;
+    border-color: rgba(76, 175, 80, 0.5);
 }
 
 .ffmpeg-status.status-warning {
-    border-color: #ff9800;
+    border-color: rgba(255, 152, 0, 0.5);
 }
 
 .status-item {
@@ -73,11 +76,15 @@
 }
 
 .search-section {
-    background: var(--color-surface);
+    background: rgba(var(--theme-bg-rgb), 0.15);
+    backdrop-filter: blur(12px) saturate(1.2);
+    -webkit-backdrop-filter: blur(12px) saturate(1.2);
     padding: 20px;
-    border-radius: 8px;
+    border-radius: 14px;
     text-align: center;
     margin-bottom: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
 }
 
 .search-section p {

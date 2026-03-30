@@ -10,6 +10,7 @@ import PreviewPanel from '../components/PreviewPanel';
 import useRenderQueue from '../hooks/useRenderQueue';
 import StatisticsPanel from '../components/StatisticsPanel';
 import { UpdateService, UpdateState } from '../services/UpdateService';
+import { Film, Volume2, Settings, BarChart3, Folder, Play, Pause, Square, RefreshCw, Sparkles, HardDrive, Check, X, Clock } from 'lucide-react';
 import type { RenderJob } from '../services/RenderService';
 import type {
   AppPreset,
@@ -274,13 +275,13 @@ const MainWindow: React.FC<MainWindowProps> = ({
 
   // Get status display text, color and icon
   const getStatusDisplay = (job: RenderJob) => {
-    const statusConfig: Record<string, { text: string; color: string; icon: string }> = {
-      pending: { text: t('queue.status.pending'), color: theme.colors.textSecondary, icon: '⏳' },
-      processing: { text: t('queue.status.processing'), color: theme.colors.primary, icon: '🔄' },
-      completed: { text: t('queue.status.completed'), color: theme.colors.success, icon: '✓' },
-      error: { text: t('queue.status.error'), color: theme.colors.error, icon: '✗' },
-      paused: { text: t('queue.status.paused'), color: theme.colors.warning, icon: '⏸' },
-      stopped: { text: t('queue.status.stopped'), color: theme.colors.warning, icon: '■' },
+    const statusConfig: Record<string, { text: string; color: string; icon: React.ReactNode }> = {
+      pending: { text: t('queue.status.pending'), color: theme.colors.textSecondary, icon: <Clock size={14} strokeWidth={2} /> },
+      processing: { text: t('queue.status.processing'), color: theme.colors.primary, icon: <RefreshCw size={14} strokeWidth={2} /> },
+      completed: { text: t('queue.status.completed'), color: theme.colors.success, icon: <Check size={14} strokeWidth={2} /> },
+      error: { text: t('queue.status.error'), color: theme.colors.error, icon: <X size={14} strokeWidth={2} /> },
+      paused: { text: t('queue.status.paused'), color: theme.colors.warning, icon: <Pause size={14} strokeWidth={2} /> },
+      stopped: { text: t('queue.status.stopped'), color: theme.colors.warning, icon: <Square size={14} strokeWidth={2} /> },
     };
     
     return statusConfig[job.status] || statusConfig.pending;
@@ -307,28 +308,31 @@ const MainWindow: React.FC<MainWindowProps> = ({
   };
 
   return ( 
-    <div className="main-window fade-in" style={{ background: theme.colors.background, color: theme.colors.text }}>
-      <header className="header" style={{ background: theme.colors.surface, borderColor: theme.colors.border }}>
+    <div className="main-window fade-in" style={{ color: theme.colors.text }}>
+      <header className="header" style={{ borderColor: theme.colors.border }}>
         <h1>{t('app.title')}</h1>
         <div className="header-buttons">
-          <button onClick={() => onNavigate('video')} style={{ background: theme.colors.primary, color: '#fff' }}>
-            📹 {t('video.title')}
+          <button onClick={() => onNavigate('video')} style={{ background: theme.colors.primary, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Film size={18} strokeWidth={1.5} /> {t('video.title')}
           </button>
-          <button onClick={() => onNavigate('audio')} style={{ background: theme.colors.primary, color: '#fff' }}>
-            🔊 {t('audio.title')}
+          <button onClick={() => onNavigate('audio')} style={{ background: theme.colors.primary, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Volume2 size={18} strokeWidth={1.5} /> {t('audio.title')}
           </button>
           <button 
             onClick={() => onNavigate('general')} 
             style={{ 
               background: updateAvailable ? theme.colors.success : theme.colors.secondary, 
               color: '#fff',
-              animation: updateAvailable ? 'pulse 2s infinite' : 'none'
+              animation: updateAvailable ? 'pulse 2s infinite' : 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
             }}
           >
-            {updateAvailable ? '🔄' : '⚙️'} {updateAvailable ? t('settings.update_available') : t('settings.title')}
+            {updateAvailable ? <Sparkles size={18} strokeWidth={1.5} /> : <Settings size={18} strokeWidth={1.5} />} {updateAvailable ? t('settings.update_available') : t('settings.title')}
           </button>
-          <button onClick={() => setShowStats(true)} style={{ background: theme.colors.primary, color: '#fff' }}>
-            📊 {t('stats.title') || 'Statistics'}
+          <button onClick={() => setShowStats(true)} style={{ background: theme.colors.primary, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <BarChart3 size={18} strokeWidth={1.5} /> {t('stats.title') || 'Statistics'}
           </button>
         </div>
       </header>
@@ -346,8 +350,8 @@ const MainWindow: React.FC<MainWindowProps> = ({
                 />
 
         <div className="file-selection">
-          <button onClick={handleSelectFiles} style={{ background: theme.colors.primary, color: '#fff' }}>
-            📁 {t('main.selectFiles')}
+          <button onClick={handleSelectFiles} style={{ background: theme.colors.primary, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Folder size={18} strokeWidth={1.5} /> {t('main.selectFiles')}
           </button>
           <div className="output-controls" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <button
@@ -357,10 +361,13 @@ const MainWindow: React.FC<MainWindowProps> = ({
                 color: '#fff',
                 opacity: mainScreenSettings.saveInSourceDirectory ? 0.5 : 1,
                 cursor: mainScreenSettings.saveInSourceDirectory ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
               }}
               disabled={mainScreenSettings.saveInSourceDirectory}
             >
-              💾 {t('main.outputFolder')}
+              <HardDrive size={18} strokeWidth={1.5} /> {t('main.outputFolder')}
             </button>
 
             <motion.button
@@ -411,10 +418,10 @@ const MainWindow: React.FC<MainWindowProps> = ({
         <div className="queue-section">
           <div className="queue-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2>{t('main.queue')} ({totalJobs})</h2>
-            <div className="queue-stats" style={{ fontSize: '0.85rem', color: theme.colors.textSecondary }}>
-              {completedJobs > 0 && <span style={{ color: theme.colors.success }}>✓ {completedJobs}</span>}
-              {errorJobs > 0 && <span style={{ color: theme.colors.error, marginLeft: '8px' }}>✗ {errorJobs}</span>}
-              {pendingJobs > 0 && <span style={{ marginLeft: '8px' }}>⏳ {pendingJobs}</span>}
+            <div className="queue-stats" style={{ fontSize: '0.85rem', color: theme.colors.textSecondary, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {completedJobs > 0 && <span style={{ color: theme.colors.success, display: 'flex', alignItems: 'center', gap: '4px' }}><Check size={14} strokeWidth={2} /> {completedJobs}</span>}
+              {errorJobs > 0 && <span style={{ color: theme.colors.error, display: 'flex', alignItems: 'center', gap: '4px' }}><X size={14} strokeWidth={2} /> {errorJobs}</span>}
+              {pendingJobs > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={14} strokeWidth={2} /> {pendingJobs}</span>}
               {completedJobs > 0 && (
                 <button
                   onClick={handleClearCompleted}
@@ -422,10 +429,11 @@ const MainWindow: React.FC<MainWindowProps> = ({
                     marginLeft: '12px', 
                     padding: '2px 8px',
                     fontSize: '0.8rem',
-                    background: theme.colors.surface,
+                    background: 'rgba(var(--theme-bg-rgb), 0.2)',
+                    backdropFilter: 'blur(8px)',
                     color: theme.colors.text,
-                    border: `1px solid ${theme.colors.border}`,
-                    borderRadius: '4px',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '6px',
                     cursor: 'pointer'
                   }}
                 >
@@ -434,7 +442,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
               )}
             </div>
           </div>
-          <div className="queue-list" style={{ background: theme.colors.surface, borderColor: theme.colors.border }}>
+          <div className="queue-list" style={{ borderColor: theme.colors.border }}>
             {jobs.length === 0 ? (
               <div className="empty-queue" style={{ color: theme.colors.textSecondary }}>
                 {t('main.selectFiles')}...
@@ -591,7 +599,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
                               }}
                               title={t('queue.showInExplorer') || 'Show in Explorer'}
                             >
-                              📁 {t('queue.show') || 'Show'}
+                              <Folder size={14} strokeWidth={1.5} /> {t('queue.show') || 'Show'}
                             </button>
                           )}
 
@@ -705,23 +713,23 @@ const MainWindow: React.FC<MainWindowProps> = ({
           <button 
             onClick={handleStart} 
             disabled={isProcessing || jobs.length === 0 || pendingJobs === 0}
-            style={{ background: theme.colors.success, color: '#fff' }}
+            style={{ background: theme.colors.success, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            ▶️ {t('main.start')}
+            <Play size={18} strokeWidth={1.5} /> {t('main.start')}
           </button>
           <button 
             onClick={handlePause} 
             disabled={!isProcessing}
-            style={{ background: theme.colors.warning, color: '#fff' }}
+            style={{ background: theme.colors.warning, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            {isPaused ? '▶️' : '⏸️'} {t('main.pause')}
+            {isPaused ? <Play size={18} strokeWidth={1.5} /> : <Pause size={18} strokeWidth={1.5} />} {t('main.pause')}
           </button>
           <button 
             onClick={handleStop} 
             disabled={!isProcessing}
-            style={{ background: theme.colors.error, color: '#fff' }}
+            style={{ background: theme.colors.error, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            ⏹️ {t('main.stop')}
+            <Square size={18} strokeWidth={1.5} /> {t('main.stop')}
           </button>
         </div>
       </div>
@@ -743,7 +751,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.98 }}
               transition={{ duration: 0.25, ease: 'easeOut' }}
-              style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
+              style={{ color: theme.colors.text }}
             >
               <div className="stats-modal-header">
                 <div className="stats-modal-title">{t('stats.title') || 'Render Statistics'}</div>

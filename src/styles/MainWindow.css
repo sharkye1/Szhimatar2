@@ -4,7 +4,7 @@
   display: flex;
   flex-direction: column;
   animation: fadeInScale 0.3s ease-out;
-
+  background: transparent;
 }
 
 @keyframes fadeInScale {
@@ -35,10 +35,13 @@
 
 .header {
   padding: 20px;
-  border-bottom: 1px solid;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  background: rgba(var(--theme-bg-rgb), 0.2);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
 }
 
 .header h1 {
@@ -56,6 +59,19 @@
   border-radius: 6px;
   font-size: 14px;
   font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: rgba(var(--theme-bg-rgb), 0.3);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.header-buttons button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  background: rgba(var(--theme-bg-rgb), 0.4);
 }
 
 .content {
@@ -65,6 +81,7 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
+  background: transparent;
 }
 
 .file-selection {
@@ -79,6 +96,14 @@
   border-radius: 8px;
   font-size: 16px;
   font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.file-selection button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .output-path {
@@ -89,6 +114,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  background: rgba(var(--theme-bg-rgb), 0.2);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .queue-section {
@@ -105,11 +134,15 @@
 
 .queue-list {
   flex: 1;
-  border: 1px solid;
-  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
   padding: 10px;
   overflow-y: auto;
   min-height: 200px;
+  background: rgba(var(--theme-bg-rgb), 0.15);
+  backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
 }
 
 .empty-queue {
@@ -122,8 +155,11 @@
 
 .queue-item {
   padding: 12px;
-  border-bottom: 1px solid;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   animation: slideIn 0.2s ease;
+  background: rgba(var(--theme-bg-rgb), 0.1);
+  border-radius: 8px;
+  margin-bottom: 6px;
 }
 
 .queue-item:last-child {
@@ -174,6 +210,19 @@
   border-radius: 8px;
   font-size: 16px;
   font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: rgba(var(--theme-bg-rgb), 0.25);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.controls button:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  background: rgba(var(--theme-bg-rgb), 0.35);
 }
 
 .controls button:disabled {
@@ -189,8 +238,9 @@
 .stats-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(6, 20, 44, 0.65);
-  backdrop-filter: blur(4px);
+  background: rgba(6, 20, 44, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -201,12 +251,15 @@
 .stats-modal {
   width: min(1100px, 92vw);
   max-height: 90vh;
-  border: 1px solid;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
-  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  background: rgba(var(--theme-bg-rgb), 0.25);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
 }
 
 .stats-modal-header {
@@ -214,9 +267,10 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 18px;
-  border-bottom: 1px solid;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   font-weight: 600;
   letter-spacing: 0.01em;
+  background: rgba(var(--theme-bg-rgb), 0.15);
 }
 
 .stats-modal-title {

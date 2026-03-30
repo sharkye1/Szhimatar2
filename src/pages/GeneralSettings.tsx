@@ -7,6 +7,7 @@ import { FfmpegManager } from '../components/FfmpegManager';
 import { VideoGuide } from '../components/VideoGuide';
 import { APP_VERSION } from '../version';
 import { UpdateService, UpdateState } from '../services/UpdateService';
+import { AlertTriangle, FolderOpen, Plus, Minus } from 'lucide-react';
 import '../styles/SettingsWindow.css';
 
 interface GeneralSettingsProps {
@@ -204,8 +205,8 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
   };
 
   return (
-    <div className="settings-window fade-in" style={{ background: theme.colors.background, color: theme.colors.text }}>
-      <header className="settings-header" style={{ background: theme.colors.surface, borderColor: theme.colors.border }}>
+    <div className="settings-window fade-in" style={{ color: theme.colors.text }}>
+      <header className="settings-header" style={{ borderColor: theme.colors.border }}>
         <button onClick={onBack} className="back-button" style={{ color: theme.colors.primary }}>
           ← {t('buttons.back')}
         </button>
@@ -222,8 +223,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
         }}>
           <div className="setting-group" style={{ flex: '1 1 200px', minWidth: '200px' }}>
             <label>{t('settings.theme')}</label>
-            <select value={themeName} onChange={(e) => setThemeName(e.target.value)}
-                    style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}>
+            <select value={themeName} onChange={(e) => setThemeName(e.target.value)}>
               <option value="light">Light</option>
               <option value="dark-red">Dark Red</option>
               <option value="blue-ocean">Blue Ocean</option>
@@ -238,8 +238,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
 
           <div className="setting-group" style={{ flex: '1 1 200px', minWidth: '200px' }}>
             <label>{t('settings.language')}</label>
-            <select value={language} onChange={(e) => setLanguage(e.target.value)}
-                    style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}>
+            <select value={language} onChange={(e) => setLanguage(e.target.value)}>
               <option value="ru">Русский</option>
               <option value="en">English</option>
               <option value="ch">中文</option>
@@ -255,7 +254,6 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
             <select 
               value={screenAnimationLocal} 
               onChange={(e) => setScreenAnimationLocal(e.target.value as ScreenAnimationType)}
-              style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
             >
               <option value="default">{t('settings.animations.default')}</option>
               <option value="soft-blur">{t('settings.animations.softBlur')}</option>
@@ -269,7 +267,6 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
         <div className="setting-group">
           <label>{t('settings.outputSuffix')}</label>
           <input type="text" value={outputSuffix} onChange={(e) => setOutputSuffix(e.target.value)}
-                 style={{ background: theme.colors.surface, color: theme.colors.text, borderColor: theme.colors.border }}
                  placeholder="_szhatoe" />
         </div>
 
@@ -333,10 +330,9 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
               flexDirection: 'column',
               gap: 12,
               padding: 12,
-              background: theme.colors.surface,
               borderRadius: 8,
-              border: `1px solid ${theme.colors.border}`,
             }}
+            className="glass-card"
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ color: theme.colors.textSecondary }}>{t('contextMenu.status')}</span>
@@ -365,9 +361,12 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
                 background: (theme.colors.warning || '#f59e0b') + '20', 
                 borderRadius: 4,
                 fontSize: 13,
-                color: theme.colors.text
+                color: theme.colors.text,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
               }}>
-                ⚠️ {t('contextMenu.exeMovedWarning')}
+                <AlertTriangle size={16} strokeWidth={2} /> {t('contextMenu.exeMovedWarning')}
               </div>
             )}
 
@@ -382,11 +381,15 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
                 borderRadius: 6,
                 cursor: contextMenuStatus.loading ? 'not-allowed' : 'pointer',
                 opacity: contextMenuStatus.loading ? 0.7 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px'
               }}
             >
               {contextMenuStatus.enabled 
-                ? `➖ ${t('contextMenu.remove')}`
-                : `➕ ${t('contextMenu.add')}`}
+                ? <><Minus size={16} strokeWidth={1.5} /> {t('contextMenu.remove')}</>
+                : <><Plus size={16} strokeWidth={1.5} /> {t('contextMenu.add')}</>}
             </button>
 
             <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
@@ -405,10 +408,9 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
               flexDirection: 'column',
               gap: 12,
               padding: 12,
-              background: theme.colors.surface,
               borderRadius: 8,
-              border: `1px solid ${theme.colors.border}`,
             }}
+            className="glass-card"
           >
             <button
               onClick={handleShowLogsWarning}
@@ -419,9 +421,13 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
                 border: 'none',
                 borderRadius: 6,
                 cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px'
               }}
             >
-              📂 {t('logs.viewFolder')}
+              <FolderOpen size={16} strokeWidth={1.5} /> {t('logs.viewFolder')}
             </button>
           </div>
         </div>
@@ -433,10 +439,8 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
             flexDirection: 'column',
             gap: 12,
             padding: 12,
-            background: theme.colors.surface,
             borderRadius: 8,
-            border: `1px solid ${theme.colors.border}`,
-          }}>
+          }} className="glass-card">
             {/* Current version */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ color: theme.colors.textSecondary }}>v{APP_VERSION}</span>
@@ -518,11 +522,9 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
 
             {/* Downloading progress */}
             {updateState.status === 'downloading' && (
-              <div style={{
+              <div className="glass-card" style={{
                 padding: 12,
-                background: theme.colors.surface,
                 borderRadius: 6,
-                border: `1px solid ${theme.colors.border}`,
               }}>
                 <div style={{ 
                   display: 'flex', 
@@ -663,17 +665,16 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
               border: `2px solid ${theme.colors.error}`,
             }}
           >
-            <h2 style={{ marginTop: 0, color: theme.colors.error }}>⚠️ {t('logs.warningTitle')}</h2>
+            <h2 style={{ marginTop: 0, color: theme.colors.error, display: 'flex', alignItems: 'center', gap: '8px' }}><AlertTriangle size={20} strokeWidth={2} /> {t('logs.warningTitle')}</h2>
             <p style={{ lineHeight: 1.6, color: theme.colors.text }}>{t('logs.warningMessage')}</p>
             
             {logsPath && (
               <div
+                className="glass-card"
                 style={{
                   marginTop: 16,
                   padding: 12,
-                  background: theme.colors.surface,
                   borderRadius: 6,
-                  border: `1px solid ${theme.colors.border}`,
                   filter: warningTimer > 0 ? 'blur(8px)' : 'none',
                   opacity: warningTimer > 0 ? 0.3 : 1,
                   transition: 'filter 0.3s ease, opacity 0.3s ease',
