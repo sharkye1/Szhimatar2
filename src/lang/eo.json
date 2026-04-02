@@ -223,6 +223,12 @@
     "update_available": "Ĝisdatigo Disponebla",
     "theme": "Etoso",
     "language": "Lingvo",
+    "backgroundSource": "Fona fonto",
+    "useImageBackground": "Uzi bildon kiel fonon",
+    "useThemeBackground": "Uzi teman kolorskemon kiel fonon",
+    "backgroundImage": "Fona bildo",
+    "chooseBackgroundImage": "Elekti bildon",
+    "noBackgroundImage": "Neniu bildo elektita",
     "ffmpegPath": "FFmpeg-vojo",
     "ffprobePath": "FFprobe-vojo",
     "outputSuffix": "Sufikso de eligaj dosieroj",
@@ -236,7 +242,9 @@
     },
     "checkUpdates": "Kontroli ĝisdatigojn",
     "save": "Konservi",
-    "cancel": "Nuligi"
+    "cancel": "Nuligi",
+    "glassOpacity": "Image Dimming",
+    "glassBlur": "Image Blur"
   },
   "watermark": {
     "title": "Agordoj de akvomarko",
@@ -408,6 +416,9 @@
     "refresh": "Refreŝigi Antaŭrigardon",
     "lowBitrateWarning": "Low bitrate for high FPS. Recommend ≥6M for NVENC to avoid compression artifacts.",
     "videoLoadError": "Malsukcesis ŝarĝi video-antaŭrigardon. Reprovu."
+  },
+  "network": {
+    "vpnProxyWarningMessage": "Aktiva proxy/VPN-konekto estis detektita. Oni rekomendas malŝalti ĝin por pli stabila laboro de la aplikaĵo kaj por eviti retajn erarojn."
   },
   "history": {
     "re_render_overwrite": "Re-bildigi kaj anstataŭigi",

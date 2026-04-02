@@ -223,6 +223,12 @@
     "update_available": "",
     "theme": "",
     "language": "",
+    "backgroundSource": "",
+    "useImageBackground": "",
+    "useThemeBackground": "",
+    "backgroundImage": "",
+    "chooseBackgroundImage": "",
+    "noBackgroundImage": "",
     "ffmpegPath": "",
     "ffprobePath": "",
     "outputSuffix": "",
@@ -236,7 +242,9 @@
     },
     "checkUpdates": "",
     "save": "",
-    "cancel": ""
+    "cancel": "",
+    "glassOpacity": "Image Dimming",
+    "glassBlur": "Image Blur"
   },
   "watermark": {
     "title": "",
@@ -412,5 +420,8 @@
     "refresh": "",
     "lowBitrateWarning": "",
     "videoLoadError": ""
+  },
+  "network": {
+    "vpnProxyWarningMessage": ""
   }
 }

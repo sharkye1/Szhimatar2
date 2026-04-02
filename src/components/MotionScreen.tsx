@@ -144,7 +144,7 @@ export const MotionScreen: React.FC<MotionScreenProps> = ({ children, animationT
       exit={config.exit}
       transition={config.transition}
       style={{
-        background: theme.colors.background,
+        background: 'transparent',
         color: theme.colors.text,
         width: '100vw',
         height: '100vh',
@@ -165,7 +165,7 @@ export const MotionScreen: React.FC<MotionScreenProps> = ({ children, animationT
           pointerEvents: 'none',
           position: 'absolute',
           inset: 0,
-          background: theme.colors.background,
+          background: 'transparent',
         }}
       />
 

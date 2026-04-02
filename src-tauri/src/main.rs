@@ -6,8 +6,8 @@ use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use walkdir::WalkDir;
 use tauri::Manager;
+use walkdir::WalkDir;
 
 #[cfg(windows)]
 use winreg::enums::*;
@@ -25,6 +25,14 @@ struct Settings {
     ffmpeg_path: String,
     ffprobe_path: String,
     output_suffix: String,
+    #[serde(default)]
+    use_background_image: bool,
+    #[serde(default)]
+    background_image_path: String,
+    #[serde(default = "default_glass_opacity", rename = "glassOpacity")]
+    glass_opacity: f32,
+    #[serde(default = "default_glass_blur", rename = "glassBlur")]
+    glass_blur: f32,
     default_video_codec: String,
     default_audio_codec: String,
     #[serde(rename = "gpuAvailable")]
@@ -39,6 +47,14 @@ fn default_screen_animation() -> String {
     "default".to_string()
 }
 
+fn default_glass_opacity() -> f32 {
+    0.15
+}
+
+fn default_glass_blur() -> f32 {
+    12.0
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -47,6 +63,10 @@ impl Default for Settings {
             ffmpeg_path: "ffmpeg".to_string(),
             ffprobe_path: "ffprobe".to_string(),
             output_suffix: "_szhatoe".to_string(),
+            use_background_image: false,
+            background_image_path: "".to_string(),
+            glass_opacity: 0.15,
+            glass_blur: 12.0,
             default_video_codec: "h264".to_string(),
             default_audio_codec: "aac".to_string(),
             gpu_available: false,
@@ -70,21 +90,20 @@ fn ensure_app_dirs() -> Result<(), String> {
     let logs_dir = app_dir.join("logs");
     let stats_dir = app_dir.join("stats");
     let presets_dir = get_presets_dir();
-    
+
     fs::create_dir_all(&logs_dir).map_err(|e| e.to_string())?;
     fs::create_dir_all(&stats_dir).map_err(|e| e.to_string())?;
     fs::create_dir_all(&presets_dir).map_err(|e| e.to_string())?;
-    
+
     Ok(())
 }
 
 #[tauri::command]
 fn load_settings() -> Result<Settings, String> {
     let settings_path = get_app_data_dir().join("settings.json");
-    
+
     if settings_path.exists() {
-        let content = fs::read_to_string(&settings_path)
-            .map_err(|e| e.to_string())?;
+        let content = fs::read_to_string(&settings_path).map_err(|e| e.to_string())?;
         serde_json::from_str(&content).map_err(|e| e.to_string())
     } else {
         Ok(Settings::default())
@@ -94,9 +113,8 @@ fn load_settings() -> Result<Settings, String> {
 #[tauri::command]
 fn save_settings(settings: Settings) -> Result<(), String> {
     let settings_path = get_app_data_dir().join("settings.json");
-    let content = serde_json::to_string_pretty(&settings)
-        .map_err(|e| e.to_string())?;
-    
+    let content = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
+
     fs::write(&settings_path, content).map_err(|e| e.to_string())
 }
 
@@ -107,10 +125,13 @@ fn save_settings(settings: Settings) -> Result<(), String> {
 fn check_gpu_compatibility() -> Result<bool, String> {
     // Check for override first (for UI testing only)
     if let Some(override_config) = load_hardware_override() {
-        println!("[HARDWARE OVERRIDE] GPU Available: {}", override_config.gpu_available);
+        println!(
+            "[HARDWARE OVERRIDE] GPU Available: {}",
+            override_config.gpu_available
+        );
         return Ok(override_config.gpu_available);
     }
-    
+
     let config = load_ffmpeg_config();
     if config.ffmpeg_path.trim().is_empty() {
         return Err("FFmpeg path not configured".to_string());
@@ -155,11 +176,11 @@ fn detect_hardware_info() -> Result<HardwareInfo, String> {
             gpu_vendor: override_config.gpu_vendor,
         });
     }
-    
+
     // Use real hardware detection
     let cpu_vendor = detect_cpu_vendor();
     let gpu_vendor = detect_gpu_vendor();
-    
+
     Ok(HardwareInfo {
         cpu_vendor,
         gpu_vendor,
@@ -187,17 +208,19 @@ fn load_hardware_override() -> Option<HardwareOverride> {
     let config_path = std::env::current_dir()
         .ok()?
         .join(".hardware-override.json");
-    
+
     if !config_path.exists() {
         return None;
     }
-    
+
     let content = fs::read_to_string(config_path).ok()?;
     let override_config: HardwareOverride = serde_json::from_str(&content).ok()?;
-    
+
     if override_config.enabled {
-        println!("[HARDWARE OVERRIDE] Enabled: CPU={}, GPU={}", 
-                 override_config.cpu_vendor, override_config.gpu_vendor);
+        println!(
+            "[HARDWARE OVERRIDE] Enabled: CPU={}, GPU={}",
+            override_config.cpu_vendor, override_config.gpu_vendor
+        );
         Some(override_config)
     } else {
         None
@@ -209,13 +232,13 @@ fn detect_cpu_vendor() -> String {
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
-        
+
         // Use WMIC to get CPU info
         let output = Command::new("wmic")
             .creation_flags(CREATE_NO_WINDOW)
             .args(["cpu", "get", "name"])
             .output();
-        
+
         if let Ok(output) = output {
             let stdout = String::from_utf8_lossy(&output.stdout).to_lowercase();
             if stdout.contains("intel") {
@@ -225,7 +248,7 @@ fn detect_cpu_vendor() -> String {
             }
         }
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         if let Ok(content) = fs::read_to_string("/proc/cpuinfo") {
@@ -237,7 +260,7 @@ fn detect_cpu_vendor() -> String {
             }
         }
     }
-    
+
     "unknown".to_string()
 }
 
@@ -246,16 +269,20 @@ fn detect_gpu_vendor() -> String {
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
-        
+
         // Use WMIC to get GPU info
         let output = Command::new("wmic")
             .creation_flags(CREATE_NO_WINDOW)
             .args(["path", "win32_videocontroller", "get", "name"])
             .output();
-        
+
         if let Ok(output) = output {
             let stdout = String::from_utf8_lossy(&output.stdout).to_lowercase();
-            if stdout.contains("nvidia") || stdout.contains("geforce") || stdout.contains("rtx") || stdout.contains("gtx") {
+            if stdout.contains("nvidia")
+                || stdout.contains("geforce")
+                || stdout.contains("rtx")
+                || stdout.contains("gtx")
+            {
                 return "nvidia".to_string();
             } else if stdout.contains("amd") || stdout.contains("radeon") {
                 return "amd".to_string();
@@ -264,12 +291,11 @@ fn detect_gpu_vendor() -> String {
             }
         }
     }
-    
+
     #[cfg(target_os = "linux")]
     {
-        let output = Command::new("lspci")
-            .output();
-        
+        let output = Command::new("lspci").output();
+
         if let Ok(output) = output {
             let stdout = String::from_utf8_lossy(&output.stdout).to_lowercase();
             if stdout.contains("nvidia") {
@@ -279,7 +305,7 @@ fn detect_gpu_vendor() -> String {
             }
         }
     }
-    
+
     "unknown".to_string()
 }
 
@@ -296,7 +322,7 @@ fn write_log(message: String) -> Result<(), String> {
     let log_path = get_app_data_dir().join("logs").join("app.log");
     let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
     let log_entry = format!("[{}] {}\n", timestamp, message);
-    
+
     fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -312,26 +338,23 @@ fn write_log(message: String) -> Result<(), String> {
 #[tauri::command]
 fn get_logs_size() -> Result<u64, String> {
     let logs_dir = get_app_data_dir().join("logs");
-    
+
     // If directory doesn't exist, return 0
     if !logs_dir.exists() {
         return Ok(0);
     }
-    
+
     let mut total_size: u64 = 0;
-    
+
     // Walk through all files and subdirectories recursively
-    for entry in WalkDir::new(&logs_dir)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
+    for entry in WalkDir::new(&logs_dir).into_iter().filter_map(|e| e.ok()) {
         if entry.file_type().is_file() {
             if let Ok(metadata) = entry.metadata() {
                 total_size += metadata.len();
             }
         }
     }
-    
+
     Ok(total_size)
 }
 
@@ -339,12 +362,12 @@ fn get_logs_size() -> Result<u64, String> {
 #[tauri::command]
 fn get_logs_path() -> Result<String, String> {
     let logs_dir = get_app_data_dir().join("logs");
-    
+
     // Create directory if it doesn't exist
     if !logs_dir.exists() {
         fs::create_dir_all(&logs_dir).map_err(|e| e.to_string())?;
     }
-    
+
     logs_dir
         .to_str()
         .map(|s| s.to_string())
@@ -355,24 +378,24 @@ fn get_logs_path() -> Result<String, String> {
 #[tauri::command]
 fn clear_logs() -> Result<(), String> {
     let logs_dir = get_app_data_dir().join("logs");
-    
+
     // If directory doesn't exist, nothing to clear
     if !logs_dir.exists() {
         return Ok(());
     }
-    
+
     // Remove all contents but keep the directory
     for entry in fs::read_dir(&logs_dir).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
-        
+
         if path.is_file() {
             fs::remove_file(&path).map_err(|e| e.to_string())?;
         } else if path.is_dir() {
             fs::remove_dir_all(&path).map_err(|e| e.to_string())?;
         }
     }
-    
+
     Ok(())
 }
 
@@ -380,10 +403,10 @@ fn clear_logs() -> Result<(), String> {
 #[tauri::command]
 fn open_logs_folder() -> Result<(), String> {
     let logs_dir = get_app_data_dir().join("logs");
-    
+
     // Ensure the directory exists before opening
     fs::create_dir_all(&logs_dir).map_err(|e| e.to_string())?;
-    
+
     #[cfg(target_os = "windows")]
     {
         Command::new("explorer")
@@ -391,7 +414,7 @@ fn open_logs_folder() -> Result<(), String> {
             .spawn()
             .map_err(|e| e.to_string())?;
     }
-    
+
     #[cfg(target_os = "macos")]
     {
         Command::new("open")
@@ -399,7 +422,7 @@ fn open_logs_folder() -> Result<(), String> {
             .spawn()
             .map_err(|e| e.to_string())?;
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         Command::new("xdg-open")
@@ -407,7 +430,7 @@ fn open_logs_folder() -> Result<(), String> {
             .spawn()
             .map_err(|e| e.to_string())?;
     }
-    
+
     Ok(())
 }
 
@@ -415,14 +438,14 @@ fn open_logs_folder() -> Result<(), String> {
 #[tauri::command]
 fn show_in_explorer(file_path: String) -> Result<(), String> {
     use std::path::Path;
-    
+
     let path = Path::new(&file_path);
-    
+
     // Check if file exists
     if !path.exists() {
         return Err(format!("File not found: {}", file_path));
     }
-    
+
     #[cfg(target_os = "windows")]
     {
         // Use explorer.exe /select to highlight the file
@@ -431,7 +454,7 @@ fn show_in_explorer(file_path: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("Failed to open explorer: {}", e))?;
     }
-    
+
     #[cfg(target_os = "macos")]
     {
         // Use 'open -R' to reveal file in Finder
@@ -440,7 +463,7 @@ fn show_in_explorer(file_path: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| format!("Failed to open Finder: {}", e))?;
     }
-    
+
     #[cfg(target_os = "linux")]
     {
         // Try various Linux file managers
@@ -451,19 +474,15 @@ fn show_in_explorer(file_path: String) -> Result<(), String> {
             ("nemo", vec![&file_path]),
             ("thunar", vec![&file_path]),
         ];
-        
+
         let mut success = false;
         for (manager, args) in &managers {
-            if Command::new(manager)
-                .args(args.as_slice())
-                .spawn()
-                .is_ok()
-            {
+            if Command::new(manager).args(args.as_slice()).spawn().is_ok() {
                 success = true;
                 break;
             }
         }
-        
+
         if !success {
             // Fallback: open containing directory
             if let Some(parent) = path.parent() {
@@ -474,10 +493,9 @@ fn show_in_explorer(file_path: String) -> Result<(), String> {
             }
         }
     }
-    
+
     Ok(())
 }
-
 
 // ============================================================================
 // FFMPEG INTEGRATION
@@ -544,7 +562,7 @@ fn get_ffmpeg_config_path() -> PathBuf {
 
 fn load_ffmpeg_config() -> FfmpegConfig {
     let config_path = get_ffmpeg_config_path();
-    
+
     if config_path.exists() {
         if let Ok(content) = fs::read_to_string(&config_path) {
             if let Ok(config) = serde_json::from_str(&content) {
@@ -552,7 +570,7 @@ fn load_ffmpeg_config() -> FfmpegConfig {
             }
         }
     }
-    
+
     FfmpegConfig::default()
 }
 
@@ -560,10 +578,9 @@ fn save_ffmpeg_config(config: &FfmpegConfig) -> Result<(), String> {
     let config_path = get_ffmpeg_config_path();
     let content = serde_json::to_string_pretty(config)
         .map_err(|e| format!("Failed to serialize config: {}", e))?;
-    
-    fs::write(&config_path, content)
-        .map_err(|e| format!("Failed to write config: {}", e))?;
-    
+
+    fs::write(&config_path, content).map_err(|e| format!("Failed to write config: {}", e))?;
+
     Ok(())
 }
 
@@ -788,7 +805,10 @@ fn get_binary_version(binary_path: String) -> Result<VersionResult, String> {
     // Try to get version
     match get_binary_version_internal(&binary_path) {
         Some(version) => Ok(VersionResult { output: version }),
-        None => Err(format!("Cannot execute binary or get version: {}", binary_path)),
+        None => Err(format!(
+            "Cannot execute binary or get version: {}",
+            binary_path
+        )),
     }
 }
 
@@ -810,7 +830,7 @@ fn save_ffmpeg_paths(ffmpeg_path: String, ffprobe_path: String) -> Result<SaveRe
 #[tauri::command]
 fn load_ffmpeg_paths() -> Result<FfmpegPaths, String> {
     let config = load_ffmpeg_config();
-    
+
     Ok(FfmpegPaths {
         ffmpeg_path: config.ffmpeg_path,
         ffprobe_path: config.ffprobe_path,
@@ -821,7 +841,7 @@ fn load_ffmpeg_paths() -> Result<FfmpegPaths, String> {
 #[tauri::command]
 fn check_ffmpeg_status() -> Result<FfmpegStatus, String> {
     let config = load_ffmpeg_config();
-    
+
     let mut status = FfmpegStatus {
         ffmpeg_found: false,
         ffprobe_found: false,
@@ -872,7 +892,7 @@ fn deep_search(binary_name: &str, window: tauri::Window) -> Option<String> {
             .filter_entry(|e| {
                 let path = e.path();
                 let path_str = path.to_string_lossy().to_lowercase();
-                
+
                 if cfg!(windows) {
                     if path_str.contains("windows\\winsxs")
                         || path_str.contains("windows\\system32")
@@ -882,14 +902,14 @@ fn deep_search(binary_name: &str, window: tauri::Window) -> Option<String> {
                         return false;
                     }
                 }
-                
+
                 true
             });
 
         let mut checked_count = 0;
         for entry in walker.filter_map(|e| e.ok()) {
             let path = entry.path();
-            
+
             if path.file_name() == Some(std::ffi::OsStr::new(&exe_name)) {
                 if let Ok(abs_path) = path.canonicalize() {
                     let path_str = abs_path.to_string_lossy().to_string();
@@ -912,7 +932,9 @@ fn deep_search(binary_name: &str, window: tauri::Window) -> Option<String> {
 /// Fast search for FFmpeg - searches PATH and standard directories
 #[tauri::command]
 async fn search_ffmpeg_fast(window: tauri::Window) -> Result<FfmpegStatus, String> {
-    window.emit("ffmpeg-search-stage", "Searching for FFmpeg...").ok();
+    window
+        .emit("ffmpeg-search-stage", "Searching for FFmpeg...")
+        .ok();
 
     // Search for both binaries
     let ffmpeg_result = search_ffmpeg_single("ffmpeg".to_string())?;
@@ -921,8 +943,16 @@ async fn search_ffmpeg_fast(window: tauri::Window) -> Result<FfmpegStatus, Strin
     // If found, save to config
     if ffmpeg_result.found || ffprobe_result.found {
         let _ = save_ffmpeg_paths(
-            if ffmpeg_result.found { ffmpeg_result.path.clone() } else { String::new() },
-            if ffprobe_result.found { ffprobe_result.path.clone() } else { String::new() },
+            if ffmpeg_result.found {
+                ffmpeg_result.path.clone()
+            } else {
+                String::new()
+            },
+            if ffprobe_result.found {
+                ffprobe_result.path.clone()
+            } else {
+                String::new()
+            },
         );
     }
 
@@ -934,7 +964,7 @@ async fn search_ffmpeg_fast(window: tauri::Window) -> Result<FfmpegStatus, Strin
 async fn search_ffmpeg_deep(window: tauri::Window) -> Result<FfmpegStatus, String> {
     // First try fast search
     let fast_result = search_ffmpeg_fast(window.clone()).await?;
-    
+
     if fast_result.ffmpeg_found && fast_result.ffprobe_found {
         return Ok(fast_result);
     }
@@ -944,14 +974,18 @@ async fn search_ffmpeg_deep(window: tauri::Window) -> Result<FfmpegStatus, Strin
     let mut ffprobe_path = fast_result.ffprobe_path.clone();
 
     if !fast_result.ffmpeg_found {
-        window.emit("ffmpeg-search-stage", "Deep searching for ffmpeg...").ok();
+        window
+            .emit("ffmpeg-search-stage", "Deep searching for ffmpeg...")
+            .ok();
         if let Some(path) = deep_search("ffmpeg", window.clone()) {
             ffmpeg_path = path;
         }
     }
 
     if !fast_result.ffprobe_found {
-        window.emit("ffmpeg-search-stage", "Deep searching for ffprobe...").ok();
+        window
+            .emit("ffmpeg-search-stage", "Deep searching for ffprobe...")
+            .ok();
         if let Some(path) = deep_search("ffprobe", window.clone()) {
             ffprobe_path = path;
         }
@@ -1024,11 +1058,28 @@ fn parse_ffmpeg_progress_line(line: &str) -> Option<(u64, f64, String, String, f
     let bitrate_re = regex::Regex::new(r"bitrate=\s*(\S+)").ok()?;
     let speed_re = regex::Regex::new(r"speed=\s*([\d.]+)x").ok()?;
 
-    let frame = frame_re.captures(line)?.get(1)?.as_str().parse::<u64>().ok()?;
-    let fps = fps_re.captures(line).and_then(|c| c.get(1)?.as_str().parse::<f64>().ok()).unwrap_or(0.0);
-    let size = size_re.captures(line).and_then(|c| Some(c.get(1)?.as_str().to_string())).unwrap_or_default();
-    let bitrate = bitrate_re.captures(line).and_then(|c| Some(c.get(1)?.as_str().to_string())).unwrap_or_default();
-    let speed = speed_re.captures(line).and_then(|c| c.get(1)?.as_str().parse::<f64>().ok()).unwrap_or(0.0);
+    let frame = frame_re
+        .captures(line)?
+        .get(1)?
+        .as_str()
+        .parse::<u64>()
+        .ok()?;
+    let fps = fps_re
+        .captures(line)
+        .and_then(|c| c.get(1)?.as_str().parse::<f64>().ok())
+        .unwrap_or(0.0);
+    let size = size_re
+        .captures(line)
+        .and_then(|c| Some(c.get(1)?.as_str().to_string()))
+        .unwrap_or_default();
+    let bitrate = bitrate_re
+        .captures(line)
+        .and_then(|c| Some(c.get(1)?.as_str().to_string()))
+        .unwrap_or_default();
+    let speed = speed_re
+        .captures(line)
+        .and_then(|c| c.get(1)?.as_str().parse::<f64>().ok())
+        .unwrap_or(0.0);
 
     let time_seconds = if let Some(caps) = time_re.captures(line) {
         let hours: f64 = caps.get(1)?.as_str().parse().ok()?;
@@ -1044,12 +1095,9 @@ fn parse_ffmpeg_progress_line(line: &str) -> Option<(u64, f64, String, String, f
 
 /// Run FFmpeg render job with progress reporting
 #[tauri::command]
-async fn run_ffmpeg_render(
-    window: tauri::Window,
-    job: RenderJob,
-) -> Result<RenderResult, String> {
+async fn run_ffmpeg_render(window: tauri::Window, job: RenderJob) -> Result<RenderResult, String> {
     let config = load_ffmpeg_config();
-    
+
     if config.ffmpeg_path.is_empty() {
         return Err("FFmpeg path not configured".to_string());
     }
@@ -1063,16 +1111,19 @@ async fn run_ffmpeg_render(
 
     // Register process with ProcessManager and get owned child handle
     let mut child = {
-        let mut manager = PROCESS_MANAGER.lock()
+        let mut manager = PROCESS_MANAGER
+            .lock()
             .map_err(|e| format!("Failed to lock ProcessManager: {}", e))?;
 
-        let (child, pid) = manager.spawn_render(
-            job.job_id.clone(),
-            config.ffmpeg_path.clone(),
-            job.input_path.clone(),
-            job.output_path.clone(),
-            job.ffmpeg_args.clone(),
-        ).map_err(|e| format!("Failed to spawn render: {}", e))?;
+        let (child, pid) = manager
+            .spawn_render(
+                job.job_id.clone(),
+                config.ffmpeg_path.clone(),
+                job.input_path.clone(),
+                job.output_path.clone(),
+                job.ffmpeg_args.clone(),
+            )
+            .map_err(|e| format!("Failed to spawn render: {}", e))?;
 
         // eprintln!("📡 [run_ffmpeg_render] Process registered - Job: {}, PID: {}", job.job_id, pid);
         child
@@ -1081,7 +1132,7 @@ async fn run_ffmpeg_render(
     // Read stderr in a separate thread for progress
     let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
     let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
-    
+
     let job_id_stdout = job.job_id.clone();
     let job_id_stderr = job.job_id.clone();
     let job_id_final = job.job_id.clone();
@@ -1165,7 +1216,9 @@ async fn run_ffmpeg_render(
             if let Ok(line) = line {
                 // Parse traditional stderr output for backup progress
                 if line.contains("frame=") && line.contains("time=") {
-                    if let Some((frame, fps, size, bitrate, time, speed)) = parse_ffmpeg_progress_line(&line) {
+                    if let Some((frame, fps, size, bitrate, time, speed)) =
+                        parse_ffmpeg_progress_line(&line)
+                    {
                         let progress_percent = if duration > 0.0 {
                             (time / duration * 100.0).min(100.0)
                         } else {
@@ -1203,11 +1256,14 @@ async fn run_ffmpeg_render(
     });
 
     // Wait for process to complete
-    let status = child.wait().map_err(|e| format!("FFmpeg process error: {}", e))?;
+    let status = child
+        .wait()
+        .map_err(|e| format!("FFmpeg process error: {}", e))?;
 
     // Check if this job was stopped by user
     let was_stopped = {
-        let mut manager = PROCESS_MANAGER.lock()
+        let mut manager = PROCESS_MANAGER
+            .lock()
             .map_err(|e| format!("Failed to lock ProcessManager: {}", e))?;
         manager.take_stopped(&job_id_final)
     };
@@ -1218,7 +1274,8 @@ async fn run_ffmpeg_render(
 
     // Clean up process from manager
     {
-        let mut manager = PROCESS_MANAGER.lock()
+        let mut manager = PROCESS_MANAGER
+            .lock()
             .map_err(|e| format!("Failed to lock ProcessManager: {}", e))?;
         manager.remove_process(&job_id_final);
         // eprintln!("🧹 [run_ffmpeg_render] Process cleaned up - Job: {}", job_id_final);
@@ -1228,15 +1285,22 @@ async fn run_ffmpeg_render(
     let log_message = format!(
         "Render job {} completed with status: {}",
         job.job_id,
-        if status.success() { "success" } else { "failed" }
+        if status.success() {
+            "success"
+        } else {
+            "failed"
+        }
     );
     let _ = write_log(log_message);
 
     if was_stopped {
-        let _ = window_final.emit("render-stopped", &serde_json::json!({
-            "job_id": job.job_id,
-            "stopped_by": "user"
-        }));
+        let _ = window_final.emit(
+            "render-stopped",
+            &serde_json::json!({
+                "job_id": job.job_id,
+                "stopped_by": "user"
+            }),
+        );
 
         Ok(RenderResult {
             job_id: job.job_id,
@@ -1247,7 +1311,7 @@ async fn run_ffmpeg_render(
     } else if status.success() {
         // Emit complete event
         let _ = window_final.emit("render-complete", &job.job_id);
-        
+
         Ok(RenderResult {
             job_id: job.job_id,
             success: true,
@@ -1262,10 +1326,13 @@ async fn run_ffmpeg_render(
         };
 
         // Emit error event
-        let _ = window_final.emit("render-error", serde_json::json!({
-            "job_id": job.job_id,
-            "error": error_msg.clone()
-        }));
+        let _ = window_final.emit(
+            "render-error",
+            serde_json::json!({
+                "job_id": job.job_id,
+                "error": error_msg.clone()
+            }),
+        );
 
         Ok(RenderResult {
             job_id: job.job_id,
@@ -1287,18 +1354,21 @@ struct StopRenderRequest {
 #[tauri::command]
 fn stop_ffmpeg_render(window: tauri::Window, request: StopRenderRequest) -> Result<bool, String> {
     let job_id = request.job_id;
-    
+
     // Mark as stopped in ProcessManager
     let pid = {
         let mut manager = PROCESS_MANAGER.lock().map_err(|e| e.to_string())?;
         let marked = manager.stop_render(&job_id);
-        
+
         if !marked {
-            eprintln!("❌ [Tauri] stop_ffmpeg_render: Process not found - Job: {}", job_id);
+            eprintln!(
+                "❌ [Tauri] stop_ffmpeg_render: Process not found - Job: {}",
+                job_id
+            );
             manager.diagnose();
             return Ok(false);
         }
-        
+
         // Get PID for killing
         manager.get_pid(&job_id)
     };
@@ -1311,27 +1381,27 @@ fn stop_ffmpeg_render(window: tauri::Window, request: StopRenderRequest) -> Resu
             let _ = Command::new("taskkill")
                 .arg("/PID")
                 .arg(pid.to_string())
-                .arg("/F")  // Force kill
+                .arg("/F") // Force kill
                 .output();
         }
 
         #[cfg(not(target_os = "windows"))]
         {
             // On Unix/Linux, use kill command
-            let _ = Command::new("kill")
-                .arg("-9")
-                .arg(pid.to_string())
-                .output();
+            let _ = Command::new("kill").arg("-9").arg(pid.to_string()).output();
         }
 
         // eprintln!("✅ [Tauri] stop_ffmpeg_render killed process - Job: {}, PID: {}", job_id, pid);
     }
 
     // Emit event that render was stopped
-    let _ = window.emit("render-stopped", &serde_json::json!({
-        "job_id": job_id,
-        "stopped_by": "user"
-    }));
+    let _ = window.emit(
+        "render-stopped",
+        &serde_json::json!({
+            "job_id": job_id,
+            "stopped_by": "user"
+        }),
+    );
 
     Ok(true)
 }
@@ -1361,18 +1431,18 @@ fn stop_all_renders(window: tauri::Window) -> Result<(), String> {
 
         #[cfg(not(target_os = "windows"))]
         {
-            let _ = Command::new("kill")
-                .arg("-9")
-                .arg(pid.to_string())
-                .output();
+            let _ = Command::new("kill").arg("-9").arg(pid.to_string()).output();
         }
 
-        let _ = window.emit("render-stopped", &serde_json::json!({
-            "job_id": job_id,
-            "stopped_by": "user"
-        }));
+        let _ = window.emit(
+            "render-stopped",
+            &serde_json::json!({
+                "job_id": job_id,
+                "stopped_by": "user"
+            }),
+        );
     }
-    
+
     Ok(())
 }
 
@@ -1380,7 +1450,7 @@ fn stop_all_renders(window: tauri::Window) -> Result<(), String> {
 #[tauri::command]
 async fn get_video_duration(input_path: String) -> Result<f64, String> {
     let config = load_ffmpeg_config();
-    
+
     if config.ffprobe_path.is_empty() {
         return Err("FFprobe path not configured".to_string());
     }
@@ -1392,10 +1462,12 @@ async fn get_video_duration(input_path: String) -> Result<f64, String> {
         Command::new(&config.ffprobe_path)
             .creation_flags(CREATE_NO_WINDOW)
             .args([
-                "-v", "quiet",
-                "-print_format", "json",
+                "-v",
+                "quiet",
+                "-print_format",
+                "json",
                 "-show_format",
-                &input_path
+                &input_path,
             ])
             .output()
             .map_err(|e| format!("Failed to run FFprobe: {}", e))?
@@ -1404,10 +1476,12 @@ async fn get_video_duration(input_path: String) -> Result<f64, String> {
     #[cfg(not(target_os = "windows"))]
     let output = Command::new(&config.ffprobe_path)
         .args([
-            "-v", "quiet",
-            "-print_format", "json",
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
             "-show_format",
-            &input_path
+            &input_path,
         ])
         .output()
         .map_err(|e| format!("Failed to run FFprobe: {}", e))?;
@@ -1419,8 +1493,8 @@ async fn get_video_duration(input_path: String) -> Result<f64, String> {
     let json_str = String::from_utf8(output.stdout)
         .map_err(|e| format!("Failed to parse FFprobe output: {}", e))?;
 
-    let json: serde_json::Value = serde_json::from_str(&json_str)
-        .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+    let json: serde_json::Value =
+        serde_json::from_str(&json_str).map_err(|e| format!("Failed to parse JSON: {}", e))?;
 
     let duration = json["format"]["duration"]
         .as_str()
@@ -1435,11 +1509,11 @@ async fn get_video_duration(input_path: String) -> Result<f64, String> {
 fn write_render_log(job_id: String, message: String) -> Result<(), String> {
     let log_dir = get_app_data_dir().join("logs").join("renders");
     fs::create_dir_all(&log_dir).map_err(|e| e.to_string())?;
-    
+
     let log_path = log_dir.join(format!("{}.log", job_id));
     let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
     let log_entry = format!("[{}] {}\n", timestamp, message);
-    
+
     fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -1456,24 +1530,24 @@ fn write_render_log(job_id: String, message: String) -> Result<(), String> {
 #[tauri::command]
 fn list_presets() -> Result<Vec<String>, String> {
     let presets_dir = get_presets_dir();
-    
+
     if !presets_dir.exists() {
         return Ok(Vec::new());
     }
 
     let mut preset_names = Vec::new();
-    
+
     for entry in fs::read_dir(&presets_dir).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
-        
+
         if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("json") {
             if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
                 preset_names.push(name.to_string());
             }
         }
     }
-    
+
     preset_names.sort();
     Ok(preset_names)
 }
@@ -1482,14 +1556,13 @@ fn list_presets() -> Result<Vec<String>, String> {
 fn save_preset(name: String, content: String) -> Result<(), String> {
     let presets_dir = get_presets_dir();
     let preset_path = presets_dir.join(format!("{}.json", name));
-    
+
     // Validate JSON before saving
     serde_json::from_str::<serde_json::Value>(&content)
         .map_err(|e| format!("Invalid JSON: {}", e))?;
-    
-    fs::write(&preset_path, content)
-        .map_err(|e| format!("Failed to save preset: {}", e))?;
-    
+
+    fs::write(&preset_path, content).map_err(|e| format!("Failed to save preset: {}", e))?;
+
     Ok(())
 }
 
@@ -1497,27 +1570,25 @@ fn save_preset(name: String, content: String) -> Result<(), String> {
 fn load_preset(name: String) -> Result<String, String> {
     let presets_dir = get_presets_dir();
     let preset_path = presets_dir.join(format!("{}.json", name));
-    
+
     if !preset_path.exists() {
         return Err(format!("Preset '{}' not found", name));
     }
-    
-    fs::read_to_string(&preset_path)
-        .map_err(|e| format!("Failed to load preset: {}", e))
+
+    fs::read_to_string(&preset_path).map_err(|e| format!("Failed to load preset: {}", e))
 }
 
 #[tauri::command]
 fn delete_preset(name: String) -> Result<(), String> {
     let presets_dir = get_presets_dir();
     let preset_path = presets_dir.join(format!("{}.json", name));
-    
+
     if !preset_path.exists() {
         return Err(format!("Preset '{}' not found", name));
     }
-    
-    fs::remove_file(&preset_path)
-        .map_err(|e| format!("Failed to delete preset: {}", e))?;
-    
+
+    fs::remove_file(&preset_path).map_err(|e| format!("Failed to delete preset: {}", e))?;
+
     Ok(())
 }
 
@@ -1546,46 +1617,44 @@ fn get_default_statistics() -> serde_json::Value {
 #[tauri::command]
 fn load_statistics() -> Result<String, String> {
     let stats_path = get_stats_file_path();
-    
+
     // Create default file if doesn't exist
     if !stats_path.exists() {
         let default_stats = get_default_statistics();
         let json_str = serde_json::to_string_pretty(&default_stats)
             .map_err(|e| format!("Failed to serialize default stats: {}", e))?;
-        
+
         // Ensure directory exists
         if let Some(parent) = stats_path.parent() {
             fs::create_dir_all(parent).map_err(|e| format!("Failed to create stats dir: {}", e))?;
         }
-        
+
         fs::write(&stats_path, &json_str)
             .map_err(|e| format!("Failed to create stats file: {}", e))?;
-        
+
         return Ok(json_str);
     }
-    
+
     // Read existing file
-    fs::read_to_string(&stats_path)
-        .map_err(|e| format!("Failed to read statistics: {}", e))
+    fs::read_to_string(&stats_path).map_err(|e| format!("Failed to read statistics: {}", e))
 }
 
 /// Save render statistics to stats/stat.json
 #[tauri::command]
 fn save_statistics(content: String) -> Result<(), String> {
     let stats_path = get_stats_file_path();
-    
+
     // Validate JSON before saving
     serde_json::from_str::<serde_json::Value>(&content)
         .map_err(|e| format!("Invalid JSON: {}", e))?;
-    
+
     // Ensure directory exists
     if let Some(parent) = stats_path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("Failed to create stats dir: {}", e))?;
     }
-    
-    fs::write(&stats_path, &content)
-        .map_err(|e| format!("Failed to save statistics: {}", e))?;
-    
+
+    fs::write(&stats_path, &content).map_err(|e| format!("Failed to save statistics: {}", e))?;
+
     Ok(())
 }
 
@@ -1593,14 +1662,13 @@ fn save_statistics(content: String) -> Result<(), String> {
 #[tauri::command]
 fn clear_statistics() -> Result<(), String> {
     let stats_path = get_stats_file_path();
-    
+
     let default_stats = get_default_statistics();
     let json_str = serde_json::to_string_pretty(&default_stats)
         .map_err(|e| format!("Failed to serialize stats: {}", e))?;
-    
-    fs::write(&stats_path, &json_str)
-        .map_err(|e| format!("Failed to clear statistics: {}", e))?;
-    
+
+    fs::write(&stats_path, &json_str).map_err(|e| format!("Failed to clear statistics: {}", e))?;
+
     Ok(())
 }
 
@@ -1608,17 +1676,16 @@ fn clear_statistics() -> Result<(), String> {
 #[tauri::command]
 fn export_statistics(output_path: String) -> Result<(), String> {
     let stats_path = get_stats_file_path();
-    
+
     if !stats_path.exists() {
         return Err("No statistics to export".to_string());
     }
-    
-    let content = fs::read_to_string(&stats_path)
-        .map_err(|e| format!("Failed to read statistics: {}", e))?;
-    
-    fs::write(&output_path, &content)
-        .map_err(|e| format!("Failed to export statistics: {}", e))?;
-    
+
+    let content =
+        fs::read_to_string(&stats_path).map_err(|e| format!("Failed to read statistics: {}", e))?;
+
+    fs::write(&output_path, &content).map_err(|e| format!("Failed to export statistics: {}", e))?;
+
     Ok(())
 }
 
@@ -1651,7 +1718,9 @@ fn get_current_exe_path() -> Result<String, String> {
 }
 
 const CONTEXT_MENU_NAME: &str = "CompressWithSzhimatar";
-const VIDEO_EXTENSIONS: &[&str] = &[".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".mpeg", ".mpg", ".3gp"];
+const VIDEO_EXTENSIONS: &[&str] = &[
+    ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".mpeg", ".mpg", ".3gp",
+];
 
 /// Check if context menu is registered and valid
 #[tauri::command]
@@ -1660,48 +1729,60 @@ fn check_context_menu_status() -> Result<ContextMenuStatus, String> {
     {
         let exe_path = get_current_exe_path().unwrap_or_default();
         let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
-        
+
         // Check first extension (.mp4) as representative
         let test_ext = VIDEO_EXTENSIONS[0];
-        let key_path = format!(r"SystemFileAssociations\{}\shell\{}", test_ext, CONTEXT_MENU_NAME);
-        
+        let key_path = format!(
+            r"SystemFileAssociations\{}\shell\{}",
+            test_ext, CONTEXT_MENU_NAME
+        );
+
         match hkcr.open_subkey(&key_path) {
             Ok(key) => {
                 // Key exists, check command
                 let command_key = match key.open_subkey("command") {
                     Ok(k) => k,
-                    Err(_) => return Ok(ContextMenuStatus {
-                        enabled: false,
-                        registry_path: format!("HKEY_CLASSES_ROOT\\SystemFileAssociations\\<ext>\\shell\\{}", CONTEXT_MENU_NAME),
-                        exe_path,
-                        exe_valid: false,
-                        needs_admin: false,
-                    }),
+                    Err(_) => {
+                        return Ok(ContextMenuStatus {
+                            enabled: false,
+                            registry_path: format!(
+                                "HKEY_CLASSES_ROOT\\SystemFileAssociations\\<ext>\\shell\\{}",
+                                CONTEXT_MENU_NAME
+                            ),
+                            exe_path,
+                            exe_valid: false,
+                            needs_admin: false,
+                        })
+                    }
                 };
-                
+
                 let registered_cmd: String = command_key.get_value("").unwrap_or_default();
                 let exe_valid = registered_cmd.contains(&exe_path);
-                
+
                 Ok(ContextMenuStatus {
                     enabled: true,
-                    registry_path: format!("HKEY_CLASSES_ROOT\\SystemFileAssociations\\<ext>\\shell\\{}", CONTEXT_MENU_NAME),
+                    registry_path: format!(
+                        "HKEY_CLASSES_ROOT\\SystemFileAssociations\\<ext>\\shell\\{}",
+                        CONTEXT_MENU_NAME
+                    ),
                     exe_path,
                     exe_valid,
                     needs_admin: false,
                 })
             }
-            Err(_) => {
-                Ok(ContextMenuStatus {
-                    enabled: false,
-                    registry_path: format!("HKEY_CLASSES_ROOT\\SystemFileAssociations\\<ext>\\shell\\{}", CONTEXT_MENU_NAME),
-                    exe_path,
-                    exe_valid: false,
-                    needs_admin: false,
-                })
-            }
+            Err(_) => Ok(ContextMenuStatus {
+                enabled: false,
+                registry_path: format!(
+                    "HKEY_CLASSES_ROOT\\SystemFileAssociations\\<ext>\\shell\\{}",
+                    CONTEXT_MENU_NAME
+                ),
+                exe_path,
+                exe_valid: false,
+                needs_admin: false,
+            }),
         }
     }
-    
+
     #[cfg(not(windows))]
     {
         Err("Context menu is only supported on Windows".to_string())
@@ -1715,7 +1796,7 @@ fn add_context_menu() -> Result<(), String> {
     {
         let exe_path = get_current_exe_path()?;
         let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
-        
+
         // Helper to check for admin required error
         fn check_admin_error<T>(result: Result<T, std::io::Error>) -> Result<T, String> {
             result.map_err(|e| {
@@ -1727,31 +1808,34 @@ fn add_context_menu() -> Result<(), String> {
                 }
             })
         }
-        
+
         // Register for each video extension
         for ext in VIDEO_EXTENSIONS {
-            let key_path = format!(r"SystemFileAssociations\{}\shell\{}", ext, CONTEXT_MENU_NAME);
-            
+            let key_path = format!(
+                r"SystemFileAssociations\{}\shell\{}",
+                ext, CONTEXT_MENU_NAME
+            );
+
             // Create main key
             let (key, _) = check_admin_error(hkcr.create_subkey(&key_path))?;
-            
+
             // Set display name
             check_admin_error(key.set_value("", &"Сжать Сжиматором"))?;
-            
+
             // Set icon
             check_admin_error(key.set_value("Icon", &format!("{},0", exe_path)))?;
-            
+
             // Create command subkey
             let (command_key, _) = check_admin_error(key.create_subkey("command"))?;
-            
+
             // Set command
             let command = format!(r#""{}" "%1""#, exe_path);
             check_admin_error(command_key.set_value("", &command))?;
         }
-        
+
         Ok(())
     }
-    
+
     #[cfg(not(windows))]
     {
         Err("Context menu is only supported on Windows".to_string())
@@ -1764,30 +1848,33 @@ fn remove_context_menu() -> Result<(), String> {
     #[cfg(windows)]
     {
         let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
-        
+
         // Remove for each video extension
         for ext in VIDEO_EXTENSIONS {
             let shell_path = format!(r"SystemFileAssociations\{}\shell", ext);
-            
+
             // Try to open shell key with write access
             if let Ok(shell_key) = hkcr.open_subkey_with_flags(&shell_path, KEY_WRITE) {
                 // Try to delete the key tree, ignore if not exists
                 let _ = shell_key.delete_subkey_all(CONTEXT_MENU_NAME);
             }
         }
-        
+
         // Verify at least one was removed by checking if any still exist
         let test_ext = VIDEO_EXTENSIONS[0];
-        let key_path = format!(r"SystemFileAssociations\{}\shell\{}", test_ext, CONTEXT_MENU_NAME);
-        
+        let key_path = format!(
+            r"SystemFileAssociations\{}\shell\{}",
+            test_ext, CONTEXT_MENU_NAME
+        );
+
         if hkcr.open_subkey(&key_path).is_ok() {
             // Key still exists, probably need admin rights
             return Err("ADMIN_REQUIRED".to_string());
         }
-        
+
         Ok(())
     }
-    
+
     #[cfg(not(windows))]
     {
         Err("Context menu is only supported on Windows".to_string())
@@ -1798,8 +1885,8 @@ fn remove_context_menu() -> Result<(), String> {
 // SIMPLE UPDATE SYSTEM (NO SIGNING)
 // ============================================================================
 
+use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
-use sha2::{Sha256, Digest};
 
 /// Get updates directory path
 fn get_updates_dir() -> PathBuf {
@@ -1814,96 +1901,110 @@ async fn download_update(
     expected_hash: Option<String>,
 ) -> Result<serde_json::Value, String> {
     use std::io::Write;
-    
+
     // Create updates directory
     let updates_dir = get_updates_dir();
     fs::create_dir_all(&updates_dir).map_err(|e| format!("Failed to create updates dir: {}", e))?;
-    
+
     // Determine filename from URL
     let filename = url.split('/').last().unwrap_or("update.exe");
     let download_path = updates_dir.join(filename);
-    
+
     // Download file using blocking client in spawn_blocking
     let url_clone = url.clone();
     let download_path_clone = download_path.clone();
     let expected_hash_clone = expected_hash.clone();
     let app_handle_clone = app_handle.clone();
-    
+
     let result = tokio::task::spawn_blocking(move || {
         // Create HTTP client
         let client = reqwest::blocking::Client::builder()
             .timeout(std::time::Duration::from_secs(300))
             .build()
             .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
-        
+
         // Start download
-        let response = client.get(&url_clone)
+        let response = client
+            .get(&url_clone)
             .send()
             .map_err(|e| format!("Download request failed: {}", e))?;
-        
+
         if !response.status().is_success() {
-            return Err(format!("Download failed with status: {}", response.status()));
+            return Err(format!(
+                "Download failed with status: {}",
+                response.status()
+            ));
         }
-        
+
         let total_size = response.content_length().unwrap_or(0);
         let mut downloaded: u64 = 0;
-        
+
         // Create file
         let mut file = std::fs::File::create(&download_path_clone)
             .map_err(|e| format!("Failed to create file: {}", e))?;
-        
+
         // Create hasher for integrity check
         let mut hasher = Sha256::new();
-        
+
         // Read and write in chunks with progress
         let mut reader = response;
         let mut buffer = [0u8; 8192];
-        
+
         loop {
-            let bytes_read = reader.read(&mut buffer)
+            let bytes_read = reader
+                .read(&mut buffer)
                 .map_err(|e| format!("Failed to read response: {}", e))?;
-            
+
             if bytes_read == 0 {
                 break;
             }
-            
+
             file.write_all(&buffer[..bytes_read])
                 .map_err(|e| format!("Failed to write file: {}", e))?;
-            
+
             hasher.update(&buffer[..bytes_read]);
-            
+
             downloaded += bytes_read as u64;
-            
+
             // Emit progress event
-            let _ = app_handle_clone.emit_all("update-download-progress", serde_json::json!({
-                "downloaded": downloaded,
-                "total": total_size
-            }));
+            let _ = app_handle_clone.emit_all(
+                "update-download-progress",
+                serde_json::json!({
+                    "downloaded": downloaded,
+                    "total": total_size
+                }),
+            );
         }
-        
-        file.flush().map_err(|e| format!("Failed to flush file: {}", e))?;
+
+        file.flush()
+            .map_err(|e| format!("Failed to flush file: {}", e))?;
         drop(file);
-        
+
         // Verify hash if provided
         if let Some(expected) = expected_hash_clone {
             let hash = hex::encode(hasher.finalize());
             if hash.to_lowercase() != expected.to_lowercase() {
                 // Delete file if hash doesn't match
                 let _ = std::fs::remove_file(&download_path_clone);
-                return Err(format!("Hash mismatch: expected {}, got {}", expected, hash));
+                return Err(format!(
+                    "Hash mismatch: expected {}, got {}",
+                    expected, hash
+                ));
             }
         }
-        
+
         Ok(download_path_clone.to_string_lossy().to_string())
-    }).await.map_err(|e| format!("Task error: {}", e))?;
-    
+    })
+    .await
+    .map_err(|e| format!("Task error: {}", e))?;
+
     match result {
         Ok(path) => {
             // If it's a zip file, extract it
             if filename.ends_with(".zip") {
                 extract_update_zip(&PathBuf::from(&path))?;
             }
-            
+
             Ok(serde_json::json!({
                 "success": true,
                 "path": path
@@ -1912,43 +2013,42 @@ async fn download_update(
         Err(e) => Ok(serde_json::json!({
             "success": false,
             "error": e
-        }))
+        })),
     }
 }
 
 /// Extract zip file to updates directory
 fn extract_update_zip(zip_path: &PathBuf) -> Result<(), String> {
-    let file = std::fs::File::open(zip_path)
-        .map_err(|e| format!("Failed to open zip: {}", e))?;
-    
-    let mut archive = zip::ZipArchive::new(file)
-        .map_err(|e| format!("Failed to read zip: {}", e))?;
-    
+    let file = std::fs::File::open(zip_path).map_err(|e| format!("Failed to open zip: {}", e))?;
+
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|e| format!("Failed to read zip: {}", e))?;
+
     let updates_dir = get_updates_dir();
-    
+
     for i in 0..archive.len() {
-        let mut file = archive.by_index(i)
+        let mut file = archive
+            .by_index(i)
             .map_err(|e| format!("Failed to read zip entry: {}", e))?;
-        
+
         let name = file.name().to_string();
-        
+
         // Only extract .exe files
         if name.ends_with(".exe") {
-            let outpath = updates_dir.join(
-                std::path::Path::new(&name).file_name().unwrap_or_default()
-            );
-            
+            let outpath =
+                updates_dir.join(std::path::Path::new(&name).file_name().unwrap_or_default());
+
             let mut outfile = std::fs::File::create(&outpath)
                 .map_err(|e| format!("Failed to create extracted file: {}", e))?;
-            
+
             std::io::copy(&mut file, &mut outfile)
                 .map_err(|e| format!("Failed to extract file: {}", e))?;
         }
     }
-    
+
     // Remove zip after extraction
     let _ = std::fs::remove_file(zip_path);
-    
+
     Ok(())
 }
 
@@ -1956,23 +2056,24 @@ fn extract_update_zip(zip_path: &PathBuf) -> Result<(), String> {
 #[tauri::command]
 fn apply_update() -> Result<serde_json::Value, String> {
     let updates_dir = get_updates_dir();
-    
+
     // Find the new exe
     let new_exe = std::fs::read_dir(&updates_dir)
         .map_err(|e| format!("Failed to read updates dir: {}", e))?
         .filter_map(|e| e.ok())
         .find(|e| {
-            e.path().extension()
+            e.path()
+                .extension()
                 .map(|ext| ext == "exe")
                 .unwrap_or(false)
         })
         .ok_or("No update executable found")?;
-    
+
     let new_exe_path = new_exe.path();
-    
+
     // Get current exe path
-    let current_exe = std::env::current_exe()
-        .map_err(|e| format!("Failed to get current exe: {}", e))?;
+    let current_exe =
+        std::env::current_exe().map_err(|e| format!("Failed to get current exe: {}", e))?;
 
     // Create and run update script, then exit
     #[cfg(target_os = "windows")]
@@ -2005,7 +2106,7 @@ del \"%~f0\"",
 
         std::process::exit(0);
     }
-    
+
     #[cfg(not(target_os = "windows"))]
     {
         let script_path = updates_dir.join("update.sh");
@@ -2022,15 +2123,15 @@ rm -f "$0"
             current_exe.display(),
             current_exe.display()
         );
-        
+
         std::fs::write(&script_path, script_content)
             .map_err(|e| format!("Failed to create update script: {}", e))?;
-        
+
         std::process::Command::new("bash")
             .arg(&script_path)
             .spawn()
             .map_err(|e| format!("Failed to start update script: {}", e))?;
-        
+
         std::process::exit(0);
     }
 }
@@ -2046,10 +2147,12 @@ fn restart_app(app_handle: tauri::AppHandle) {
 #[tauri::command]
 fn get_cli_files() -> Vec<String> {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    
+
     // Filter to only video files that exist
-    let video_extensions = ["mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "m4v", "mpeg", "mpg", "3gp"];
-    
+    let video_extensions = [
+        "mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "m4v", "mpeg", "mpg", "3gp",
+    ];
+
     args.into_iter()
         .filter(|arg| {
             let path = std::path::Path::new(arg);
@@ -2079,9 +2182,9 @@ struct PreviewSettings {
     resampling_enabled: bool,
     resampling_intensity: u8,
     // NEW: Sync with final render parameters
-    bitrate: Option<String>,       // e.g. "2.6" for 2.6M
-    preset: Option<String>,        // e.g. "slow", "medium", "p7"
-    prefer_gpu: Option<bool>,      // Use NVENC if available
+    bitrate: Option<String>,  // e.g. "2.6" for 2.6M
+    preset: Option<String>,   // e.g. "slow", "medium", "p7"
+    prefer_gpu: Option<bool>, // Use NVENC if available
 }
 
 /// Extract a single frame from video at given time with current settings applied
@@ -2103,7 +2206,7 @@ async fn get_preview_frame(
 
     // Build filter chain
     let mut filters: Vec<String> = Vec::new();
-    
+
     // Resolution scaling
     if !settings.resolution.is_empty() && settings.resolution != "original" {
         let parts: Vec<&str> = settings.resolution.split('x').collect();
@@ -2124,9 +2227,12 @@ async fn get_preview_frame(
 
     // Build FFmpeg command with fast seeking (-ss before -i)
     let mut cmd_args: Vec<String> = vec![
-        "-ss".to_string(), format!("{:.3}", time_seconds),
-        "-i".to_string(), input_path.clone(),
-        "-vframes".to_string(), "1".to_string(),
+        "-ss".to_string(),
+        format!("{:.3}", time_seconds),
+        "-i".to_string(),
+        input_path.clone(),
+        "-vframes".to_string(),
+        "1".to_string(),
     ];
 
     if !filters.is_empty() {
@@ -2136,7 +2242,8 @@ async fn get_preview_frame(
 
     // Quality settings for preview
     cmd_args.extend([
-        "-q:v".to_string(), "2".to_string(),
+        "-q:v".to_string(),
+        "2".to_string(),
         "-y".to_string(),
         temp_file.to_string_lossy().to_string(),
     ]);
@@ -2165,14 +2272,14 @@ async fn get_preview_frame(
     }
 
     // Read file and encode to base64
-    let image_data = fs::read(&temp_file)
-        .map_err(|e| format!("Failed to read preview image: {}", e))?;
-    
+    let image_data =
+        fs::read(&temp_file).map_err(|e| format!("Failed to read preview image: {}", e))?;
+
     // Cleanup temp file
     let _ = fs::remove_file(&temp_file);
 
     // Return base64 encoded
-    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
     Ok(STANDARD.encode(&image_data))
 }
 
@@ -2212,13 +2319,13 @@ async fn get_preview_video(
 
     // Build filter chain - FPS FIRST to ensure it's applied
     let mut filters: Vec<String> = Vec::new();
-    
+
     // FPS filter FIRST - more reliable than -r parameter
     if !settings.fps.is_empty() {
         let fps: u32 = settings.fps.parse().unwrap_or(30);
         filters.push(format!("fps={}", fps));
     }
-    
+
     // Resolution scaling
     if !settings.resolution.is_empty() && settings.resolution != "original" {
         let parts: Vec<&str> = settings.resolution.split('x').collect();
@@ -2252,9 +2359,9 @@ async fn get_preview_video(
     filters.push("format=yuv420p".to_string());
 
     // Determine encoder based on codec and GPU preference
-    let use_nvenc = settings.prefer_gpu.unwrap_or(false) && 
-        (settings.codec == "h264" || settings.codec == "h265" || settings.codec == "hevc");
-    
+    let use_nvenc = settings.prefer_gpu.unwrap_or(false)
+        && (settings.codec == "h264" || settings.codec == "h265" || settings.codec == "hevc");
+
     let encoder = if use_nvenc {
         if settings.codec == "h265" || settings.codec == "hevc" {
             "hevc_nvenc"
@@ -2264,112 +2371,152 @@ async fn get_preview_video(
     } else {
         match settings.codec.as_str() {
             "h265" | "hevc" => "libx265",
-            _ => "libx264"
+            _ => "libx264",
         }
     };
 
     // Build FFmpeg command with fast seeking (-ss before -i)
     let mut cmd_args: Vec<String> = vec![
-        "-ss".to_string(), format!("{:.3}", time_seconds),
-        "-i".to_string(), input_path.clone(),
-        "-t".to_string(), format!("{:.1}", duration.min(5.0)), // Max 5 seconds for preview
-        "-c:v".to_string(), encoder.to_string(),
+        "-ss".to_string(),
+        format!("{:.3}", time_seconds),
+        "-i".to_string(),
+        input_path.clone(),
+        "-t".to_string(),
+        format!("{:.1}", duration.min(5.0)), // Max 5 seconds for preview
+        "-c:v".to_string(),
+        encoder.to_string(),
     ];
 
     // ========== IDENTICAL RATE CONTROL AS FINAL RENDER ==========
-    let has_bitrate = settings.bitrate.as_ref().map(|b| !b.is_empty() && b != "auto").unwrap_or(false);
+    let has_bitrate = settings
+        .bitrate
+        .as_ref()
+        .map(|b| !b.is_empty() && b != "auto")
+        .unwrap_or(false);
     let has_crf = !settings.crf.is_empty() && settings.crf != "auto";
 
     if use_nvenc {
         // NVENC rate control - MUST match RenderService.ts logic exactly
         if has_bitrate {
-            let bitrate_val: f64 = settings.bitrate.as_ref()
+            let bitrate_val: f64 = settings
+                .bitrate
+                .as_ref()
                 .and_then(|b| b.parse::<f64>().ok())
                 .unwrap_or(5.0)
                 .max(0.1)
                 .min(100.0);
-            
+
             // VBR mode with target bitrate
             // Use SMALL bufsize (500k) to make bitrate limit strict - shows honest artifacts
             cmd_args.extend([
-                "-rc".to_string(), "vbr".to_string(),
-                "-b:v".to_string(), format!("{}M", bitrate_val),
-                "-maxrate".to_string(), format!("{}M", bitrate_val),
-                "-bufsize".to_string(), "500k".to_string(),
+                "-rc".to_string(),
+                "vbr".to_string(),
+                "-b:v".to_string(),
+                format!("{}M", bitrate_val),
+                "-maxrate".to_string(),
+                format!("{}M", bitrate_val),
+                "-bufsize".to_string(),
+                "500k".to_string(),
             ]);
-            
+
             // If CRF is also set, use CQ as quality floor
             if has_crf {
                 let cq: i32 = settings.crf.parse().unwrap_or(23).max(0).min(51);
                 cmd_args.extend([
-                    "-cq".to_string(), cq.to_string(),
-                    "-qmin".to_string(), cq.to_string(),
-                    "-qmax".to_string(), cq.to_string(),
+                    "-cq".to_string(),
+                    cq.to_string(),
+                    "-qmin".to_string(),
+                    cq.to_string(),
+                    "-qmax".to_string(),
+                    cq.to_string(),
                 ]);
             }
         } else if has_crf {
             // CQ (Constant Quality) mode - NVENC equivalent of CRF
             let cq: i32 = settings.crf.parse().unwrap_or(23).max(0).min(51);
             cmd_args.extend([
-                "-rc".to_string(), "constqp".to_string(),
-                "-cq".to_string(), cq.to_string(),
-                "-qp".to_string(), cq.to_string(),
+                "-rc".to_string(),
+                "constqp".to_string(),
+                "-cq".to_string(),
+                cq.to_string(),
+                "-qp".to_string(),
+                cq.to_string(),
             ]);
         } else {
             // Default: CQ 23
             cmd_args.extend([
-                "-rc".to_string(), "constqp".to_string(),
-                "-cq".to_string(), "23".to_string(),
-                "-qp".to_string(), "23".to_string(),
+                "-rc".to_string(),
+                "constqp".to_string(),
+                "-cq".to_string(),
+                "23".to_string(),
+                "-qp".to_string(),
+                "23".to_string(),
             ]);
         }
-        
+
         // NVENC-specific optimizations (same as final render)
         cmd_args.extend([
-            "-spatial-aq".to_string(), "1".to_string(),
-            "-temporal-aq".to_string(), "1".to_string(),
+            "-spatial-aq".to_string(),
+            "1".to_string(),
+            "-temporal-aq".to_string(),
+            "1".to_string(),
         ]);
-        
+
         // Map preset for NVENC
-        let preset = settings.preset.as_ref().map(|p| p.as_str()).unwrap_or("medium");
+        let preset = settings
+            .preset
+            .as_ref()
+            .map(|p| p.as_str())
+            .unwrap_or("medium");
         let nvenc_preset = match preset {
             "ultrafast" => "p1",
-            "superfast" => "p2", 
+            "superfast" => "p2",
             "veryfast" => "p3",
             "faster" | "fast" => "p4",
             "medium" => "p5",
             "slow" => "p6",
             "slower" | "veryslow" | "placebo" => "p7",
             p if p.starts_with("p") => p,
-            _ => "p4"
+            _ => "p4",
         };
         cmd_args.extend([
-            "-preset".to_string(), nvenc_preset.to_string(),
-            "-tune".to_string(), "hq".to_string(),
+            "-preset".to_string(),
+            nvenc_preset.to_string(),
+            "-tune".to_string(),
+            "hq".to_string(),
         ]);
-        
     } else {
         // CPU encoders (libx264/libx265)
         if has_bitrate && has_crf {
             // CRF with bitrate cap - use SMALL bufsize for strict limit
             let crf: i32 = settings.crf.parse().unwrap_or(23).max(0).min(51);
-            let bitrate_val: f64 = settings.bitrate.as_ref()
+            let bitrate_val: f64 = settings
+                .bitrate
+                .as_ref()
                 .and_then(|b| b.parse::<f64>().ok())
                 .unwrap_or(5.0);
             cmd_args.extend([
-                "-crf".to_string(), crf.to_string(),
-                "-maxrate".to_string(), format!("{}M", bitrate_val),
-                "-bufsize".to_string(), "500k".to_string(),
+                "-crf".to_string(),
+                crf.to_string(),
+                "-maxrate".to_string(),
+                format!("{}M", bitrate_val),
+                "-bufsize".to_string(),
+                "500k".to_string(),
             ]);
         } else if has_bitrate {
             // Bitrate only - strict limit with small buffer
-            let bitrate_val: f64 = settings.bitrate.as_ref()
+            let bitrate_val: f64 = settings
+                .bitrate
+                .as_ref()
                 .and_then(|b| b.parse::<f64>().ok())
                 .unwrap_or(5.0);
             cmd_args.extend([
-                "-b:v".to_string(), format!("{}M", bitrate_val),
-                "-maxrate".to_string(), format!("{}M", bitrate_val),
-                "-bufsize".to_string(), "500k".to_string(),
+                "-b:v".to_string(),
+                format!("{}M", bitrate_val),
+                "-maxrate".to_string(),
+                format!("{}M", bitrate_val),
+                "-bufsize".to_string(),
+                "500k".to_string(),
             ]);
         } else if has_crf {
             let crf: i32 = settings.crf.parse().unwrap_or(23).max(0).min(51);
@@ -2377,11 +2524,29 @@ async fn get_preview_video(
         } else {
             cmd_args.extend(["-crf".to_string(), "23".to_string()]);
         }
-        
+
         // CPU preset - use same as final (not ultrafast!)
-        let preset = settings.preset.as_ref().map(|p| p.as_str()).unwrap_or("medium");
-        let valid_presets = ["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"];
-        let cpu_preset = if valid_presets.contains(&preset) { preset } else { "medium" };
+        let preset = settings
+            .preset
+            .as_ref()
+            .map(|p| p.as_str())
+            .unwrap_or("medium");
+        let valid_presets = [
+            "ultrafast",
+            "superfast",
+            "veryfast",
+            "faster",
+            "fast",
+            "medium",
+            "slow",
+            "slower",
+            "veryslow",
+        ];
+        let cpu_preset = if valid_presets.contains(&preset) {
+            preset
+        } else {
+            "medium"
+        };
         cmd_args.extend(["-preset".to_string(), cpu_preset.to_string()]);
     }
 
@@ -2398,14 +2563,20 @@ async fn get_preview_video(
     // Output settings
     cmd_args.extend([
         "-an".to_string(),
-        "-pix_fmt".to_string(), "yuv420p".to_string(),
-        "-movflags".to_string(), "+faststart".to_string(),
+        "-pix_fmt".to_string(),
+        "yuv420p".to_string(),
+        "-movflags".to_string(),
+        "+faststart".to_string(),
         "-y".to_string(),
         temp_file.to_string_lossy().to_string(),
     ]);
 
     // Log FULL command for debugging - visible in Tauri console
-    let full_cmd = format!("[PREVIEW CMD FULL]: {} {}", config.ffmpeg_path, cmd_args.join(" "));
+    let full_cmd = format!(
+        "[PREVIEW CMD FULL]: {} {}",
+        config.ffmpeg_path,
+        cmd_args.join(" ")
+    );
     println!("{}", full_cmd);
     // Also log to stderr so it appears in DevTools
     eprintln!("{}", full_cmd);
@@ -2434,22 +2605,24 @@ async fn get_preview_video(
     }
 
     // Validate output file exists and has content
-    let metadata = std::fs::metadata(&temp_file)
-        .map_err(|e| format!("Preview file not created: {}", e))?;
-    
+    let metadata =
+        std::fs::metadata(&temp_file).map_err(|e| format!("Preview file not created: {}", e))?;
+
     if metadata.len() == 0 {
         return Err("Preview generation failed: output file is empty".to_string());
     }
 
     // Small delay to ensure file is fully flushed to disk and OS releases handles
     std::thread::sleep(std::time::Duration::from_millis(50));
-    
+
     // Verify file is still accessible after delay
-    let final_size = std::fs::metadata(&temp_file)
-        .map(|m| m.len())
-        .unwrap_or(0);
-    
-    println!("[Preview] Output file ready: {} bytes at {}", final_size, temp_file.display());
+    let final_size = std::fs::metadata(&temp_file).map(|m| m.len()).unwrap_or(0);
+
+    println!(
+        "[Preview] Output file ready: {} bytes at {}",
+        final_size,
+        temp_file.display()
+    );
 
     Ok(temp_file.to_string_lossy().to_string())
 }
@@ -2469,9 +2642,12 @@ async fn get_video_info_for_preview(input_path: String) -> Result<VideoPreviewIn
         Command::new(&config.ffprobe_path)
             .creation_flags(CREATE_NO_WINDOW)
             .args([
-                "-v", "quiet",
-                "-show_entries", "format=duration:stream=width,height,r_frame_rate",
-                "-of", "json",
+                "-v",
+                "quiet",
+                "-show_entries",
+                "format=duration:stream=width,height,r_frame_rate",
+                "-of",
+                "json",
                 &input_path,
             ])
             .output()
@@ -2481,9 +2657,12 @@ async fn get_video_info_for_preview(input_path: String) -> Result<VideoPreviewIn
     #[cfg(not(target_os = "windows"))]
     let output = Command::new(&config.ffprobe_path)
         .args([
-            "-v", "quiet",
-            "-show_entries", "format=duration:stream=width,height,r_frame_rate",
-            "-of", "json",
+            "-v",
+            "quiet",
+            "-show_entries",
+            "format=duration:stream=width,height,r_frame_rate",
+            "-of",
+            "json",
             &input_path,
         ])
         .output()
@@ -2522,12 +2701,343 @@ struct VideoPreviewInfo {
     height: u32,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct NetworkProxyVpnStatus {
+    proxy_enabled: bool,
+    proxy_details: Vec<String>,
+    vpn_likely_active: bool,
+    vpn_interfaces: Vec<String>,
+    clash_likely_active: bool,
+    clash_details: Vec<String>,
+    warning_needed: bool,
+}
+
+#[cfg(windows)]
+fn detect_proxy_settings_windows() -> (bool, Vec<String>) {
+    let mut details = Vec::new();
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+
+    if let Ok(internet_settings) =
+        hkcu.open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")
+    {
+        let proxy_enable: u32 = internet_settings.get_value("ProxyEnable").unwrap_or(0);
+        let proxy_server: String = internet_settings
+            .get_value("ProxyServer")
+            .unwrap_or_default();
+        let auto_config_url: String = internet_settings
+            .get_value("AutoConfigURL")
+            .unwrap_or_default();
+
+        if proxy_enable != 0 {
+            if proxy_server.trim().is_empty() {
+                details.push("System proxy is enabled".to_string());
+            } else {
+                details.push(format!("System proxy: {}", proxy_server));
+            }
+        }
+
+        if !auto_config_url.trim().is_empty() {
+            details.push(format!("Auto proxy script (PAC): {}", auto_config_url));
+        }
+    }
+
+    for env_name in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"] {
+        if let Ok(val) = std::env::var(env_name) {
+            if !val.trim().is_empty() {
+                details.push(format!("{}={}", env_name, val));
+            }
+        }
+    }
+
+    let enabled = !details.is_empty();
+    (enabled, details)
+}
+
+#[cfg(windows)]
+fn detect_vpn_interfaces_windows() -> Vec<String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+    let script = "$adapters = Get-NetAdapter -ErrorAction SilentlyContinue | Select-Object Name, InterfaceDescription, Status; $adapters | ConvertTo-Json -Compress";
+
+    let output = Command::new("powershell")
+        .creation_flags(CREATE_NO_WINDOW)
+        .args(["-NoProfile", "-Command", script])
+        .output();
+
+    let keywords = [
+        "vpn",
+        "wireguard",
+        "wg",
+        "openvpn",
+        "tap",
+        "tun",
+        "wintun",
+        "ppp",
+        "pptp",
+        "l2tp",
+        "ikev2",
+        "clash",
+        "mihomo",
+        "nordlynx",
+        "mullvad",
+        "proton",
+        "outline",
+        "cisco",
+        "forticlient",
+        "anyconnect",
+        "zerotier",
+        "tailscale",
+        "hamachi",
+    ];
+
+    let mut matches = Vec::new();
+
+    let Ok(output) = output else {
+        return matches;
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if stdout.is_empty() {
+        return matches;
+    }
+
+    let parse_adapter = |item: &serde_json::Value, acc: &mut Vec<String>| {
+        let status = item
+            .get("Status")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .to_lowercase();
+
+        if status != "up" {
+            return;
+        }
+
+        let name = item
+            .get("Name")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+
+        let description = item
+            .get("InterfaceDescription")
+            .and_then(|s| s.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+
+        let haystack = format!("{} {}", name.to_lowercase(), description.to_lowercase());
+        if keywords.iter().any(|k| haystack.contains(k)) {
+            if description.is_empty() {
+                acc.push(name);
+            } else if name.is_empty() {
+                acc.push(description);
+            } else {
+                acc.push(format!("{} ({})", name, description));
+            }
+        }
+    };
+
+    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+        if let Some(items) = json.as_array() {
+            for item in items {
+                parse_adapter(item, &mut matches);
+            }
+        } else if json.is_object() {
+            parse_adapter(&json, &mut matches);
+        }
+    }
+
+    matches.sort();
+    matches.dedup();
+    matches
+}
+
+#[cfg(windows)]
+fn detect_clash_activity_windows() -> Vec<String> {
+    use std::collections::HashMap;
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+    let mut details: Vec<String> = Vec::new();
+    let clash_ports = [7890_u16, 7891, 7892, 7897, 9090, 9091, 9097];
+    let clash_keywords = [
+        "clash",
+        "mihomo",
+        "metacubex",
+        "verge",
+        "nekoray",
+        "flclash",
+    ];
+
+    let process_output = Command::new("powershell")
+        .creation_flags(CREATE_NO_WINDOW)
+        .args([
+            "-NoProfile",
+            "-Command",
+            "$p = Get-Process -ErrorAction SilentlyContinue | Select-Object Id, ProcessName; $p | ConvertTo-Json -Compress",
+        ])
+        .output();
+
+    let mut process_map: HashMap<u32, String> = HashMap::new();
+    if let Ok(output) = process_output {
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+            let mut push_proc = |item: &serde_json::Value| {
+                let pid = item.get("Id").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                let name = item
+                    .get("ProcessName")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+
+                if pid > 0 && !name.is_empty() {
+                    process_map.insert(pid, name.clone());
+                    let lname = name.to_lowercase();
+                    if clash_keywords.iter().any(|k| lname.contains(k)) {
+                        details.push(format!(
+                            "Clash-related process is running: {} (PID {})",
+                            name, pid
+                        ));
+                    }
+                }
+            };
+
+            if let Some(items) = json.as_array() {
+                for item in items {
+                    push_proc(item);
+                }
+            } else if json.is_object() {
+                push_proc(&json);
+            }
+        }
+    }
+
+    let netstat_output = Command::new("netstat")
+        .creation_flags(CREATE_NO_WINDOW)
+        .args(["-ano", "-p", "tcp"])
+        .output();
+
+    if let Ok(output) = netstat_output {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        for line in stdout.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || !trimmed.contains("LISTENING") {
+                continue;
+            }
+
+            let cols: Vec<&str> = trimmed.split_whitespace().collect();
+            if cols.len() < 5 {
+                continue;
+            }
+
+            let local_addr = cols[1];
+            let pid_str = cols[4];
+            let pid = pid_str.parse::<u32>().unwrap_or(0);
+
+            let Some(port_str) = local_addr.rsplit(':').next() else {
+                continue;
+            };
+            let Ok(port) = port_str.parse::<u16>() else {
+                continue;
+            };
+
+            if !clash_ports.contains(&port) {
+                continue;
+            }
+
+            let process_name = process_map
+                .get(&pid)
+                .cloned()
+                .unwrap_or_else(|| "unknown".to_string());
+
+            details.push(format!(
+                "Clash-like local proxy port {} is LISTENING (PID {}, process {})",
+                port, pid, process_name
+            ));
+        }
+    }
+
+    details.sort();
+    details.dedup();
+    details
+}
+
+#[tauri::command]
+fn check_network_proxy_vpn_status() -> Result<NetworkProxyVpnStatus, String> {
+    #[cfg(windows)]
+    {
+        let (proxy_enabled, proxy_details) = detect_proxy_settings_windows();
+        let vpn_interfaces = detect_vpn_interfaces_windows();
+        let clash_details = detect_clash_activity_windows();
+        let vpn_likely_active = !vpn_interfaces.is_empty();
+        let clash_likely_active = !clash_details.is_empty();
+
+        if proxy_enabled {
+            let details = if proxy_details.is_empty() {
+                "no details".to_string()
+            } else {
+                proxy_details.join(" | ")
+            };
+            let _ = write_log(format!(
+                "[NETWORK CHECK] Proxy indicator detected via system/env: {}",
+                details
+            ));
+        }
+
+        if vpn_likely_active {
+            let _ = write_log(format!(
+                "[NETWORK CHECK] VPN-like adapter(s) UP: {}",
+                vpn_interfaces.join(" | ")
+            ));
+        }
+
+        if clash_likely_active {
+            let _ = write_log(format!(
+                "[NETWORK CHECK] Clash-core indicator(s): {}",
+                clash_details.join(" | ")
+            ));
+        }
+
+        if !proxy_enabled && !vpn_likely_active && !clash_likely_active {
+            let _ =
+                write_log("[NETWORK CHECK] No active proxy/VPN/Clash indicators found".to_string());
+        }
+
+        Ok(NetworkProxyVpnStatus {
+            proxy_enabled,
+            proxy_details,
+            vpn_likely_active,
+            vpn_interfaces,
+            clash_likely_active,
+            clash_details,
+            warning_needed: proxy_enabled || vpn_likely_active || clash_likely_active,
+        })
+    }
+
+    #[cfg(not(windows))]
+    {
+        Ok(NetworkProxyVpnStatus {
+            proxy_enabled: false,
+            proxy_details: Vec::new(),
+            vpn_likely_active: false,
+            vpn_interfaces: Vec::new(),
+            clash_likely_active: false,
+            clash_details: Vec::new(),
+            warning_needed: false,
+        })
+    }
+}
+
 fn main() {
     // Ensure app directories exist
     if let Err(e) = ensure_app_dirs() {
         eprintln!("Failed to create app directories: {}", e);
     }
-    
+
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             load_settings,
@@ -2580,6 +3090,8 @@ fn main() {
             get_preview_frame,
             get_preview_video,
             get_video_info_for_preview,
+            // Network safety checks
+            check_network_proxy_vpn_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

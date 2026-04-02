@@ -223,6 +223,12 @@
     "update_available": "Update Available",
     "theme": "Theme",
     "language": "Language",
+    "backgroundSource": "Background Source",
+    "useImageBackground": "Use image as background",
+    "useThemeBackground": "Use theme color scheme as background",
+    "backgroundImage": "Background Image",
+    "chooseBackgroundImage": "Choose image",
+    "noBackgroundImage": "No image selected",
     "ffmpegPath": "FFmpeg Path",
     "ffprobePath": "FFprobe Path",
     "outputSuffix": "Output File Suffix",
@@ -236,7 +242,9 @@
     },
     "checkUpdates": "Check for Updates",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "glassOpacity": "Image Dimming",
+    "glassBlur": "Image Blur"
   },
   "watermark": {
     "title": "Watermark Settings",
@@ -380,6 +388,9 @@
     "errorRemoving": "Error removing from context menu",
     "windowsOnly": "Context menu is only available on Windows"
   },
+  "network": {
+    "vpnProxyWarningMessage": "An active proxy/VPN connection was detected. It is recommended to disable it so the app works more reliably and avoids network-related errors."
+  },
   "history": {
     "re_render_overwrite": "Re-render and overwrite",
     "re_render_new": "Re-render as new version"
@@ -412,9 +423,5 @@
     "refresh": "Refresh Preview",
     "lowBitrateWarning": "Low bitrate for high FPS. Recommend ≥6M for NVENC to avoid compression artifacts.",
     "videoLoadError": "Failed to load video preview. Try refreshing."
-  },
-  "history": {
-    "re_render_overwrite": "Re-render and overwrite",
-    "re_render_new": "Re-render as new version"
   }
 }

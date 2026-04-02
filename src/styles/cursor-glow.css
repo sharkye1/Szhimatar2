@@ -1,0 +1,83 @@
+﻿/* cursor-glow.css */
+
+.cursor-glow,
+.cursor-aura {
+    position: fixed;
+    pointer-events: none;
+    z-index: 1;
+    mix-blend-mode: screen;
+    transform-origin: center center;
+    will-change: translate, opacity, scale;
+}
+
+/* Core glow: smaller, brighter */
+.cursor-glow {
+    top: -150px;
+    left: -150px;
+    width: 300px;
+    height: 300px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(var(--primary-rgb), 0.2) 0%, transparent 60%);
+    transition: opacity 0.3s ease-out, scale 0.3s ease-out;
+    opacity: 0.9;
+    scale: 1;
+}
+
+/* Aura: larger, softer */
+.cursor-aura {
+    top: -300px;
+    left: -300px;
+    width: 600px;
+    height: 600px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(var(--primary-rgb), 0.08) 0%, transparent 65%);
+    transition: opacity 0.5s ease-out, scale 0.5s ease-out;
+    opacity: 0.5;
+    scale: 1;
+}
+
+/* States during movement: keep them attached, just shrink slightly */
+.cursor-glow.moving {
+    opacity: 0.8;
+    scale: 0.7;
+    /* Compress nicely while moving */
+}
+
+.cursor-aura.moving {
+    opacity: 0.3;
+    scale: 0.8;
+    /* Keep the aura tight but visible */
+}
+
+/* Idle pulse animations (AFK) -> Expands and pulses */
+.cursor-glow.idle {
+    animation: pulse-core 3s ease-in-out 0.1s infinite alternate;
+}
+
+.cursor-aura.idle {
+    animation: pulse-aura 4s ease-in-out 0.1s infinite alternate;
+}
+
+@keyframes pulse-core {
+    0% {
+        scale: 1;
+        opacity: 0.9;
+    }
+
+    100% {
+        scale: 1.25;
+        opacity: 0.7;
+    }
+}
+
+@keyframes pulse-aura {
+    0% {
+        scale: 1;
+        opacity: 0.5;
+    }
+
+    100% {
+        scale: 1.15;
+        opacity: 0.3;
+    }
+}

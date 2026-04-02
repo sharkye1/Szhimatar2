@@ -223,6 +223,12 @@
     "update_available": "Dostupno Ažuriranje",
     "theme": "Tema",
     "language": "Jazyk",
+    "backgroundSource": "Istočnik fonu",
+    "useImageBackground": "Ispolzovati izobraženje jak fon",
+    "useThemeBackground": "Ispolzovati cvetovu shemu jak fon",
+    "backgroundImage": "Fonovo izobraženje",
+    "chooseBackgroundImage": "Vybrati izobraženje",
+    "noBackgroundImage": "Izobraženje ne vybrano",
     "ffmpegPath": "FFmpeg put",
     "ffprobePath": "FFprobe put",
     "outputSuffix": "Sufiks izhodnyh fajlov",
@@ -236,7 +242,9 @@
     },
     "checkUpdates": "Proveriti obnovy",
     "save": "Sahraniti",
-    "cancel": "Otkazati"
+    "cancel": "Otkazati",
+    "glassOpacity": "Image Dimming",
+    "glassBlur": "Image Blur"
   },
   "watermark": {
     "title": "Nastavenja vodoznaka",
@@ -412,5 +420,8 @@
     "refresh": "Obnoviti Predogled",
     "lowBitrateWarning": "Low bitrate for high FPS. Recommend ≥6M for NVENC to avoid compression artifacts.",
     "videoLoadError": "Nemožno zašaržiti predogled. Ponoviti."
+  },
+  "network": {
+    "vpnProxyWarningMessage": "Detected an active proxy/VPN connection. It is recommended to disable it so the app works more reliably and avoids network-related errors."
   }
 }

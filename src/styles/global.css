@@ -44,11 +44,16 @@ body {
   left: 0;
   width: 100vw;
   height: 100vh;
-  z-index: -1;
+  z-index: 0;
   pointer-events: none;
   background-size: 200% 200%;
   background-position: center;
   animation: gradientShift 15s ease infinite;
+}
+
+.app-background.has-image-background {
+  filter: blur(var(--bg-image-blur, 0px)) brightness(var(--bg-image-brightness, 100%));
+  transform: scale(var(--bg-image-scale, 1));
 }
 
 @keyframes gradientShift {
@@ -75,11 +80,15 @@ body {
   background: rgba(var(--theme-bg-rgb), var(--bg-overlay-opacity, 0.4));
 }
 
+.app-background.has-image-background::after {
+  background: transparent;
+}
+
 /* ========== UNIVERSAL GLASS ELEMENT ========== */
 .glass-element {
   background: rgba(var(--theme-bg-rgb), var(--glass-opacity, 0.15));
-  backdrop-filter: blur(12px) saturate(1.2);
-  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  backdrop-filter: blur(var(--glass-blur, 12px)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--glass-blur, 12px)) saturate(1.2);
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.35),
@@ -88,9 +97,9 @@ body {
 }
 
 .glass-element-light {
-  background: rgba(var(--theme-bg-rgb), 0.08);
-  backdrop-filter: blur(8px) saturate(1.1);
-  -webkit-backdrop-filter: blur(8px) saturate(1.1);
+  background: rgba(var(--theme-bg-rgb), var(--glass-opacity-light, 0.08));
+  backdrop-filter: blur(var(--glass-blur-light, 8px)) saturate(1.1);
+  -webkit-backdrop-filter: blur(var(--glass-blur-light, 8px)) saturate(1.1);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow:
     0 4px 16px rgba(0, 0, 0, 0.2),

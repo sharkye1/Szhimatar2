@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
+import { open } from '@tauri-apps/api/dialog';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettings, ScreenAnimationType } from '../contexts/SettingsContext';
@@ -16,12 +17,27 @@ interface GeneralSettingsProps {
 
 const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
   const { t, setLanguage: setAppLanguage } = useLanguage();
-  const { theme, setTheme: setAppTheme } = useTheme();
+  const {
+    theme,
+    setTheme: setAppTheme,
+    useImageBackground: appUseImageBackground,
+    backgroundImagePath: appBackgroundImagePath,
+    glassOpacity: appGlassOpacity,
+    glassBlur: appGlassBlur,
+    setUseImageBackground: setAppUseImageBackground,
+    setBackgroundImagePath: setAppBackgroundImagePath,
+    setGlassOpacity: setAppGlassOpacity,
+    setGlassBlur: setAppGlassBlur,
+  } = useTheme();
   const { screenAnimation, setScreenAnimation } = useSettings();
-  
+
   const [themeName, setThemeName] = useState('light');
   const [language, setLanguage] = useState('ru');
   const [outputSuffix, setOutputSuffix] = useState('_szhatoe');
+  const [useImageBackground, setUseImageBackground] = useState<boolean>(appUseImageBackground);
+  const [backgroundImagePath, setBackgroundImagePath] = useState<string>(appBackgroundImagePath);
+  const [glassOpacity, setGlassOpacity] = useState<number>(appGlassOpacity);
+  const [glassBlur, setGlassBlur] = useState<number>(appGlassBlur);
   const [screenAnimationLocal, setScreenAnimationLocal] = useState<ScreenAnimationType>(screenAnimation);
   const [gpuAvailable, setGpuAvailable] = useState<boolean>(false);
   const [showFfmpegManager, setShowFfmpegManager] = useState(false);
@@ -54,12 +70,44 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
     };
   }, []);
 
+  // Live preview for background effects
+  useEffect(() => {
+    if (!useImageBackground) return;
+    const root = document.documentElement;
+    const imgBrightness = Math.max(0, 100 - glassOpacity);
+    root.style.setProperty('--bg-image-brightness', `${imgBrightness}%`);
+  }, [glassOpacity, useImageBackground]);
+
+  useEffect(() => {
+    if (!useImageBackground) return;
+    const root = document.documentElement;
+    root.style.setProperty('--bg-image-blur', `${glassBlur}px`);
+    const scale = 1 + (glassBlur * 0.003);
+    root.style.setProperty('--bg-image-scale', `${scale}`);
+  }, [glassBlur, useImageBackground]);
+
+  useEffect(() => {
+    return () => {
+      // Revert live preview if closed without saving
+      const root = document.documentElement;
+      const imgBrightness = Math.max(0, 100 - appGlassOpacity);
+      root.style.setProperty('--bg-image-brightness', `${imgBrightness}%`);
+      root.style.setProperty('--bg-image-blur', `${appGlassBlur}px`);
+      const scale = 1 + (appGlassBlur * 0.003);
+      root.style.setProperty('--bg-image-scale', `${scale}`);
+    };
+  }, [appGlassOpacity, appGlassBlur]);
+
   const loadSettings = async () => {
     try {
       const settings = await invoke<any>('load_settings');
       setThemeName(settings.theme);
       setLanguage(settings.language);
       setOutputSuffix(settings.output_suffix);
+      setUseImageBackground(!!settings.use_background_image);
+      setBackgroundImagePath(settings.background_image_path || '');
+      if (settings.glassOpacity !== undefined) setGlassOpacity(settings.glassOpacity);
+      if (settings.glassBlur !== undefined) setGlassBlur(settings.glassBlur);
       setGpuAvailable(!!settings.gpuAvailable);
       if (settings.screenAnimation) {
         setScreenAnimationLocal(settings.screenAnimation as ScreenAnimationType);
@@ -188,14 +236,21 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
           theme: themeName,
           language,
           output_suffix: outputSuffix,
+          use_background_image: useImageBackground,
+          background_image_path: backgroundImagePath,
+          glassOpacity: glassOpacity,
+          glassBlur: glassBlur,
           screenAnimation: screenAnimationLocal,
         }
       });
-      
+
       setAppTheme(themeName);
       setAppLanguage(language);
       setScreenAnimation(screenAnimationLocal);
-      
+      setAppUseImageBackground(useImageBackground);
+      setAppBackgroundImagePath(backgroundImagePath);
+      setAppGlassOpacity(glassOpacity);
+      setAppGlassBlur(glassBlur);
       await invoke('write_log', { message: 'Settings saved' });
       alert('Settings saved!');
     } catch (error) {
@@ -261,6 +316,153 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
               <option value="scale-fade">{t('settings.animations.scaleFade')}</option>
               <option value="none">{t('settings.animations.none')}</option>
             </select>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            gap: '16px',
+            flexWrap: 'wrap',
+            marginBottom: '20px',
+          }}
+        >
+          <div className="setting-group" style={{ flex: '1 1 260px', minWidth: '260px' }}>
+            <label>{t('settings.backgroundSource')}</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={useImageBackground}
+                onClick={() => setUseImageBackground((prev) => !prev)}
+                style={{
+                  width: 56,
+                  height: 30,
+                  borderRadius: 30,
+                  border: `1px solid ${useImageBackground ? theme.colors.primary : theme.colors.border}`,
+                  background: useImageBackground ? `${theme.colors.primary}CC` : 'rgba(var(--theme-bg-rgb), 0.3)',
+                  position: 'relative',
+                  transition: 'all 0.22s ease',
+                  padding: 0,
+                  flexShrink: 0,
+                }}
+                title={t('settings.backgroundSource')}
+              >
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: 3,
+                    left: useImageBackground ? 29 : 3,
+                    width: 22,
+                    height: 22,
+                    borderRadius: '50%',
+                    background: '#fff',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.35)',
+                    transition: 'left 0.22s ease',
+                  }}
+                />
+              </button>
+              <span>
+                {useImageBackground ? t('settings.useImageBackground') : t('settings.useThemeBackground')}
+              </span>
+            </div>
+          </div>
+
+          <div className="setting-group" style={{ flex: '2 1 420px', minWidth: '300px' }}>
+            <label>{t('settings.backgroundImage')}</label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="text"
+                value={backgroundImagePath}
+                onChange={(e) => setBackgroundImagePath(e.target.value)}
+                placeholder={t('settings.noBackgroundImage')}
+                disabled={!useImageBackground}
+                style={{ flex: 1 }}
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  const selected = await open({
+                    multiple: false,
+                    filters: [
+                      {
+                        name: 'Images',
+                        extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp'],
+                      },
+                    ],
+                  });
+
+                  if (selected && typeof selected === 'string') {
+                    setBackgroundImagePath(selected);
+                  }
+                }}
+                disabled={!useImageBackground}
+                style={{
+                  background: theme.colors.primary,
+                  color: '#fff',
+                  padding: '8px 12px',
+                  border: 'none',
+                  borderRadius: 4,
+                  opacity: useImageBackground ? 1 : 0.5,
+                  cursor: useImageBackground ? 'pointer' : 'not-allowed',
+                }}
+              >
+                {t('settings.chooseBackgroundImage')}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Glass effect controls for the image backdrop */}
+        <div style={{
+          display: 'flex',
+          gap: '16px',
+          flexWrap: 'wrap',
+          marginBottom: '20px',
+          opacity: useImageBackground ? 1 : 0.5,
+          pointerEvents: useImageBackground ? 'auto' : 'none',
+          background: 'rgba(0,0,0,0.1)',
+          padding: '12px',
+          borderRadius: '8px'
+        }}>
+          <div style={{ width: '100%' }}>
+            <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', opacity: 0.9 }}>
+              {t('settings.backgroundImage')} - Эффекты
+            </h4>
+          </div>
+
+          <div className="setting-group" style={{ flex: '1 1 200px' }}>
+            <label style={{ display: 'block', marginBottom: '8px' }}>
+              {t('settings.glassOpacity')} ({glassOpacity}%)
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontSize: 12, opacity: 0.7 }}>0%</span>
+              <input 
+                type="range" 
+                min="0" max="100" 
+                value={glassOpacity} 
+                onChange={(e) => setGlassOpacity(Number(e.target.value))} 
+                style={{ flex: 1, accentColor: theme.colors.primary }}
+              />
+              <span style={{ fontSize: 12, opacity: 0.7 }}>100%</span>
+            </div>
+          </div>
+
+          <div className="setting-group" style={{ flex: '1 1 200px' }}>
+            <label style={{ display: 'block', marginBottom: '8px' }}>
+              {t('settings.glassBlur')} ({glassBlur}px)
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontSize: 12, opacity: 0.7 }}>0px</span>
+              <input 
+                type="range" 
+                min="0" max="40" 
+                value={glassBlur} 
+                onChange={(e) => setGlassBlur(Number(e.target.value))} 
+                style={{ flex: 1, accentColor: theme.colors.primary }}
+              />
+              <span style={{ fontSize: 12, opacity: 0.7 }}>40px</span>
+            </div>
           </div>
         </div>
 

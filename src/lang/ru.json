@@ -223,6 +223,12 @@
     "update_available": "Доступно обновление",
     "theme": "Тема",
     "language": "Язык",
+    "backgroundSource": "Источник фона",
+    "useImageBackground": "Использовать изображение как фон",
+    "useThemeBackground": "Использовать цветовую схему как фон",
+    "backgroundImage": "Фоновое изображение",
+    "chooseBackgroundImage": "Выбрать изображение",
+    "noBackgroundImage": "Изображение не выбрано",
     "ffmpegPath": "Путь к FFmpeg",
     "ffprobePath": "Путь к FFprobe",
     "outputSuffix": "Суффикс выходных файлов",
@@ -236,7 +242,9 @@
     },
     "checkUpdates": "Проверить обновления",
     "save": "Сохранить",
-    "cancel": "Отмена"
+    "cancel": "Отмена",
+    "glassOpacity": "Затенение картинки",
+    "glassBlur": "Размытие картинки"
   },
   "watermark": {
     "title": "Настройки водяного знака",
@@ -379,6 +387,9 @@
     "errorAdding": "Ошибка добавления в контекстное меню",
     "errorRemoving": "Ошибка удаления из контекстного меню",
     "windowsOnly": "Контекстное меню доступно только на Windows"
+  },
+  "network": {
+    "vpnProxyWarningMessage": "Обнаружено активное proxy/VPN соединение. Рекомендуется отключить его, чтобы программа работала стабильнее и без сетевых ошибок."
   },
   "update": {
     "checkForUpdates": "Проверить обновления",

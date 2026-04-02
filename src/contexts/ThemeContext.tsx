@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { convertFileSrc } from '@tauri-apps/api/tauri';
 import lightTheme from '../themes/light.json';
 import darkRedTheme from '../themes/dark-red.json';
 import blueOceanTheme from '../themes/blue-ocean.json';
@@ -30,6 +31,14 @@ interface ThemeContextType {
   theme: Theme;
   themeName: string;
   setTheme: (name: string) => void;
+  useImageBackground: boolean;
+  backgroundImagePath: string;
+  glassOpacity: number;
+  glassBlur: number;
+  setUseImageBackground: (value: boolean) => void;
+  setBackgroundImagePath: (path: string) => void;
+  setGlassOpacity: (value: number) => void;
+  setGlassBlur: (value: number) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -71,9 +80,46 @@ const themeBackgrounds: Record<string, string> = {
 // Check if theme is light
 const isLightTheme = (name: string): boolean => name === 'light';
 
+const canLoadImage = (url: string): Promise<boolean> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = url;
+  });
+};
+
+const resolveBackgroundImageUrl = async (filePath: string): Promise<string | null> => {
+  const normalizedPath = filePath.replace(/\\/g, '/');
+
+  const candidates = [
+    convertFileSrc(filePath),
+    convertFileSrc(normalizedPath),
+    encodeURI(convertFileSrc(normalizedPath)),
+  ];
+
+  for (const url of candidates) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const ok = await canLoadImage(url);
+      if (ok) {
+        return url;
+      }
+    } catch {
+      // Continue trying fallback URLs
+    }
+  }
+
+  return null;
+};
+
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [themeName, setThemeName] = useState<string>('light');
   const [theme, setThemeState] = useState<Theme>(themes.light);
+  const [useImageBackground, setUseImageBackground] = useState<boolean>(false);
+  const [backgroundImagePath, setBackgroundImagePath] = useState<string>('');
+  const [glassOpacity, setGlassOpacity] = useState<number>(15);
+  const [glassBlur, setGlassBlur] = useState<number>(12);
 
   useEffect(() => {
     // Load theme from settings
@@ -85,6 +131,10 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           setThemeName(settings.theme);
           setThemeState(themes[settings.theme]);
         }
+        setUseImageBackground(!!settings.use_background_image);
+        setBackgroundImagePath(settings.background_image_path || '');
+        if (settings.glassOpacity !== undefined) setGlassOpacity(settings.glassOpacity);
+        if (settings.glassBlur !== undefined) setGlassBlur(settings.glassBlur);
       } catch (error) {
         console.error('Failed to load theme:', error);
       }
@@ -93,6 +143,8 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
     // Apply theme colors to CSS variables
     const root = document.documentElement;
     Object.entries(theme.colors).forEach(([key, value]) => {
@@ -108,17 +160,71 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     // Set light/dark theme specific variables
     const isLight = isLightTheme(themeName);
     root.style.setProperty('--bg-brightness', isLight ? '1.0' : '0.7');
-    root.style.setProperty('--bg-overlay-opacity', isLight ? '0.3' : '0.4');
+    root.style.setProperty('--bg-overlay-opacity', useImageBackground ? '0.05' : (isLight ? '0.3' : '0.4'));
+    
+    // UI Glass variables (fixed beautiful defaults)
     root.style.setProperty('--glass-opacity', isLight ? '0.25' : '0.15');
     root.style.setProperty('--glass-border-color', isLight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.1)');
+    root.style.setProperty('--glass-blur', '12px');
+    root.style.setProperty('--glass-opacity-light', isLight ? '0.15' : '0.08');
+    root.style.setProperty('--glass-blur-light', '8px');
+
+    // Background Image variables based on user sliders
+    // glassOpacity is used as "Dimming" (0% -> brightness 100%, 100% -> brightness 0%)
+    const imgBrightness = Math.max(0, 100 - glassOpacity);
+    root.style.setProperty('--bg-image-brightness', `${imgBrightness}%`);
+    root.style.setProperty('--bg-image-blur', `${glassBlur}px`);
+    // Scale up slightly to hide blurry edges (e.g. 40px blur needs ~ 10% scale up)
+    const scale = 1 + (glassBlur * 0.003);
+    root.style.setProperty('--bg-image-scale', `${scale}`);
     
     // Set background for the app-background element
     const bgElement = document.querySelector('.app-background') as HTMLElement;
-    if (bgElement) {
+    const applyThemeGradient = () => {
+      if (!bgElement) return;
+      bgElement.classList.remove('has-image-background');
       const bgStyle = themeBackgrounds[themeName] || themeBackgrounds['dark-blue'];
+      bgElement.style.backgroundImage = '';
       bgElement.style.background = bgStyle;
+      bgElement.style.backgroundSize = '200% 200%';
+      bgElement.style.backgroundPosition = 'center';
+      bgElement.style.backgroundRepeat = 'repeat';
+      bgElement.style.backgroundColor = '';
+      bgElement.style.animation = 'gradientShift 15s ease infinite';
+    };
+
+    const applyImageBackground = async () => {
+      if (!bgElement) return;
+
+      const fileUrl = await resolveBackgroundImageUrl(backgroundImagePath);
+      if (!fileUrl || cancelled) {
+        console.warn('[ThemeContext] Background image failed to load:', backgroundImagePath);
+        applyThemeGradient();
+        return;
+      }
+
+      bgElement.classList.add('has-image-background');
+      bgElement.style.background = `transparent url("${fileUrl}") center / cover no-repeat`;
+      bgElement.style.backgroundImage = `url("${fileUrl}")`;
+      bgElement.style.backgroundSize = 'cover';
+      bgElement.style.backgroundPosition = 'center';
+      bgElement.style.backgroundRepeat = 'no-repeat';
+      bgElement.style.backgroundColor = 'transparent';
+      bgElement.style.animation = 'none';
+    };
+
+    if (bgElement) {
+      if (useImageBackground && backgroundImagePath) {
+        applyImageBackground();
+      } else {
+        applyThemeGradient();
+      }
     }
-  }, [theme, themeName]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [theme, themeName, useImageBackground, backgroundImagePath, glassOpacity, glassBlur]);
 
   const setTheme = (name: string) => {
     if (themes[name]) {
@@ -128,7 +234,21 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, themeName, setTheme }}>
+    <ThemeContext.Provider
+      value={{
+        theme,
+        themeName,
+        setTheme,
+        useImageBackground,
+        backgroundImagePath,
+        setUseImageBackground,
+        setBackgroundImagePath,
+        glassOpacity,
+        setGlassOpacity,
+        glassBlur,
+        setGlassBlur,
+      }}
+    >
       {children}
     </ThemeContext.Provider>
   );

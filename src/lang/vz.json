@@ -223,6 +223,12 @@
     "update_available": "🚀 ОБНОВЛЕНИЕ!!!",
     "theme": "Тема",
     "language": "Язык",
+    "backgroundSource": "🖼️ Источник фона",
+    "useImageBackground": "🖼️ Использовать картинку как фон",
+    "useThemeBackground": "🎨 Использовать цветовую схему как фон",
+    "backgroundImage": "🖼️ Фоновое изображение",
+    "chooseBackgroundImage": "📂 Выбрать изображение",
+    "noBackgroundImage": "❌ Изображение не выбрано",
     "ffmpegPath": "Путь к FFmpeg",
     "ffprobePath": "Путь к FFprobe",
     "outputSuffix": "Суффикс выходных файлов",
@@ -236,7 +242,9 @@
     },
     "checkUpdates": "Проверить обновления",
     "save": "Сохранить",
-    "cancel": "Отмена"
+    "cancel": "Отмена",
+    "glassOpacity": "Image Dimming",
+    "glassBlur": "Image Blur"
   },
   "watermark": {
     "title": "Настройки водяного знака",
@@ -412,5 +420,8 @@
     "refresh": "🔄 Обновить Превью",
     "lowBitrateWarning": "Low bitrate for high FPS. Recommend ≥6M for NVENC to avoid compression artifacts.",
     "videoLoadError": "❌ Не удалось загрузить превью! Попробуй обновить."
+  },
+  "network": {
+    "vpnProxyWarningMessage": "🚨 Обнаружен активный proxy/VPN! Лучше отключить его, чтобы приложение работало стабильнее и без сетевых ошибок."
   }
 }

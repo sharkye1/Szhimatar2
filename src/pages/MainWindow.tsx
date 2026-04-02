@@ -10,7 +10,7 @@ import PreviewPanel from '../components/PreviewPanel';
 import useRenderQueue from '../hooks/useRenderQueue';
 import StatisticsPanel from '../components/StatisticsPanel';
 import { UpdateService, UpdateState } from '../services/UpdateService';
-import { Film, Volume2, Settings, BarChart3, Folder, Play, Pause, Square, RefreshCw, Sparkles, HardDrive, Check, X, Clock } from 'lucide-react';
+import { Film, Volume2, Settings, BarChart3, Folder, Play, Pause, Square, RefreshCw, Sparkles, HardDrive, Check, X, Clock, AlertTriangle } from 'lucide-react';
 import type { RenderJob } from '../services/RenderService';
 import type {
   AppPreset,
@@ -84,6 +84,17 @@ interface MainWindowProps {
   cliFiles?: string[];
   onCliFilesProcessed?: () => void;
 }
+
+interface NetworkProxyVpnStatus {
+  proxy_enabled: boolean;
+  proxy_details: string[];
+  vpn_likely_active: boolean;
+  vpn_interfaces: string[];
+  clash_likely_active: boolean;
+  clash_details: string[];
+  warning_needed: boolean;
+}
+
 const MainWindow: React.FC<MainWindowProps> = ({
   onNavigate,
   videoSettings,
@@ -132,6 +143,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
   const [showPreview, setShowPreview] = useState(false);
   const [selectedPreviewPath, setSelectedPreviewPath] = useState<string>('');
   const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [networkWarning, setNetworkWarning] = useState<string | null>(null);
 
   // Check for updates after 2 seconds
   useEffect(() => {
@@ -150,6 +162,50 @@ const MainWindow: React.FC<MainWindowProps> = ({
 
     return () => clearTimeout(timer);
   }, []);
+
+  // Check active VPN/proxy on startup and show safety warning
+  useEffect(() => {
+    const checkNetworkRisk = async () => {
+      try {
+        const today = new Date().toDateString();
+        const dismissedDate = localStorage.getItem('vpnWarningDismissedDate');
+        if (dismissedDate === today) {
+          return; // User already dismissed this warning today
+        }
+
+        const result = await invoke<NetworkProxyVpnStatus>('check_network_proxy_vpn_status');
+        if (!result.warning_needed) {
+          return;
+        }
+
+        const translated = t('network.vpnProxyWarningMessage');
+        const baseMessage = translated === 'network.vpnProxyWarningMessage'
+          ? 'Обнаружено активное proxy/VPN соединение. Рекомендуется отключить его, чтобы программа работала стабильнее и без сетевых ошибок.'
+          : translated;
+
+        setNetworkWarning(baseMessage);
+
+        const logDetails: string[] = [];
+        if (result.proxy_enabled && result.proxy_details.length > 0) {
+          logDetails.push(`proxy=${result.proxy_details.join(' | ')}`);
+        }
+        if (result.vpn_likely_active && result.vpn_interfaces.length > 0) {
+          logDetails.push(`vpnInterfaces=${result.vpn_interfaces.join(' | ')}`);
+        }
+        if (result.clash_likely_active && result.clash_details.length > 0) {
+          logDetails.push(`clash=${result.clash_details.join(' | ')}`);
+        }
+
+        await invoke('write_log', {
+          message: `[MainWindow] Network warning shown at startup. ${logDetails.join(' || ') || 'No extra details'}`,
+        });
+      } catch (error) {
+        console.warn('Network proxy/VPN check failed:', error);
+      }
+    };
+
+    checkNetworkRisk();
+  }, [t]);
   useEffect(() => {
     if (jobs.length > 0 && !selectedPreviewPath) {
       setSelectedPreviewPath(jobs[0].inputPath);
@@ -336,6 +392,68 @@ const MainWindow: React.FC<MainWindowProps> = ({
           </button>
         </div>
       </header>
+
+      {networkWarning && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '12px',
+            left: '12px',
+            right: '12px',
+            zIndex: 9999,
+            pointerEvents: 'none',
+            display: 'flex',
+            justifyContent: 'center',
+          }}
+        >
+          <div
+            style={{
+              width: 'min(92vw, 760px)',
+              padding: '12px 14px',
+              borderRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              background: 'rgba(18, 18, 20, 0.95)',
+              border: `1px solid ${theme.colors.warning}`,
+              color: '#fff',
+              fontSize: '0.95rem',
+              lineHeight: 1.4,
+              boxShadow: '0 12px 32px rgba(0, 0, 0, 0.35)',
+              backdropFilter: 'blur(8px)',
+              pointerEvents: 'auto',
+            }}
+          >
+            <AlertTriangle size={18} strokeWidth={2.25} color={theme.colors.warning} />
+            <span style={{ flex: 1, fontWeight: 500 }}>{networkWarning}</span>
+            <button
+              onClick={() => {
+                setNetworkWarning(null);
+                localStorage.setItem('vpnWarningDismissedDate', new Date().toDateString());
+              }}
+              aria-label="Close network warning"
+              style={{
+                border: `1px solid ${theme.colors.warning}`,
+                background: theme.colors.warning,
+                color: '#111',
+                borderRadius: '6px',
+                width: '30px',
+                height: '30px',
+                cursor: 'pointer',
+                fontSize: '1.05rem',
+                fontWeight: 700,
+                lineHeight: 1,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              title="Close"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="content">
                 {/* Preset Manager */}

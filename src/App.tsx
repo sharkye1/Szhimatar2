@@ -10,6 +10,7 @@ import VideoSettings from './pages/VideoSettings';
 import AudioSettings from './pages/AudioSettings';
 import GeneralSettings from './pages/GeneralSettings';
 import MotionScreen from './components/MotionScreen';
+import CursorGlow from './components/CursorGlow';
 import {
   VideoSettings as VideoSettingsType,
   AudioSettings as AudioSettingsType,
@@ -147,26 +148,14 @@ function App() {
           {/* Glassmorphism background layer */}
           <div className="app-background" />
           
-          {/* Spotlight effect layer */}
-          <div 
-            className="spotlight-layer"
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              width: '100vw',
-              height: '100vh',
-              pointerEvents: 'none',
-              zIndex: 0,
-              background: `radial-gradient(600px circle at var(--mouse-x) var(--mouse-y), rgba(var(--primary-rgb), 0.06), transparent 40%)`,
-            }}
-          />
+          {/* Dynamic Interactive Cursor Glow */}
+          <CursorGlow />
           
           {/* Main app container with mouse tracking */}
           <div 
             className="app-root"
             onMouseMove={handleMouseMove}
-            style={{ width: '100vw', height: '100vh', display: 'flex', position: 'relative', zIndex: 1 }}
+            style={{ width: '100vw', height: '100vh', display: 'flex', position: 'relative', zIndex: 2 }}
           >
             <AnimatePresence mode="wait" initial={false}>
               {currentScreen === 'main' && (

@@ -223,6 +223,12 @@
     "update_available": "可用更新",
     "theme": "主题",
     "language": "语言",
+    "backgroundSource": "背景来源",
+    "useImageBackground": "使用图片作为背景",
+    "useThemeBackground": "使用主题配色作为背景",
+    "backgroundImage": "背景图片",
+    "chooseBackgroundImage": "选择图片",
+    "noBackgroundImage": "未选择图片",
     "ffmpegPath": "FFmpeg路径",
     "ffprobePath": "FFprobe路径",
     "outputSuffix": "输出文件后缀",
@@ -236,7 +242,9 @@
     },
     "checkUpdates": "检查更新",
     "save": "保存",
-    "cancel": "取消"
+    "cancel": "取消",
+    "glassOpacity": "Image Dimming",
+    "glassBlur": "Image Blur"
   },
   "watermark": {
     "title": "水印设置",
@@ -408,6 +416,9 @@
     "refresh": "刷新预览",
     "lowBitrateWarning": "Low bitrate for high FPS. Recommend ≥6M for NVENC to avoid compression artifacts.",
     "videoLoadError": "无法加载视频预览。请刷新。"
+  },
+  "network": {
+    "vpnProxyWarningMessage": "检测到活动代理/VPN连接。建议禁用它，以便应用程序更可靠地工作，并避免与网络相关的错误。"
   },
   "history": {
     "re_render_overwrite": "重新渲染并覆盖",
