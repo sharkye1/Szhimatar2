@@ -451,9 +451,11 @@ fn show_in_explorer(file_path: String) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
+        // Replace forward slashes with backslashes, as Explorer is very strict about paths for /select
+        let windows_path = file_path.replace("/", "\\");
         // Use explorer.exe /select to highlight the file
         Command::new("explorer")
-            .arg(format!("/select,{}", file_path))
+            .args(["/select,", &windows_path])
             .spawn()
             .map_err(|e| format!("Failed to open explorer: {}", e))?;
     }

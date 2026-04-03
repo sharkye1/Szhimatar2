@@ -26,6 +26,7 @@ HARDWARE_OVERRIDE*.md
 # --- Rust/Tauri ---
 target/
 src-tauri/target/
+src-tauri/test*
 src-tauri/.cargo/
 Cargo.lock
 src-tauri/Cargo.lock
@@ -110,6 +111,7 @@ $RECYCLE.BIN/
 *.lcov
 .mocha-timeout
 src/services/__tests__/
+*test*
 
 # --- Production artifacts ---
 *.log
