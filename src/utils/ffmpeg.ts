@@ -44,6 +44,7 @@ export interface VideoSettings {
   bitrate: number; // in Mbps
   fps: number;
   resolution: string; // "1920x1080" or "original"
+  aspectRatioAuto?: boolean;
   crf?: number; // 0-51, lower = better quality
   preset?: string; // ultrafast, superfast, veryfast, faster, fast, medium, slow, slower
 }
@@ -323,7 +324,7 @@ export class FFmpegCommandBuilder {
     command += ` -b:v ${videoConfig.bitrate}M`;
     command += ` -r ${videoConfig.fps}`;
     
-    if (videoConfig.resolution !== 'original') {
+    if ((videoConfig as any).aspectRatioAuto !== true && videoConfig.resolution !== 'original') {
       command += ` -s ${videoConfig.resolution}`;
     }
     
@@ -574,7 +575,7 @@ export class FFmpegManager {
     args.push('-r', String(job.videoSettings.fps));
 
     // Resolution
-    if (job.videoSettings.resolution !== 'original') {
+    if (!job.videoSettings.aspectRatioAuto && job.videoSettings.resolution !== 'original') {
       args.push('-s', job.videoSettings.resolution);
     }
 

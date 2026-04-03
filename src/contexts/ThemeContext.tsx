@@ -30,7 +30,9 @@ interface Theme {
 interface ThemeContextType {
   theme: Theme;
   themeName: string;
+  modifiedTheme: boolean;
   setTheme: (name: string) => void;
+  setModifiedTheme: (value: boolean) => void;
   useImageBackground: boolean;
   backgroundImagePath: string;
   glassOpacity: number;
@@ -116,6 +118,7 @@ const resolveBackgroundImageUrl = async (filePath: string): Promise<string | nul
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [themeName, setThemeName] = useState<string>('light');
   const [theme, setThemeState] = useState<Theme>(themes.light);
+  const [modifiedTheme, setModifiedThemeState] = useState<boolean>(false);
   const [useImageBackground, setUseImageBackground] = useState<boolean>(false);
   const [backgroundImagePath, setBackgroundImagePath] = useState<string>('');
   const [glassOpacity, setGlassOpacity] = useState<number>(15);
@@ -130,6 +133,11 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         if (settings.theme && themes[settings.theme]) {
           setThemeName(settings.theme);
           setThemeState(themes[settings.theme]);
+        }
+        if (settings.modifiedTheme !== undefined) {
+          setModifiedThemeState(settings.modifiedTheme);
+        } else if (settings.modified_theme !== undefined) {
+          setModifiedThemeState(settings.modified_theme);
         }
         setUseImageBackground(!!settings.use_background_image);
         setBackgroundImagePath(settings.background_image_path || '');
@@ -148,7 +156,11 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     // Apply theme colors to CSS variables
     const root = document.documentElement;
     Object.entries(theme.colors).forEach(([key, value]) => {
-      root.style.setProperty(`--color-${key}`, value);
+      let cssValue = value;
+      if (modifiedTheme && (key === 'success' || key === 'warning' || key === 'error')) {
+        cssValue = theme.colors.primary;
+      }
+      root.style.setProperty(`--color-${key}`, cssValue);
     });
     
     // Set RGB variables for glassmorphism
@@ -224,7 +236,7 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return () => {
       cancelled = true;
     };
-  }, [theme, themeName, useImageBackground, backgroundImagePath, glassOpacity, glassBlur]);
+  }, [theme, themeName, modifiedTheme, useImageBackground, backgroundImagePath, glassOpacity, glassBlur]);
 
   const setTheme = (name: string) => {
     if (themes[name]) {
@@ -233,12 +245,28 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   };
 
+  const setModifiedTheme = (value: boolean) => {
+    setModifiedThemeState(value);
+  };
+
+  const effectiveTheme = modifiedTheme ? {
+    ...theme,
+    colors: {
+      ...theme.colors,
+      success: theme.colors.primary,
+      warning: theme.colors.primary,
+      error: theme.colors.primary,
+    }
+  } : theme;
+
   return (
     <ThemeContext.Provider
       value={{
-        theme,
+        theme: effectiveTheme,
         themeName,
+        modifiedTheme,
         setTheme,
+        setModifiedTheme,
         useImageBackground,
         backgroundImagePath,
         setUseImageBackground,

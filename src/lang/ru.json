@@ -28,6 +28,7 @@
   "videoSettings": {
     "fps": "ФПС",
     "autoFps": "Авто ФПС",
+    "autoAspectRatio": "Авто",
     "detecting": "Определение...",
     "fpsShort": "фпс",
     "resolution": "Разрешение",
@@ -248,7 +249,7 @@
   },
   "watermark": {
     "title": "Настройки водяного знака",
-    "selectImage": "Выбрать изображение",
+    "selectImage": "Выбрать изображение для водяного знака",
     "position": "Позиция",
     "opacity": "Прозрачность",
     "positions": {

@@ -168,43 +168,79 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
           </select>
         </div>
 
-        {/* Bitrate */}
-        <div className="setting-group">
-          <label>{t('video.bitrate')}</label>
-          <input
-            type="number"
-            value={settings.bitrate}
-            onChange={(e) => setSettings(prev => ({ ...prev, bitrate: e.target.value }))}
-            min="0.5"
-            max="100"
-            step="0.5"
-          />
-        </div>
-
-        {/* FPS with Auto */}
+{/* Resolution & Bitrate */}
         <div className="setting-row">
           <div className="setting-group flex-1">
-            <label>{t('videoSettings.fps')}</label>
+            <label>{t('videoSettings.resolution')}</label>
             <select
-              value={settings.fps}
-              onChange={(e) => setSettings(prev => ({ ...prev, fps: e.target.value }))}
-              disabled={false}
+              value={settings.resolution}
+              onChange={(e) => setSettings(prev => ({ ...prev, resolution: e.target.value }))}
             >
-              {fps_options.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label} {t('videoSettings.fpsShort')}</option>
+              {resolutions.map(res => (
+                <option key={res.value} value={res.value}>{res.label}</option>
               ))}
             </select>
           </div>
-          <div className="setting-group checkbox-group">
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={settings.fpsAuto}
-                onChange={(e) => handleFpsAutoChange(e.target.checked)}
-                disabled={false}
-              />
-              <span>{t('videoSettings.autoFps')}</span>
-            </label>
+          <div className="setting-group flex-1">
+            <label>{t('video.bitrate')}</label>
+            <input
+              type="number"
+              value={settings.bitrate}
+              onChange={(e) => setSettings(prev => ({ ...prev, bitrate: e.target.value }))}
+              min="0.5"
+              max="100"
+              step="0.5"
+            />
+          </div>
+        </div>
+
+        {/* Aspect Ratio & FPS */}
+        <div className="setting-row">
+          <div className="setting-group flex-1">
+            <label>{t('videoSettings.aspectRatio')}</label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <select
+                value={settings.aspectRatio}
+                onChange={(e) => setSettings(prev => ({ ...prev, aspectRatio: e.target.value }))}
+                style={{ flex: 1 }}
+                disabled={settings.aspectRatioAuto}
+              >
+                {aspectRatios.map(ar => (
+                  <option key={ar.value} value={ar.value}>{ar.label}</option>
+                ))}
+              </select>
+              <label className="checkbox-label" style={{ margin: 0, whiteSpace: 'nowrap' }}>
+                <input
+                  type="checkbox"
+                  checked={settings.aspectRatioAuto || false}
+                  onChange={(e) => setSettings(prev => ({ ...prev, aspectRatioAuto: e.target.checked }))}
+                />
+                <span>{t('videoSettings.autoAspectRatio')}</span>
+              </label>
+            </div>
+          </div>
+          <div className="setting-group flex-1">
+            <label>{t('videoSettings.fps')}</label>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <select
+                value={settings.fps}
+                onChange={(e) => setSettings(prev => ({ ...prev, fps: e.target.value }))}
+                style={{ flex: 1 }}
+                disabled={settings.fpsAuto}
+              >
+                {fps_options.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label} {t('videoSettings.fpsShort')}</option>
+                ))}
+              </select>
+              <label className="checkbox-label" style={{ margin: 0, whiteSpace: 'nowrap' }}>
+                <input
+                  type="checkbox"
+                  checked={settings.fpsAuto}
+                  onChange={(e) => handleFpsAutoChange(e.target.checked)}
+                />
+                <span>{t('videoSettings.autoFps')}</span>
+              </label>
+            </div>
           </div>
         </div>
 
@@ -243,32 +279,6 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
               </div>
             </div>
           )}
-        </div>
-
-        {/* Resolution & Aspect Ratio */}
-        <div className="setting-row">
-          <div className="setting-group flex-1">
-            <label>{t('videoSettings.resolution')}</label>
-            <select
-              value={settings.resolution}
-              onChange={(e) => setSettings(prev => ({ ...prev, resolution: e.target.value }))}
-            >
-              {resolutions.map(res => (
-                <option key={res.value} value={res.value}>{res.label}</option>
-              ))}
-            </select>
-          </div>
-          <div className="setting-group flex-1">
-            <label>{t('videoSettings.aspectRatio')}</label>
-            <select
-              value={settings.aspectRatio}
-              onChange={(e) => setSettings(prev => ({ ...prev, aspectRatio: e.target.value }))}
-            >
-              {aspectRatios.map(ar => (
-                <option key={ar.value} value={ar.value}>{ar.label}</option>
-              ))}
-            </select>
-          </div>
         </div>
 
         {/* CRF & Preset */}
@@ -385,7 +395,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
 
         {/* Watermark */}
         <div className="watermark-section" style={{ marginTop: '30px', paddingTop: '20px', borderTop: `1px solid ${theme.colors.border}` }}>
-          <h3>{t('watermark.title')}</h3>
+          {/* <h3>{t('watermark.title')}</h3> */}
           
           <div className="setting-group">
             <label>{t('watermark.selectImage')}</label>

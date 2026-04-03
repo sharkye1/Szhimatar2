@@ -28,6 +28,7 @@
   "videoSettings": {
     "fps": "Kadry v sekundě",
     "autoFps": "Avtomatičny FPS",
+    "autoAspectRatio": "Avto",
     "detecting": "Detektovanje...",
     "fpsShort": "k/s",
     "resolution": "Rezolucija",
@@ -248,7 +249,7 @@
   },
   "watermark": {
     "title": "Nastavenja vodoznaka",
-    "selectImage": "Izbrati obraz",
+    "selectImage": "Izbrati obraz vodoznaka",
     "position": "Pozicija",
     "opacity": "Prozračnost",
     "positions": {

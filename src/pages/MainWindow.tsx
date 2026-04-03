@@ -890,8 +890,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
           codec: videoSettings.codec,
           crf: videoSettings.crf,
           fps: videoSettings.fps,
-          resolution: videoSettings.resolution,
-          filters: videoSettings.filters.filter(f => f.enabled).map(f => f.name),
+          resolution: videoSettings.resolution,            aspectRatioAuto: videoSettings.aspectRatioAuto,          filters: videoSettings.filters.filter(f => f.enabled).map(f => f.name),
           resampling_enabled: !!videoSettings.resamplingEnabled,
           resampling_intensity: videoSettings.resamplingIntensity || 5,
         }}

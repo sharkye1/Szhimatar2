@@ -8,9 +8,9 @@
         "text": "#f3e5f5",
         "textSecondary": "#ce93d8",
         "border": "#4a2f5a",
-        "success": "#eabbf2",
-        "warning": "#eabbf2",
-        "error": "#eabbf2",
+        "success": "#66bb6a",
+        "warning": "#ffc107",
+        "error": "#f44336",
         "hover": "#3a2748"
     }
 }

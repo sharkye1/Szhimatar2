@@ -28,6 +28,7 @@
   "videoSettings": {
     "fps": "",
     "autoFps": "",
+    "autoAspectRatio": "",
     "detecting": "",
     "fpsShort": "",
     "resolution": "",

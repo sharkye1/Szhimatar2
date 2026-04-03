@@ -21,6 +21,8 @@ use process_manager::PROCESS_MANAGER;
 #[derive(Debug, Serialize, Deserialize)]
 struct Settings {
     theme: String,
+    #[serde(default, rename = "modifiedTheme")]
+    modified_theme: bool,
     language: String,
     ffmpeg_path: String,
     ffprobe_path: String,
@@ -59,6 +61,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             theme: "light".to_string(),
+            modified_theme: false,
             language: "ru".to_string(),
             ffmpeg_path: "ffmpeg".to_string(),
             ffprobe_path: "ffprobe".to_string(),
@@ -2178,6 +2181,8 @@ struct PreviewSettings {
     crf: String,
     fps: String,
     resolution: String,
+    #[serde(rename = "aspectRatioAuto")]
+    aspect_ratio_auto: Option<bool>,
     filters: Vec<String>,
     resampling_enabled: bool,
     resampling_intensity: u8,

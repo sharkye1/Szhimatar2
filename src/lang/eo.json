@@ -28,6 +28,7 @@
   "videoSettings": {
     "fps": "Kadroj por sekundo",
     "autoFps": "Aŭtomata FPS",
+    "autoAspectRatio": "Aŭtomata",
     "detecting": "Detektado...",
     "fpsShort": "fps",
     "resolution": "Rezolucio",
@@ -248,7 +249,7 @@
   },
   "watermark": {
     "title": "Agordoj de akvomarko",
-    "selectImage": "Elekti bildon",
+    "selectImage": "Elekti bildon por akvomarko",
     "position": "Pozicio",
     "opacity": "Travidebleco",
     "positions": {

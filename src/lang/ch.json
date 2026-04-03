@@ -28,6 +28,7 @@
   "videoSettings": {
     "fps": "帧率",
     "autoFps": "自动帧率",
+    "autoAspectRatio": "自动",
     "detecting": "检测中...",
     "fpsShort": "帧/秒",
     "resolution": "分辨率",
@@ -248,7 +249,7 @@
   },
   "watermark": {
     "title": "水印设置",
-    "selectImage": "选择图片",
+    "selectImage": "选择图片 作为水印",
     "position": "位置",
     "opacity": "不透明度",
     "positions": {

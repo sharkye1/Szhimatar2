@@ -1,5 +1,6 @@
 export interface Settings {
   theme: string;
+  modifiedTheme?: boolean;
   language: string;
   ffmpeg_path: string;
   ffprobe_path: string;
@@ -15,6 +16,7 @@ export interface VideoSettings {
   fpsAuto: boolean;           // Auto-detect FPS from metadata
   resolution: string;
   aspectRatio: string;        // 16:9, 4:3, 21:9, etc.
+  aspectRatioAuto?: boolean;  // Auto-detect Aspect Ratio
   crf: string;
   preset: string;
   speed: number;              // 0.25 to 2.0 (slow to fast)
@@ -38,6 +40,7 @@ export const DEFAULT_VIDEO_SETTINGS: VideoSettings = {
   fpsAuto: false,
   resolution: '1920x1080',
   aspectRatio: '16:9',
+  aspectRatioAuto: false,
   crf: '23',
   preset: 'medium',
   speed: 1.0,

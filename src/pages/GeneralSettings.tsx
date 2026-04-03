@@ -19,6 +19,8 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
   const { t, setLanguage: setAppLanguage } = useLanguage();
   const {
     theme,
+    modifiedTheme: appModifiedTheme,
+    setModifiedTheme: setAppModifiedTheme,
     setTheme: setAppTheme,
     useImageBackground: appUseImageBackground,
     backgroundImagePath: appBackgroundImagePath,
@@ -32,6 +34,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
   const { screenAnimation, setScreenAnimation } = useSettings();
 
   const [themeName, setThemeName] = useState('light');
+  const [modifiedTheme, setModifiedTheme] = useState<boolean>(appModifiedTheme);
   const [language, setLanguage] = useState('ru');
   const [outputSuffix, setOutputSuffix] = useState('_szhatoe');
   const [useImageBackground, setUseImageBackground] = useState<boolean>(appUseImageBackground);
@@ -102,6 +105,11 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
     try {
       const settings = await invoke<any>('load_settings');
       setThemeName(settings.theme);
+      if (settings.modifiedTheme !== undefined) {
+        setModifiedTheme(settings.modifiedTheme);
+      } else if (settings.modified_theme !== undefined) {
+        setModifiedTheme(settings.modified_theme);
+      }
       setLanguage(settings.language);
       setOutputSuffix(settings.output_suffix);
       setUseImageBackground(!!settings.use_background_image);
@@ -234,6 +242,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
         settings: {
           ...settings,
           theme: themeName,
+          modifiedTheme: modifiedTheme,
           language,
           output_suffix: outputSuffix,
           use_background_image: useImageBackground,
@@ -245,6 +254,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
       });
 
       setAppTheme(themeName);
+      setAppModifiedTheme(modifiedTheme);
       setAppLanguage(language);
       setScreenAnimation(screenAnimationLocal);
       setAppUseImageBackground(useImageBackground);
@@ -278,7 +288,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
         }}>
           <div className="setting-group" style={{ flex: '1 1 200px', minWidth: '200px' }}>
             <label>{t('settings.theme')}</label>
-            <select value={themeName} onChange={(e) => setThemeName(e.target.value)}>
+            <select value={themeName} onChange={(e) => setThemeName(e.target.value)} style={{ marginBottom: '8px' }}>
               <option value="light">Light</option>
               <option value="dark-red">Dark Red</option>
               <option value="blue-ocean">Blue Ocean</option>
@@ -286,9 +296,17 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
               <option value="dark-gray">Dark Gray</option>
               <option value="dark-orange">Dark Orange</option>
               <option value="dark-green">Dark Green</option>
-              <option value="purple-pink">Purple Pink (modified)</option>
+              <option value="purple-pink">Purple Pink</option>       
               <option value="pink">Pink</option>
             </select>
+            <label className="checkbox-label" style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={modifiedTheme}
+                onChange={(e) => setModifiedTheme(e.target.checked)}
+              />
+              Modified Theme
+            </label>
           </div>
 
           <div className="setting-group" style={{ flex: '1 1 200px', minWidth: '200px' }}>

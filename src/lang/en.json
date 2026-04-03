@@ -28,6 +28,7 @@
   "videoSettings": {
     "fps": "FPS",
     "autoFps": "Auto FPS",
+    "autoAspectRatio": "Auto",
     "detecting": "Detecting...",
     "fpsShort": "fps",
     "resolution": "Resolution",
@@ -248,7 +249,7 @@
   },
   "watermark": {
     "title": "Watermark Settings",
-    "selectImage": "Select Image",
+    "selectImage": "Select Image for Watermark",
     "position": "Position",
     "opacity": "Opacity",
     "positions": {

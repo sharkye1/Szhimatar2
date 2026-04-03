@@ -151,13 +151,14 @@ export class RenderScheduler {
         if (next) dispatch.push({ jobId: next, slot: 'gpu' });
       }
     } else if (this.mode === 'duo') {
-      if (cpuFree) {
-        const nextCpu = takeNext();
-        if (nextCpu) dispatch.push({ jobId: nextCpu, slot: 'cpu' });
-      }
+      // GPU gets priority over CPU in duo mode
       if (this.gpuAvailable && gpuFree) {
         const nextGpu = takeNext();
         if (nextGpu) dispatch.push({ jobId: nextGpu, slot: 'gpu' });
+      }
+      if (cpuFree) {
+        const nextCpu = takeNext();
+        if (nextCpu) dispatch.push({ jobId: nextCpu, slot: 'cpu' });
       }
     }
 

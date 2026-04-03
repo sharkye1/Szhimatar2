@@ -12,6 +12,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { invoke } from '@tauri-apps/api/tauri';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useTheme } from '../contexts/ThemeContext';
 import DuoEasterEggOverlay from './DuoEasterEggOverlay';
 import './RenderModeSelector.css';
 
@@ -94,8 +95,7 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
   gpuAvailable,
   isRendering = false,
 }) => {
-  const { t } = useLanguage();
-  const [hardwareInfo, setHardwareInfo] = useState<HardwareInfo>({
+  const { t } = useLanguage();  const { theme, modifiedTheme } = useTheme();  const [hardwareInfo, setHardwareInfo] = useState<HardwareInfo>({
     cpu_vendor: 'unknown',
     gpu_vendor: 'unknown',
   });
@@ -123,16 +123,27 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
   }, []);
 
   // Get gradient configs based on hardware
-  const cpuGradient = useMemo(() => 
-    CPU_GRADIENTS[hardwareInfo.cpu_vendor] || CPU_GRADIENTS.unknown,
-    [hardwareInfo.cpu_vendor]
-  );
+  const cpuGradient = useMemo(() => {
+    if (modifiedTheme) {
+      return {
+        primary: theme.colors.primary,
+        secondary: theme.colors.secondary,
+        glow: `rgba(var(--primary-rgb), 0.6)`,
+      };
+    }
+    return CPU_GRADIENTS[hardwareInfo.cpu_vendor] || CPU_GRADIENTS.unknown;
+  }, [hardwareInfo.cpu_vendor, modifiedTheme, theme.colors]);
 
-  const gpuGradient = useMemo(() => 
-    GPU_GRADIENTS[hardwareInfo.gpu_vendor] || GPU_GRADIENTS.unknown,
-    [hardwareInfo.gpu_vendor]
-  );
-
+  const gpuGradient = useMemo(() => {
+    if (modifiedTheme) {
+      return {
+        primary: theme.colors.primary,
+        secondary: theme.colors.secondary,
+        glow: `rgba(var(--primary-rgb), 0.6)`,
+      };
+    }
+    return GPU_GRADIENTS[hardwareInfo.gpu_vendor] || GPU_GRADIENTS.unknown;
+  }, [hardwareInfo.gpu_vendor, modifiedTheme, theme.colors]);
   // State calculations
   const isCpuActive = mode === 'cpu' || mode === 'duo';
   const isGpuActive = mode === 'gpu' || mode === 'duo';

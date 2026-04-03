@@ -71,6 +71,7 @@ interface PreviewSettings {
   crf: string;
   fps: string;
   resolution: string;
+  aspectRatioAuto?: boolean;
   filters: string[];
   resampling_enabled: boolean;
   resampling_intensity: number;
@@ -95,6 +96,7 @@ interface PreviewPanelProps {
     crf: string;
     fps: string;
     resolution: string;
+    aspectRatioAuto?: boolean;
     bitrate?: string;       // Bitrate in Mbps (e.g. "2.6")
     preset?: string;        // Encoding preset
     filters: { name: string; enabled: boolean }[];
@@ -131,7 +133,7 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     codec: videoSettings?.codec || 'h264',
     crf: videoSettings?.crf || '23',
     fps: videoSettings?.fps || '30',
-    resolution: videoSettings?.resolution || '1920x1080',
+    resolution: videoSettings?.aspectRatioAuto ? 'original' : (videoSettings?.resolution || '1920x1080'),
     filters: videoSettings?.filters?.filter(f => f.enabled).map(f => f.name) || [],
     resampling_enabled: videoSettings?.resamplingEnabled || false,
     resampling_intensity: videoSettings?.resamplingIntensity || 0,

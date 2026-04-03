@@ -149,7 +149,8 @@ export class FFmpegCommandBuilder {
       }
 
       // Resolution - NVENC requires dimensions divisible by 2
-      if (this.videoSettings.resolution && 
+      if (!this.videoSettings.aspectRatioAuto &&
+          this.videoSettings.resolution &&
           this.videoSettings.resolution !== 'original' &&
           this.videoSettings.resolution !== 'source') {
         const [width, height] = this.videoSettings.resolution.split('x').map(Number);
