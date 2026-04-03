@@ -1,9 +1,11 @@
 ﻿import React, { useEffect, useRef } from 'react';
 import '../styles/cursor-glow.css';
+import { useRenderQueue } from '../hooks/useRenderQueue';
 
 export const CursorGlow: React.FC = () => {
   const glowRef = useRef<HTMLDivElement>(null);
   const auraRef = useRef<HTMLDivElement>(null);
+  const { isProcessing } = useRenderQueue();
 
   useEffect(() => {
     let idleTimer: ReturnType<typeof setTimeout>;
@@ -62,8 +64,21 @@ export const CursorGlow: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (glowRef.current && auraRef.current) {
+      if (isProcessing) {
+        glowRef.current.classList.add('rendering');
+        auraRef.current.classList.add('rendering');
+      } else {
+        glowRef.current.classList.remove('rendering');
+        auraRef.current.classList.remove('rendering');
+      }
+    }
+  }, [isProcessing]);
+
   return (
     <>
+      <div className={`window-render-glow ${isProcessing ? 'active' : ''}`} />
       <div ref={auraRef} className="cursor-aura idle" />
       <div ref={glowRef} className="cursor-glow idle" />
     </>
