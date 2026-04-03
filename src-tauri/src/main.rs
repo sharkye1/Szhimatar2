@@ -453,7 +453,7 @@ fn show_in_explorer(file_path: String) -> Result<(), String> {
     {
         // Use explorer.exe /select to highlight the file
         Command::new("explorer")
-            .args(["/select,", &file_path])
+            .arg(format!("/select,{}", file_path))
             .spawn()
             .map_err(|e| format!("Failed to open explorer: {}", e))?;
     }

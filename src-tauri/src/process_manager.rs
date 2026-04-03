@@ -1,19 +1,19 @@
 // Process Manager for FFmpeg rendering
 // Handles lifecycle of FFmpeg processes with proper ownership and cleanup
 
+use lazy_static::lazy_static;
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
-use std::path::PathBuf;
 use std::time::Instant;
-use lazy_static::lazy_static;
 
 // ============================================================================
 // Process Manager Singleton
 // ============================================================================
 
 lazy_static! {
-    pub static ref PROCESS_MANAGER: Arc<Mutex<ProcessManager>> = 
+    pub static ref PROCESS_MANAGER: Arc<Mutex<ProcessManager>> =
         Arc::new(Mutex::new(ProcessManager::new()));
 }
 
@@ -45,17 +45,17 @@ impl ProcessManager {
     }
 
     /// Spawn FFmpeg process for rendering
-    /// 
+    ///
     /// # Arguments
     /// * `job_id` - Unique identifier for this job
     /// * `ffmpeg_path` - Path to FFmpeg binary
     /// * `input_path` - Input video file path
     /// * `output_path` - Output video file path
     /// * `ffmpeg_args` - FFmpeg command arguments
-    /// 
+    ///
     /// # Returns
     /// Result with (Child, PID) tuple or error message
-    /// 
+    ///
     /// The returned Child is owned by the caller (run_ffmpeg_render).
     /// The ProcessManager tracks only metadata for lookup/stopping.
     pub fn spawn_render(
@@ -80,7 +80,7 @@ impl ProcessManager {
         let mut cmd = Command::new(&ffmpeg_path);
 
         // Build full command
-        cmd.arg("-y")  // Overwrite output
+        cmd.arg("-y") // Overwrite output
             .arg("-i")
             .arg(&input_path)
             .args(&ffmpeg_args)
@@ -94,12 +94,13 @@ impl ProcessManager {
             .stderr(Stdio::piped());
 
         // Spawn process
-        let child = cmd.spawn()
+        let child = cmd
+            .spawn()
             .map_err(|e| format!("Failed to spawn FFmpeg: {}", e))?;
 
         // Get PID
         let pid = child.id();
-        
+
         // Store metadata ONLY (not the Child, which goes to the caller)
         let process = RenderProcess {
             id: job_id.clone(),
@@ -124,13 +125,13 @@ impl ProcessManager {
     }
 
     /// Mark a render job as stopped by user
-    /// 
+    ///
     /// This does NOT kill the process (that's done by the caller in main.rs).
     /// This just marks it so we can distinguish user-stop from error later.
-    /// 
+    ///
     /// # Arguments
     /// * `job_id` - ID of the job to stop
-    /// 
+    ///
     /// # Returns
     /// true if job was found and marked, false if not found
     pub fn stop_render(&mut self, job_id: &str) -> bool {
@@ -148,7 +149,7 @@ impl ProcessManager {
     /// Stop all running renders
     pub fn stop_all_renders(&mut self) {
         let job_ids: Vec<String> = self.processes.keys().cloned().collect();
-        
+
         for job_id in job_ids {
             let _ = self.stop_render(&job_id);
         }
@@ -191,17 +192,23 @@ impl ProcessManager {
 
     /// Get all active PIDs
     pub fn active_pids(&self) -> Vec<(String, u32)> {
-        self.processes.iter().map(|(id, p)| (id.clone(), p.pid)).collect()
+        self.processes
+            .iter()
+            .map(|(id, p)| (id.clone(), p.pid))
+            .collect()
     }
 
     /// Diagnose current state (for debugging)
     pub fn diagnose(&self) {
         eprintln!("\n📋 [ProcessManager] Diagnostic Report:");
         eprintln!("   Active processes: {}", self.processes.len());
-        
+
         for (job_id, process) in &self.processes {
             let elapsed = process.started_at.elapsed();
-            eprintln!("   - Job: {}, PID: {}, Elapsed: {:?}", job_id, process.pid, elapsed);
+            eprintln!(
+                "   - Job: {}, PID: {}, Elapsed: {:?}",
+                job_id, process.pid, elapsed
+            );
         }
         eprintln!();
     }
@@ -238,7 +245,8 @@ impl RenderProcessContext {
         output_path: String,
         ffmpeg_args: Vec<String>,
     ) -> Result<Self, String> {
-        let mut manager = PROCESS_MANAGER.lock()
+        let mut manager = PROCESS_MANAGER
+            .lock()
             .map_err(|e| format!("Failed to lock ProcessManager: {}", e))?;
 
         let (child, pid) = manager.spawn_render(
@@ -249,18 +257,15 @@ impl RenderProcessContext {
             ffmpeg_args,
         )?;
 
-        Ok(Self {
-            job_id,
-            child,
-            pid,
-        })
+        Ok(Self { job_id, child, pid })
     }
 
     /// Clean up context (remove from manager)
     pub fn cleanup(self) -> Result<(), String> {
-        let mut manager = PROCESS_MANAGER.lock()
+        let mut manager = PROCESS_MANAGER
+            .lock()
             .map_err(|e| format!("Failed to lock ProcessManager: {}", e))?;
-        
+
         manager.remove_process(&self.job_id);
         Ok(())
     }
