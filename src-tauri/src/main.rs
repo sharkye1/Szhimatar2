@@ -43,6 +43,8 @@ struct Settings {
     render_mode: String,
     #[serde(rename = "screenAnimation", default = "default_screen_animation")]
     screen_animation: String,
+    #[serde(rename = "performanceMode", default)]
+    performance_mode: bool,
 }
 
 fn default_screen_animation() -> String {
@@ -75,6 +77,7 @@ impl Default for Settings {
             gpu_available: false,
             render_mode: "cpu".to_string(),
             screen_animation: "default".to_string(),
+            performance_mode: false,
         }
     }
 }
@@ -174,6 +177,10 @@ fn check_gpu_compatibility() -> Result<bool, String> {
 fn detect_hardware_info() -> Result<HardwareInfo, String> {
     // Check for override first (for testing UI only)
     if let Some(override_config) = load_hardware_override() {
+        let _ = write_log(format!(
+            "[HW DETECT] Override enabled -> CPU={}, GPU={}, gpu_available={}",
+            override_config.cpu_vendor, override_config.gpu_vendor, override_config.gpu_available
+        ));
         return Ok(HardwareInfo {
             cpu_vendor: override_config.cpu_vendor,
             gpu_vendor: override_config.gpu_vendor,
@@ -181,8 +188,13 @@ fn detect_hardware_info() -> Result<HardwareInfo, String> {
     }
 
     // Use real hardware detection
-    let cpu_vendor = detect_cpu_vendor();
-    let gpu_vendor = detect_gpu_vendor();
+    let (cpu_vendor, cpu_reason) = detect_cpu_vendor();
+    let (gpu_vendor, gpu_reason) = detect_gpu_vendor();
+
+    let _ = write_log(format!(
+        "[HW DETECT] Result -> CPU vendor='{}' ({}) | GPU vendor='{}' ({})",
+        cpu_vendor, cpu_reason, gpu_vendor, gpu_reason
+    ));
 
     Ok(HardwareInfo {
         cpu_vendor,
@@ -230,7 +242,16 @@ fn load_hardware_override() -> Option<HardwareOverride> {
     }
 }
 
-fn detect_cpu_vendor() -> String {
+fn summarize_for_log(input: &str, max_len: usize) -> String {
+    let compact = input.split_whitespace().collect::<Vec<_>>().join(" ");
+    if compact.len() <= max_len {
+        compact
+    } else {
+        format!("{}...", &compact[..max_len])
+    }
+}
+
+fn detect_cpu_vendor() -> (String, String) {
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
@@ -245,11 +266,37 @@ fn detect_cpu_vendor() -> String {
         if let Ok(output) = output {
             let stdout = String::from_utf8_lossy(&output.stdout).to_lowercase();
             if stdout.contains("intel") {
-                return "intel".to_string();
+                return (
+                    "intel".to_string(),
+                    "wmic cpu get name output contains 'intel'".to_string(),
+                );
             } else if stdout.contains("amd") {
-                return "amd".to_string();
+                return (
+                    "amd".to_string(),
+                    "wmic cpu get name output contains 'amd'".to_string(),
+                );
             }
+
+            return (
+                "unknown".to_string(),
+                format!(
+                    "wmic cpu get name did not match known vendor (status={}) output='{}'",
+                    output.status,
+                    summarize_for_log(&stdout, 180)
+                ),
+            );
         }
+
+        return (
+            "unknown".to_string(),
+            format!(
+                "wmic cpu get name failed: {}",
+                output
+                    .err()
+                    .map(|e| e.to_string())
+                    .unwrap_or_else(|| "unknown error".to_string())
+            ),
+        );
     }
 
     #[cfg(target_os = "linux")]
@@ -257,17 +304,36 @@ fn detect_cpu_vendor() -> String {
         if let Ok(content) = fs::read_to_string("/proc/cpuinfo") {
             let lower = content.to_lowercase();
             if lower.contains("intel") {
-                return "intel".to_string();
+                return ("intel".to_string(), "cpuinfo contains 'intel'".to_string());
             } else if lower.contains("amd") {
-                return "amd".to_string();
+                return ("amd".to_string(), "cpuinfo contains 'amd'".to_string());
             }
+
+            return (
+                "unknown".to_string(),
+                format!(
+                    "/proc/cpuinfo read but vendor not matched: '{}'",
+                    summarize_for_log(&lower, 180)
+                ),
+            );
         }
+
+        return (
+            "unknown".to_string(),
+            "failed to read /proc/cpuinfo".to_string(),
+        );
     }
 
-    "unknown".to_string()
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    {
+        return ("unknown".to_string(), "platform fallback".to_string());
+    }
+
+    #[allow(unreachable_code)]
+    ("unknown".to_string(), "platform fallback".to_string())
 }
 
-fn detect_gpu_vendor() -> String {
+fn detect_gpu_vendor() -> (String, String) {
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
@@ -286,13 +352,42 @@ fn detect_gpu_vendor() -> String {
                 || stdout.contains("rtx")
                 || stdout.contains("gtx")
             {
-                return "nvidia".to_string();
+                return (
+                    "nvidia".to_string(),
+                    "wmic win32_videocontroller output matched nvidia/geforce/rtx/gtx".to_string(),
+                );
             } else if stdout.contains("amd") || stdout.contains("radeon") {
-                return "amd".to_string();
+                return (
+                    "amd".to_string(),
+                    "wmic win32_videocontroller output matched amd/radeon".to_string(),
+                );
             } else if stdout.contains("intel") {
-                return "intel".to_string();
+                return (
+                    "intel".to_string(),
+                    "wmic win32_videocontroller output matched intel".to_string(),
+                );
             }
+
+            return (
+                "unknown".to_string(),
+                format!(
+                    "wmic win32_videocontroller did not match known vendor (status={}) output='{}'",
+                    output.status,
+                    summarize_for_log(&stdout, 220)
+                ),
+            );
         }
+
+        return (
+            "unknown".to_string(),
+            format!(
+                "wmic win32_videocontroller failed: {}",
+                output
+                    .err()
+                    .map(|e| e.to_string())
+                    .unwrap_or_else(|| "unknown error".to_string())
+            ),
+        );
     }
 
     #[cfg(target_os = "linux")]
@@ -302,14 +397,36 @@ fn detect_gpu_vendor() -> String {
         if let Ok(output) = output {
             let stdout = String::from_utf8_lossy(&output.stdout).to_lowercase();
             if stdout.contains("nvidia") {
-                return "nvidia".to_string();
+                return (
+                    "nvidia".to_string(),
+                    "lspci output matched nvidia".to_string(),
+                );
             } else if stdout.contains("amd") || stdout.contains("radeon") {
-                return "amd".to_string();
+                return (
+                    "amd".to_string(),
+                    "lspci output matched amd/radeon".to_string(),
+                );
             }
+
+            return (
+                "unknown".to_string(),
+                format!(
+                    "lspci read but vendor not matched: '{}'",
+                    summarize_for_log(&stdout, 220)
+                ),
+            );
         }
+
+        return ("unknown".to_string(), "lspci command failed".to_string());
     }
 
-    "unknown".to_string()
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    {
+        return ("unknown".to_string(), "platform fallback".to_string());
+    }
+
+    #[allow(unreachable_code)]
+    ("unknown".to_string(), "platform fallback".to_string())
 }
 
 /// Save render mode to settings
@@ -1107,12 +1224,50 @@ async fn run_ffmpeg_render(window: tauri::Window, job: RenderJob) -> Result<Rend
         return Err("FFmpeg path not configured".to_string());
     }
 
-    // Log start
+    // Log render log path in app.log (instead of generic started message)
+    let render_log_path = get_app_data_dir()
+        .join("logs")
+        .join("renders")
+        .join(format!("{}.log", job.job_id));
     let log_message = format!(
-        "Starting render job: {} -> {}",
-        job.input_path, job.output_path
+        "Render log file for job {}: {}",
+        job.job_id,
+        render_log_path.display()
     );
     let _ = write_log(log_message);
+
+    let quoted_args = job
+        .ffmpeg_args
+        .iter()
+        .map(|a| {
+            if a.contains(' ') || a.contains('"') {
+                format!("\"{}\"", a.replace('"', "\\\""))
+            } else {
+                a.clone()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let full_command = format!(
+        "\"{}\" -i \"{}\" {} \"{}\"",
+        config.ffmpeg_path, job.input_path, quoted_args, job.output_path
+    );
+
+    let _ = write_render_log(
+        job.job_id.clone(),
+        format!(
+            "[RUN START]\njob_id={}\nffmpeg_path={}\ninput_path={}\noutput_path={}\nduration_seconds={}\nffmpeg_args_count={}\nffmpeg_args={}\nfull_command={}",
+            job.job_id,
+            config.ffmpeg_path,
+            job.input_path,
+            job.output_path,
+            job.duration_seconds,
+            job.ffmpeg_args.len(),
+            quoted_args,
+            full_command
+        ),
+    );
 
     // Register process with ProcessManager and get owned child handle
     let mut child = {
@@ -1509,6 +1664,14 @@ async fn get_video_duration(input_path: String) -> Result<f64, String> {
     Ok(duration)
 }
 
+/// Get file size in bytes
+#[tauri::command]
+fn get_file_size_bytes(input_path: String) -> Result<u64, String> {
+    let metadata =
+        fs::metadata(&input_path).map_err(|e| format!("Failed to read file metadata: {}", e))?;
+    Ok(metadata.len())
+}
+
 /// Write render log to file
 #[tauri::command]
 fn write_render_log(job_id: String, message: String) -> Result<(), String> {
@@ -1581,6 +1744,55 @@ fn load_preset(name: String) -> Result<String, String> {
     }
 
     fs::read_to_string(&preset_path).map_err(|e| format!("Failed to load preset: {}", e))
+}
+
+#[derive(serde::Serialize)]
+struct DefaultPresetResult {
+    name: String,
+    content: String,
+}
+
+#[tauri::command]
+fn load_default_preset() -> Result<Option<DefaultPresetResult>, String> {
+    let presets_dir = get_presets_dir();
+
+    if !presets_dir.exists() {
+        return Ok(None);
+    }
+
+    let mut preset_paths = Vec::new();
+    for entry in fs::read_dir(&presets_dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("json") {
+            preset_paths.push(path);
+        }
+    }
+
+    preset_paths.sort();
+
+    for path in preset_paths {
+        let content = match fs::read_to_string(&path) {
+            Ok(content) => content,
+            Err(_) => continue,
+        };
+
+        let is_default = serde_json::from_str::<serde_json::Value>(&content)
+            .ok()
+            .and_then(|v| v.get("isDefault").and_then(|d| d.as_bool()))
+            .unwrap_or(false);
+
+        if is_default {
+            if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
+                return Ok(Some(DefaultPresetResult {
+                    name: name.to_string(),
+                    content,
+                }));
+            }
+        }
+    }
+
+    Ok(None)
 }
 
 #[tauri::command]
@@ -2983,36 +3195,7 @@ fn check_network_proxy_vpn_status() -> Result<NetworkProxyVpnStatus, String> {
         let vpn_likely_active = !vpn_interfaces.is_empty();
         let clash_likely_active = !clash_details.is_empty();
 
-        if proxy_enabled {
-            let details = if proxy_details.is_empty() {
-                "no details".to_string()
-            } else {
-                proxy_details.join(" | ")
-            };
-            let _ = write_log(format!(
-                "[NETWORK CHECK] Proxy indicator detected via system/env: {}",
-                details
-            ));
-        }
-
-        if vpn_likely_active {
-            let _ = write_log(format!(
-                "[NETWORK CHECK] VPN-like adapter(s) UP: {}",
-                vpn_interfaces.join(" | ")
-            ));
-        }
-
-        if clash_likely_active {
-            let _ = write_log(format!(
-                "[NETWORK CHECK] Clash-core indicator(s): {}",
-                clash_details.join(" | ")
-            ));
-        }
-
-        if !proxy_enabled && !vpn_likely_active && !clash_likely_active {
-            let _ =
-                write_log("[NETWORK CHECK] No active proxy/VPN/Clash indicators found".to_string());
-        }
+        // Intentionally no app.log writes for network check to reduce noise.
 
         Ok(NetworkProxyVpnStatus {
             proxy_enabled,
@@ -3072,12 +3255,14 @@ fn main() {
             list_presets,
             save_preset,
             load_preset,
+            load_default_preset,
             delete_preset,
             // Render commands
             run_ffmpeg_render,
             stop_ffmpeg_render,
             stop_all_renders,
             get_video_duration,
+            get_file_size_bytes,
             write_render_log,
             // Statistics commands
             load_statistics,

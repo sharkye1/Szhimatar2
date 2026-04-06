@@ -1,0 +1,16 @@
+{
+    "name": "paper-sepia",
+    "colors": {
+        "background": "#faf5e8",
+        "surface": "#f2e9d3",
+        "primary": "#b97a2f",
+        "secondary": "#c9a06b",
+        "text": "#3f2d1a",
+        "textSecondary": "#6d5337",
+        "border": "#e2ceb0",
+        "success": "#5f8b4b",
+        "warning": "#c6882e",
+        "error": "#b44f4f",
+        "hover": "#efe3ca"
+    }
+}

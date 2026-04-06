@@ -223,6 +223,23 @@
     "title": "Agordoj",
     "update_available": "Ĝisdatigo Disponebla",
     "theme": "Etoso",
+    "themeNames": {
+      "light": "Nuba Tago",
+      "darkRed": "Purpura Kelo",
+      "blueOcean": "Blua Oceano",
+      "darkBlue": "Nokta Haveno",
+      "darkGray": "Cindra Nebulo",
+      "darkOrange": "Sukcena Forĝejo",
+      "darkGreen": "Pina Krepusko",
+      "purplePink": "Pruna Floro",
+      "pink": "Roza Bombono",
+      "sunnyYellow": "Suna Flavo",
+      "mintGlass": "Menta Vitro",
+      "paperSepia": "Papera Sepio",
+      "nordSoft": "Mola Nordo",
+      "graphiteLight": "Hela Grafito",
+      "amoledNight": "AMOLED Nokto"
+    },
     "language": "Lingvo",
     "backgroundSource": "Fona fonto",
     "useImageBackground": "Uzi bildon kiel fonon",
@@ -245,7 +262,8 @@
     "save": "Konservi",
     "cancel": "Nuligi",
     "glassOpacity": "Image Dimming",
-    "glassBlur": "Image Blur"
+    "glassBlur": "Image Blur",
+    "performanceMode": "Performance Mode (flat dark gray, no glow/animations)"
   },
   "watermark": {
     "title": "Agordoj de akvomarko",
@@ -315,7 +333,11 @@
     "deleteFromQueue": "Forigi el atendovico",
     "show": "Montri",
     "showInExplorer": "Montri en dosieradministrilo",
-    "completedWithSize": "Finita"
+    "completedWithSize": "Finita",
+    "trim": "Tondi",
+    "trimRange": "Intervalo",
+    "trimDuration": "Daŭro",
+    "trimReadonly": "Tondado redakteblas nur dum la ero estas atendanta"
   },
   "gpu": {
     "label": "GPU (NVENC)",

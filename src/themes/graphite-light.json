@@ -1,0 +1,16 @@
+{
+    "name": "graphite-light",
+    "colors": {
+        "background": "#f4f5f7",
+        "surface": "#ebedf0",
+        "primary": "#4f5d75",
+        "secondary": "#8a94a6",
+        "text": "#1f2430",
+        "textSecondary": "#596173",
+        "border": "#d5dbe3",
+        "success": "#5a9b78",
+        "warning": "#c28a3d",
+        "error": "#c35a5a",
+        "hover": "#e2e6ec"
+    }
+}

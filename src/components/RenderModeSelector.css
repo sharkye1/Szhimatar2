@@ -321,23 +321,11 @@
    ============================================================================ */
 
 .active-indicator {
-    position: absolute;
-    bottom: 4px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 30%;
-    height: 3px;
-    background: rgba(255, 255, 255, 0.6);
-    border-radius: 2px;
-    box-shadow: 0 0 6px rgba(0, 0, 0, 0.4), 0 0 3px rgba(255, 255, 255, 0.2);
+    display: none;
 }
 
 .duo-indicator {
-    background: linear-gradient(90deg,
-            var(--cpu-secondary),
-            #fff,
-            var(--gpu-secondary));
-    width: 50%;
+    display: none;
 }
 
 /* ============================================================================

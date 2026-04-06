@@ -6,6 +6,8 @@ export type ScreenAnimationType = 'default' | 'soft-blur' | 'physics' | 'scale-f
 interface SettingsContextType {
   screenAnimation: ScreenAnimationType;
   setScreenAnimation: (animation: ScreenAnimationType) => void;
+  performanceMode: boolean;
+  setPerformanceMode: (enabled: boolean) => void;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -16,6 +18,13 @@ interface SettingsProviderProps {
 
 export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) => {
   const [screenAnimation, setScreenAnimationState] = useState<ScreenAnimationType>('default');
+  const [performanceMode, setPerformanceModeState] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('performanceMode') === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   // Load settings on mount
   useEffect(() => {
@@ -24,6 +33,13 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
         const settings = await invoke<any>('load_settings');
         if (settings.screenAnimation) {
           setScreenAnimationState(settings.screenAnimation as ScreenAnimationType);
+        } else if (settings.screen_animation) {
+          setScreenAnimationState(settings.screen_animation as ScreenAnimationType);
+        }
+        if (settings.performanceMode !== undefined) {
+          setPerformanceMode(!!settings.performanceMode);
+        } else if (settings.performance_mode !== undefined) {
+          setPerformanceMode(!!settings.performance_mode);
         }
       } catch (error) {
         console.error('Failed to load screen animation setting:', error);
@@ -36,8 +52,26 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
     setScreenAnimationState(animation);
   };
 
+  const setPerformanceMode = (enabled: boolean) => {
+    setPerformanceModeState(enabled);
+    try {
+      localStorage.setItem('performanceMode', enabled ? 'true' : 'false');
+    } catch {
+      // Ignore storage errors in restricted environments
+    }
+  };
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (performanceMode) {
+      root.classList.add('performance-mode');
+    } else {
+      root.classList.remove('performance-mode');
+    }
+  }, [performanceMode]);
+
   return (
-    <SettingsContext.Provider value={{ screenAnimation, setScreenAnimation }}>
+    <SettingsContext.Provider value={{ screenAnimation, setScreenAnimation, performanceMode, setPerformanceMode }}>
       {children}
     </SettingsContext.Provider>
   );

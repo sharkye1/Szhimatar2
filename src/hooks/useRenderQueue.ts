@@ -39,7 +39,8 @@ export interface UseRenderQueueReturn {
   
   // Actions
   addFiles: (filePaths: string[]) => Promise<RenderJob[]>;
-  addToQueue: (inputPath: string, outputPath: string) => Promise<RenderJob>;
+  addToQueue: (inputPath: string, outputPath: string, trimStartSec?: number, trimEndSec?: number) => Promise<RenderJob>;
+  updateJobTrim: (jobId: string, trimStartSec: number, trimEndSec: number) => boolean;
   removeJob: (jobId: string) => boolean;
   clearCompleted: () => void;
   start: () => Promise<void>;
@@ -92,8 +93,17 @@ export function useRenderQueue(): UseRenderQueueReturn {
     return RenderService.addToQueue(filePaths);
   }, []);
 
-  const addToQueue = useCallback(async (inputPath: string, outputPath: string): Promise<RenderJob> => {
-    return (RenderService as any).addToQueueWithOutput(inputPath, outputPath);
+  const addToQueue = useCallback(async (
+    inputPath: string,
+    outputPath: string,
+    trimStartSec?: number,
+    trimEndSec?: number,
+  ): Promise<RenderJob> => {
+    return RenderService.addToQueueWithOutput(inputPath, outputPath, trimStartSec, trimEndSec);
+  }, []);
+
+  const updateJobTrim = useCallback((jobId: string, trimStartSec: number, trimEndSec: number): boolean => {
+    return RenderService.updateJobTrim(jobId, trimStartSec, trimEndSec);
   }, []);
 
   const removeJob = useCallback((jobId: string): boolean => {
@@ -161,6 +171,7 @@ export function useRenderQueue(): UseRenderQueueReturn {
     // Actions
     addFiles,
     addToQueue,
+    updateJobTrim,
     removeJob,
     clearCompleted,
     start,

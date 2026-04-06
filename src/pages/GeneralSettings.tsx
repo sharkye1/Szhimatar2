@@ -31,7 +31,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
     setGlassOpacity: setAppGlassOpacity,
     setGlassBlur: setAppGlassBlur,
   } = useTheme();
-  const { screenAnimation, setScreenAnimation } = useSettings();
+  const { screenAnimation, setScreenAnimation, performanceMode, setPerformanceMode } = useSettings();
 
   const [themeName, setThemeName] = useState('light');
   const [modifiedTheme, setModifiedTheme] = useState<boolean>(appModifiedTheme);
@@ -42,6 +42,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
   const [glassOpacity, setGlassOpacity] = useState<number>(appGlassOpacity);
   const [glassBlur, setGlassBlur] = useState<number>(appGlassBlur);
   const [screenAnimationLocal, setScreenAnimationLocal] = useState<ScreenAnimationType>(screenAnimation);
+  const [performanceModeLocal, setPerformanceModeLocal] = useState<boolean>(performanceMode);
   const [gpuAvailable, setGpuAvailable] = useState<boolean>(false);
   const [showFfmpegManager, setShowFfmpegManager] = useState(false);
   const [showLogsWarning, setShowLogsWarning] = useState(false);
@@ -119,6 +120,13 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
       setGpuAvailable(!!settings.gpuAvailable);
       if (settings.screenAnimation) {
         setScreenAnimationLocal(settings.screenAnimation as ScreenAnimationType);
+      } else if (settings.screen_animation) {
+        setScreenAnimationLocal(settings.screen_animation as ScreenAnimationType);
+      }
+      if (settings.performanceMode !== undefined) {
+        setPerformanceModeLocal(!!settings.performanceMode);
+      } else if (settings.performance_mode !== undefined) {
+        setPerformanceModeLocal(!!settings.performance_mode);
       }
       // First run GPU check if key missing
       if (settings.gpuAvailable === undefined) {
@@ -250,6 +258,9 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
           glassOpacity: glassOpacity,
           glassBlur: glassBlur,
           screenAnimation: screenAnimationLocal,
+          screen_animation: screenAnimationLocal,
+          performanceMode: performanceModeLocal,
+          performance_mode: performanceModeLocal,
         }
       });
 
@@ -257,11 +268,11 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
       setAppModifiedTheme(modifiedTheme);
       setAppLanguage(language);
       setScreenAnimation(screenAnimationLocal);
+      setPerformanceMode(performanceModeLocal);
       setAppUseImageBackground(useImageBackground);
       setAppBackgroundImagePath(backgroundImagePath);
       setAppGlassOpacity(glassOpacity);
       setAppGlassBlur(glassBlur);
-      await invoke('write_log', { message: 'Settings saved' });
       alert('Settings saved!');
     } catch (error) {
       console.error('Failed to save settings:', error);
@@ -289,15 +300,21 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
           <div className="setting-group" style={{ flex: '1 1 200px', minWidth: '200px' }}>
             <label>{t('settings.theme')}</label>
             <select value={themeName} onChange={(e) => setThemeName(e.target.value)} style={{ marginBottom: '8px' }}>
-              <option value="light">Light</option>
-              <option value="dark-red">Dark Red</option>
-              <option value="blue-ocean">Blue Ocean</option>
-              <option value="dark-blue">Dark Blue</option>
-              <option value="dark-gray">Dark Gray</option>
-              <option value="dark-orange">Dark Orange</option>
-              <option value="dark-green">Dark Green</option>
-              <option value="purple-pink">Purple Pink</option>       
-              <option value="pink">Pink</option>
+              <option value="light">{t('settings.themeNames.light') || 'Cloud Day'}</option>
+              <option value="dark-red">{t('settings.themeNames.darkRed') || 'Crimson Cellar'}</option>
+              <option value="blue-ocean">{t('settings.themeNames.blueOcean') || 'Blue Ocean'}</option>
+              <option value="dark-blue">{t('settings.themeNames.darkBlue') || 'Midnight Harbor'}</option>
+              <option value="dark-gray">{t('settings.themeNames.darkGray') || 'Ash Fog'}</option>
+              <option value="dark-orange">{t('settings.themeNames.darkOrange') || 'Amber Forge'}</option>
+              <option value="dark-green">{t('settings.themeNames.darkGreen') || 'Pine Dusk'}</option>
+              <option value="purple-pink">{t('settings.themeNames.purplePink') || 'Plum Bloom'}</option>
+              <option value="pink">{t('settings.themeNames.pink') || 'Rose Candy'}</option>
+              <option value="sunny-yellow">{t('settings.themeNames.sunnyYellow') || 'Sunny Yellow'}</option>
+              <option value="mint-glass">{t('settings.themeNames.mintGlass') || 'Mint Glass'}</option>
+              <option value="paper-sepia">{t('settings.themeNames.paperSepia') || 'Paper Sepia'}</option>
+              <option value="nord-soft">{t('settings.themeNames.nordSoft') || 'Nord Soft'}</option>
+              <option value="graphite-light">{t('settings.themeNames.graphiteLight') || 'Graphite Light'}</option>
+              <option value="amoled-night">{t('settings.themeNames.amoledNight') || 'AMOLED Night'}</option>
             </select>
             <label className="checkbox-label" style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
               <input
@@ -334,6 +351,14 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
               <option value="scale-fade">{t('settings.animations.scaleFade')}</option>
               <option value="none">{t('settings.animations.none')}</option>
             </select>
+            <label className="checkbox-label" style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={performanceModeLocal}
+                onChange={(e) => setPerformanceModeLocal(e.target.checked)}
+              />
+              {t('settings.performanceMode')}
+            </label>
           </div>
         </div>
 

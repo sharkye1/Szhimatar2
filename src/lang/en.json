@@ -223,6 +223,23 @@
     "title": "Settings",
     "update_available": "Update Available",
     "theme": "Theme",
+    "themeNames": {
+      "light": "Cloud Day",
+      "darkRed": "Crimson Cellar",
+      "blueOcean": "Blue Ocean",
+      "darkBlue": "Midnight Harbor",
+      "darkGray": "Ash Fog",
+      "darkOrange": "Amber Forge",
+      "darkGreen": "Pine Dusk",
+      "purplePink": "Plum Bloom",
+      "pink": "Rose Candy",
+      "sunnyYellow": "Sunny Yellow",
+      "mintGlass": "Mint Glass",
+      "paperSepia": "Paper Sepia",
+      "nordSoft": "Nord Soft",
+      "graphiteLight": "Graphite Light",
+      "amoledNight": "AMOLED Night"
+    },
     "language": "Language",
     "backgroundSource": "Background Source",
     "useImageBackground": "Use image as background",
@@ -245,7 +262,8 @@
     "save": "Save",
     "cancel": "Cancel",
     "glassOpacity": "Image Dimming",
-    "glassBlur": "Image Blur"
+    "glassBlur": "Image Blur",
+    "performanceMode": "Performance Mode (flat dark gray, no glow/animations)"
   },
   "watermark": {
     "title": "Watermark Settings",
@@ -315,7 +333,11 @@
     "deleteFromQueue": "Delete from queue",
     "show": "Show",
     "showInExplorer": "Show in Explorer",
-    "completedWithSize": "Done"
+    "completedWithSize": "Done",
+    "trim": "Trim",
+    "trimRange": "Range",
+    "trimDuration": "Length",
+    "trimReadonly": "Trim can be edited only while item is pending"
   },
   "gpu": {
     "label": "GPU (NVENC)",

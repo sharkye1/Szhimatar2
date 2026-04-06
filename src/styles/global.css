@@ -228,6 +228,46 @@ pre,
   animation: slideIn 0.3s ease;
 }
 
+/* Performance mode: prioritize startup/render speed over visual effects */
+:root.performance-mode {
+  --color-background: #2a2a2a;
+  --color-surface: #333333;
+  --color-primary: #9a9a9a;
+  --color-secondary: #7d7d7d;
+  --color-text: #e2e2e2;
+  --color-textSecondary: #bbbbbb;
+  --color-border: #4a4a4a;
+  --theme-bg-rgb: 42, 42, 42;
+  --primary-rgb: 154, 154, 154;
+}
+
+:root.performance-mode .app-background {
+  background: #2a2a2a !important;
+  background-image: none !important;
+  animation: none !important;
+}
+
+:root.performance-mode .app-background::after {
+  background: transparent !important;
+}
+
+:root.performance-mode * {
+  animation: none !important;
+  transition: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  filter: none !important;
+}
+
+:root.performance-mode button::before,
+:root.performance-mode .app-background::before,
+:root.performance-mode .app-background::after {
+  display: none !important;
+  content: none !important;
+}
+
 /* Scrollbar styles */
 ::-webkit-scrollbar {
   width: 8px;

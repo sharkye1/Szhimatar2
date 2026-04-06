@@ -223,6 +223,23 @@
     "title": "设置",
     "update_available": "可用更新",
     "theme": "主题",
+    "themeNames": {
+      "light": "晴云白昼",
+      "darkRed": "绯红地窖",
+      "blueOcean": "蓝色海洋",
+      "darkBlue": "午夜港湾",
+      "darkGray": "灰烬薄雾",
+      "darkOrange": "琥珀熔炉",
+      "darkGreen": "松林暮色",
+      "purplePink": "梅子绽放",
+      "pink": "玫瑰糖",
+      "sunnyYellow": "阳光黄",
+      "mintGlass": "薄荷玻璃",
+      "paperSepia": "纸感棕褐",
+      "nordSoft": "柔和北境",
+      "graphiteLight": "浅石墨",
+      "amoledNight": "AMOLED 夜色"
+    },
     "language": "语言",
     "backgroundSource": "背景来源",
     "useImageBackground": "使用图片作为背景",
@@ -245,7 +262,8 @@
     "save": "保存",
     "cancel": "取消",
     "glassOpacity": "Image Dimming",
-    "glassBlur": "Image Blur"
+    "glassBlur": "Image Blur",
+    "performanceMode": "Performance Mode (flat dark gray, no glow/animations)"
   },
   "watermark": {
     "title": "水印设置",
@@ -315,7 +333,11 @@
     "deleteFromQueue": "从队列删除",
     "show": "显示",
     "showInExplorer": "在资源管理器中显示",
-    "completedWithSize": "完成"
+    "completedWithSize": "完成",
+    "trim": "裁剪",
+    "trimRange": "范围",
+    "trimDuration": "时长",
+    "trimReadonly": "仅在队列等待状态下可编辑裁剪"
   },
   "gpu": {
     "label": "GPU (NVENC)",

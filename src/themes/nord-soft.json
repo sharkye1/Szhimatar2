@@ -1,0 +1,16 @@
+{
+    "name": "nord-soft",
+    "colors": {
+        "background": "#2b313c",
+        "surface": "#343c4a",
+        "primary": "#88c0d0",
+        "secondary": "#81a1c1",
+        "text": "#e5e9f0",
+        "textSecondary": "#b8c2d1",
+        "border": "#4b5568",
+        "success": "#a3be8c",
+        "warning": "#ebcb8b",
+        "error": "#bf616a",
+        "hover": "#3a4354"
+    }
+}

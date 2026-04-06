@@ -1,7 +1,7 @@
 import React, { ReactNode } from 'react';
 import { motion, Transition, TargetAndTransition } from 'framer-motion';
 import { useTheme } from '../contexts/ThemeContext';
-import { useSettings, ScreenAnimationType } from '../contexts/SettingsContext';
+import { ScreenAnimationType } from '../contexts/SettingsContext';
 
 interface MotionScreenProps {
   children: ReactNode;
@@ -123,16 +123,8 @@ const getAnimationConfig = (type: ScreenAnimationType): AnimationConfig => {
 // Unified screen transition component
 export const MotionScreen: React.FC<MotionScreenProps> = ({ children, animationType }) => {
   const { theme } = useTheme();
-  
-  // Try to use settings context, fallback to prop or default
-  let effectiveAnimation: ScreenAnimationType = 'default';
-  try {
-    const { screenAnimation } = useSettings();
-    effectiveAnimation = animationType || screenAnimation;
-  } catch {
-    // SettingsProvider not available, use prop or default
-    effectiveAnimation = animationType || 'default';
-  }
+  const effectiveAnimation: ScreenAnimationType = animationType || 'default';
+  console.log('[MotionScreen] animation profile:', effectiveAnimation);
 
   const config = getAnimationConfig(effectiveAnimation);
 

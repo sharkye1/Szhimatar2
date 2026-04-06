@@ -223,6 +223,23 @@
     "title": "Настройки",
     "update_available": "🚀 ОБНОВЛЕНИЕ!!!",
     "theme": "Тема",
+    "themeNames": {
+      "light": "☁️ Облачный день",
+      "darkRed": "🩸 Багровый подвал",
+      "blueOcean": "🌊 Синий океан",
+      "darkBlue": "🌌 Полуночная гавань",
+      "darkGray": "🌫️ Пепельный туман",
+      "darkOrange": "🔥 Янтарная кузница",
+      "darkGreen": "🌲 Сумеречная хвоя",
+      "purplePink": "🍑 Сливовый цвет",
+      "pink": "🍬 Розовая карамель",
+      "sunnyYellow": "☀️ Солнечный жёлтый",
+      "mintGlass": "🧊 Мятное стекло",
+      "paperSepia": "📜 Бумажная сепия",
+      "nordSoft": "🧭 Мягкий норд",
+      "graphiteLight": "✏️ Светлый графит",
+      "amoledNight": "🌑 AMOLED ночь"
+    },
     "language": "Язык",
     "backgroundSource": "🖼️ Источник фона",
     "useImageBackground": "🖼️ Использовать картинку как фон",
@@ -245,7 +262,8 @@
     "save": "Сохранить",
     "cancel": "Отмена",
     "glassOpacity": "Image Dimming",
-    "glassBlur": "Image Blur"
+    "glassBlur": "Image Blur",
+    "performanceMode": "⚡ Режим производительности (тёмно-серый, без glow/анимаций)"
   },
   "watermark": {
     "title": "Настройки водяного знака",
@@ -315,7 +333,11 @@
     "deleteFromQueue": "Удалить из взрывной очереди",
     "show": "Показать взрыв",
     "showInExplorer": "Показать в взрывном проводнике",
-    "completedWithSize": "Взорвано"
+    "completedWithSize": "Взорвано",
+    "trim": "Обрезка взрыва",
+    "trimRange": "Диапазон",
+    "trimDuration": "Длина",
+    "trimReadonly": "Обрезку можно менять только пока элемент ждёт взрыва"
   },
   "gpu": {
     "label": "GPU (NVENC) ",

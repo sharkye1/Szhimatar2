@@ -1,13 +1,19 @@
-﻿import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import '../styles/cursor-glow.css';
 import { useRenderQueue } from '../hooks/useRenderQueue';
+import { useSettings } from '../contexts/SettingsContext';
 
 export const CursorGlow: React.FC = () => {
   const glowRef = useRef<HTMLDivElement>(null);
   const auraRef = useRef<HTMLDivElement>(null);
   const { isProcessing } = useRenderQueue();
+  const { performanceMode } = useSettings();
 
   useEffect(() => {
+    if (performanceMode) {
+      return;
+    }
+
     let idleTimer: ReturnType<typeof setTimeout>;
     let rafId: number;
     
@@ -62,9 +68,13 @@ export const CursorGlow: React.FC = () => {
       clearTimeout(idleTimer);
       cancelAnimationFrame(rafId);
     };
-  }, []);
+  }, [performanceMode]);
 
   useEffect(() => {
+    if (performanceMode) {
+      return;
+    }
+
     if (glowRef.current && auraRef.current) {
       if (isProcessing) {
         glowRef.current.classList.add('rendering');
@@ -74,7 +84,11 @@ export const CursorGlow: React.FC = () => {
         auraRef.current.classList.remove('rendering');
       }
     }
-  }, [isProcessing]);
+  }, [isProcessing, performanceMode]);
+
+  if (performanceMode) {
+    return null;
+  }
 
   return (
     <>

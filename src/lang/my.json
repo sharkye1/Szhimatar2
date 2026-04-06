@@ -223,6 +223,23 @@
     "title": "Nastavenja",
     "update_available": "Dostupno Ažuriranje",
     "theme": "Tema",
+    "themeNames": {
+      "light": "Oblačny den",
+      "darkRed": "Bagrovy podval",
+      "blueOcean": "Blue Ocean",
+      "darkBlue": "Ponočna pristan",
+      "darkGray": "Popelna mgla",
+      "darkOrange": "Jantarna kuznja",
+      "darkGreen": "Sutona hvoya",
+      "purplePink": "Slivovy cvet",
+      "pink": "Rožova karamel",
+      "sunnyYellow": "Sunny Yellow",
+      "mintGlass": "Mint Glass",
+      "paperSepia": "Paper Sepia",
+      "nordSoft": "Nord Soft",
+      "graphiteLight": "Graphite Light",
+      "amoledNight": "AMOLED Night"
+    },
     "language": "Jazyk",
     "backgroundSource": "Istočnik fonu",
     "useImageBackground": "Ispolzovati izobraženje jak fon",
@@ -245,7 +262,8 @@
     "save": "Sahraniti",
     "cancel": "Otkazati",
     "glassOpacity": "Image Dimming",
-    "glassBlur": "Image Blur"
+    "glassBlur": "Image Blur",
+    "performanceMode": "Performance Mode (flat dark gray, no glow/animations)"
   },
   "watermark": {
     "title": "Nastavenja vodoznaka",
@@ -315,7 +333,11 @@
     "deleteFromQueue": "Udaliti iz čereda",
     "show": "Pokazać",
     "showInExplorer": "Pokazać u pravadniku",
-    "completedWithSize": "Gotovo"
+    "completedWithSize": "Gotovo",
+    "trim": "Obrezka",
+    "trimRange": "Diapazon",
+    "trimDuration": "Dlina",
+    "trimReadonly": "Obrezku možno mjenjati tolko poka element čeka"
   },
   "gpu": {
     "label": "GPU (NVENC)",

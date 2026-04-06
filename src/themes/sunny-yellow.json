@@ -1,0 +1,16 @@
+{
+    "name": "sunny-yellow",
+    "colors": {
+        "background": "#fffdf2",
+        "surface": "#fff7d6",
+        "primary": "#f0b429",
+        "secondary": "#e0c772",
+        "text": "#3f3200",
+        "textSecondary": "#6f5a10",
+        "border": "#f1de9a",
+        "success": "#6aa84f",
+        "warning": "#f39c12",
+        "error": "#d64545",
+        "hover": "#fff1b8"
+    }
+}

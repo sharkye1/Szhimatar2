@@ -9,6 +9,12 @@ import darkGreenTheme from '../themes/dark-green.json';
 import purplePinkTheme from '../themes/purple-pink.json';
 import darkGrayTheme from '../themes/dark-gray.json';
 import pinkTheme from '../themes/pink.json';
+import sunnyYellowTheme from '../themes/sunny-yellow.json';
+import mintGlassTheme from '../themes/mint-glass.json';
+import paperSepiaTheme from '../themes/paper-sepia.json';
+import nordSoftTheme from '../themes/nord-soft.json';
+import graphiteLightTheme from '../themes/graphite-light.json';
+import amoledNightTheme from '../themes/amoled-night.json';
 
 interface Theme {
   name: string;
@@ -55,6 +61,12 @@ const themes: Record<string, Theme> = {
   'purple-pink': purplePinkTheme,
   'dark-gray': darkGrayTheme,
   'pink': pinkTheme,
+  'sunny-yellow': sunnyYellowTheme,
+  'mint-glass': mintGlassTheme,
+  'paper-sepia': paperSepiaTheme,
+  'nord-soft': nordSoftTheme,
+  'graphite-light': graphiteLightTheme,
+  'amoled-night': amoledNightTheme,
 };
 
 // Convert hex color to RGB values
@@ -77,10 +89,22 @@ const themeBackgrounds: Record<string, string> = {
   'purple-pink': 'linear-gradient(-45deg, #1a0a1a, #2d152d, #3d1a3d, #2d1040, #1a051a)',
   'dark-gray': 'linear-gradient(-45deg, #151515, #252525, #1a1a1a, #2a2a2a, #101010)',
   'pink': 'linear-gradient(-45deg, #2a1520, #3d2530, #4a2a3a, #3d2035, #2a1520)',
+  'sunny-yellow': 'linear-gradient(-45deg, #fff8d1, #ffefb5, #ffe694, #fff3bf, #ffe082)',
+  'mint-glass': 'linear-gradient(-45deg, #e8fff7, #d9f7ee, #cff3ea, #dcfbf2, #c8efe2)',
+  'paper-sepia': 'linear-gradient(-45deg, #f8f1e1, #efe5cc, #f5ebd6, #e9dcc0, #f3e8d0)',
+  'nord-soft': 'linear-gradient(-45deg, #2b313c, #323a47, #2f3644, #3a4354, #252b35)',
+  'graphite-light': 'linear-gradient(-45deg, #f1f3f6, #e9edf2, #f5f6f8, #e3e7ed, #eef1f5)',
+  'amoled-night': 'linear-gradient(-45deg, #050505, #0b0b0b, #121212, #090909, #020202)',
 };
 
 // Check if theme is light
-const isLightTheme = (name: string): boolean => name === 'light';
+const isLightTheme = (name: string): boolean => (
+  name === 'light'
+  || name === 'sunny-yellow'
+  || name === 'mint-glass'
+  || name === 'paper-sepia'
+  || name === 'graphite-light'
+);
 
 const canLoadImage = (url: string): Promise<boolean> => {
   return new Promise((resolve) => {
@@ -152,6 +176,32 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   useEffect(() => {
     let cancelled = false;
+    let performanceModeEnabled = false;
+
+    try {
+      performanceModeEnabled = localStorage.getItem('performanceMode') === 'true';
+    } catch {
+      performanceModeEnabled = false;
+    }
+
+    if (performanceModeEnabled) {
+      const root = document.documentElement;
+      root.style.setProperty('--theme-bg-rgb', '42, 42, 42');
+      root.style.setProperty('--primary-rgb', '154, 154, 154');
+      root.style.setProperty('--secondary-rgb', '125, 125, 125');
+
+      const bgElement = document.querySelector('.app-background') as HTMLElement;
+      if (bgElement) {
+        bgElement.classList.remove('has-image-background');
+        bgElement.style.background = '#2a2a2a';
+        bgElement.style.backgroundImage = 'none';
+        bgElement.style.animation = 'none';
+      }
+
+      return () => {
+        cancelled = true;
+      };
+    }
 
     // Apply theme colors to CSS variables
     const root = document.documentElement;

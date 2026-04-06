@@ -1,0 +1,16 @@
+{
+    "name": "amoled-night",
+    "colors": {
+        "background": "#050505",
+        "surface": "#101010",
+        "primary": "#3d2f24",
+        "secondary": "#8b95a7",
+        "text": "#f4f6fb",
+        "textSecondary": "#aab3c2",
+        "border": "#1f1f1f",
+        "success": "#67d394",
+        "warning": "#ffcc66",
+        "error": "#ff6b7a",
+        "hover": "#171717"
+    }
+}

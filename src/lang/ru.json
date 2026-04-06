@@ -223,6 +223,23 @@
     "title": "Настройки",
     "update_available": "Доступно обновление",
     "theme": "Тема",
+    "themeNames": {
+      "light": "Облачный день",
+      "darkRed": "Спелая вишня",
+      "blueOcean": "Спокойная гавань",
+      "darkBlue": "Полуночная гавань",
+      "darkGray": "Пепельный туман",
+      "darkOrange": "Янтарная кузница",
+      "darkGreen": "Изумрудная роща",
+      "purplePink": "Сливовый пирог",
+      "pink": "Сахарная вата",
+      "sunnyYellow": "Лимонный зефир",
+      "mintGlass": "Мятный лед",
+      "paperSepia": "Бумажная сепия",
+      "nordSoft": "Мягкий норд",
+      "graphiteLight": "Светлый графит",
+      "amoledNight": "Горячий кофе"
+    },
     "language": "Язык",
     "backgroundSource": "Источник фона",
     "useImageBackground": "Использовать изображение как фон",
@@ -245,7 +262,8 @@
     "save": "Сохранить",
     "cancel": "Отмена",
     "glassOpacity": "Затенение картинки",
-    "glassBlur": "Размытие картинки"
+    "glassBlur": "Размытие картинки",
+    "performanceMode": "Режим производительности (плоский темно-серый, без glow/анимаций)"
   },
   "watermark": {
     "title": "Настройки водяного знака",
@@ -315,7 +333,11 @@
     "deleteFromQueue": "Удалить из очереди",
     "show": "Показать",
     "showInExplorer": "Показать в проводнике",
-    "completedWithSize": "Готово"
+    "completedWithSize": "Готово",
+    "trim": "Обрезка",
+    "trimRange": "Диапазон",
+    "trimDuration": "Длина",
+    "trimReadonly": "Обрезку можно менять только пока элемент в ожидании"
   },
   "gpu": {
     "label": "GPU (NVENC)",

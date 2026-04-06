@@ -3,7 +3,7 @@ import { AnimatePresence } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/tauri';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { LanguageProvider } from './contexts/LanguageContext';
-import { SettingsProvider } from './contexts/SettingsContext';
+import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import MainWindow from './pages/MainWindow';
 import RenderService from './services/RenderService';
 import VideoSettings from './pages/VideoSettings';
@@ -25,7 +25,13 @@ import {
 
 type Screen = 'main' | 'video' | 'audio' | 'general';
 
-function App() {
+type DefaultPresetResponse = {
+  name: string;
+  content: string;
+};
+
+function AppContent() {
+  const { performanceMode, screenAnimation } = useSettings();
   const [currentScreen, setCurrentScreen] = useState<Screen>('main');
   const [videoSettings, setVideoSettings] = useState<VideoSettingsType>(DEFAULT_VIDEO_SETTINGS);
   const [audioSettings, setAudioSettings] = useState<AudioSettingsType>(DEFAULT_AUDIO_SETTINGS);
@@ -88,23 +94,9 @@ function App() {
   useEffect(() => {
     const applyDefaultPreset = async () => {
       try {
-        const presetNames = await invoke<string[]>('list_presets');
-        const presets = await Promise.all(
-          presetNames.map(async (name) => {
-            try {
-              const content = await invoke<string>('load_preset', { name });
-              const parsed = JSON.parse(content) as AppPreset;
-              return { name, preset: parsed };
-            } catch (error) {
-              console.error('Failed to load preset', name, error);
-              return null;
-            }
-          })
-        );
-
-        const defaultPreset = presets.find((p) => p?.preset.isDefault === true);
-        if (defaultPreset?.preset) {
-          const p = defaultPreset.preset;
+        const defaultPreset = await invoke<DefaultPresetResponse | null>('load_default_preset');
+        if (defaultPreset) {
+          const p = JSON.parse(defaultPreset.content) as AppPreset;
           setVideoSettings(p.video);
           setAudioSettings(p.audio);
           setMainScreenSettings(p.mainScreen);
@@ -141,69 +133,99 @@ function App() {
   const navigateTo = (screen: Screen) => setCurrentScreen(screen);
   const goBack = () => setCurrentScreen('main');
 
+  const renderScreen = (key: string, content: JSX.Element) => {
+    if (performanceMode) {
+      return (
+        <div
+          key={key}
+          className="motion-screen"
+          style={{
+            background: 'transparent',
+            width: '100vw',
+            height: '100vh',
+            position: 'relative',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          {content}
+        </div>
+      );
+    }
+
+    return <MotionScreen key={key} animationType={screenAnimation}>{content}</MotionScreen>;
+  };
+
+  const getCurrentScreenContent = (): JSX.Element => {
+    switch (currentScreen) {
+      case 'video':
+        return (
+          <VideoSettings
+            onBack={goBack}
+            settings={videoSettings}
+            setSettings={setVideoSettings}
+            watermarkSettings={watermarkSettings}
+            setWatermarkSettings={setWatermarkSettings}
+          />
+        );
+      case 'audio':
+        return (
+          <AudioSettings
+            onBack={goBack}
+            settings={audioSettings}
+            setSettings={setAudioSettings}
+          />
+        );
+      case 'general':
+        return <GeneralSettings onBack={goBack} />;
+      case 'main':
+      default:
+        return (
+          <MainWindow
+            onNavigate={navigateTo}
+            videoSettings={videoSettings}
+            setVideoSettings={setVideoSettings}
+            audioSettings={audioSettings}
+            setAudioSettings={setAudioSettings}
+            mainScreenSettings={mainScreenSettings}
+            setMainScreenSettings={setMainScreenSettings}
+            watermarkSettings={watermarkSettings}
+            setWatermarkSettings={setWatermarkSettings}
+            selectedPresetName={selectedPresetName}
+            setSelectedPresetName={setSelectedPresetName}
+            cliFiles={cliFiles}
+            onCliFilesProcessed={() => setCliFiles([])}
+          />
+        );
+    }
+  };
+
+  const currentScreenNode = renderScreen(`screen-${currentScreen}`, getCurrentScreenContent());
+
   return (
-    <ThemeProvider>
-      <LanguageProvider>
-        <SettingsProvider>
-          {/* Glassmorphism background layer */}
-          <div className="app-background" />
-          
-          {/* Dynamic Interactive Cursor Glow */}
-          <CursorGlow />
+    <>
+      {!performanceMode && <div className="app-background" />}
+      {!performanceMode && <CursorGlow />}
           
           {/* Main app container with mouse tracking */}
           <div 
             className="app-root"
-            onMouseMove={handleMouseMove}
+            onMouseMove={performanceMode ? undefined : handleMouseMove}
             style={{ width: '100vw', height: '100vh', display: 'flex', position: 'relative', zIndex: 2 }}
           >
-            <AnimatePresence mode="wait" initial={false}>
-              {currentScreen === 'main' && (
-                <MotionScreen key="screen-main">
-                  <MainWindow
-                    onNavigate={navigateTo}
-                    videoSettings={videoSettings}
-                  setVideoSettings={setVideoSettings}
-                  audioSettings={audioSettings}
-                  setAudioSettings={setAudioSettings}
-                  mainScreenSettings={mainScreenSettings}
-                  setMainScreenSettings={setMainScreenSettings}
-                  watermarkSettings={watermarkSettings}
-                  setWatermarkSettings={setWatermarkSettings}
-                  selectedPresetName={selectedPresetName}
-                  setSelectedPresetName={setSelectedPresetName}
-                  cliFiles={cliFiles}
-                  onCliFilesProcessed={() => setCliFiles([])}
-                />
-              </MotionScreen>
-            )}
-            {currentScreen === 'video' && (
-              <MotionScreen key="screen-video">
-                <VideoSettings
-                  onBack={goBack}
-                  settings={videoSettings}
-                  setSettings={setVideoSettings}
-                  watermarkSettings={watermarkSettings}
-                  setWatermarkSettings={setWatermarkSettings}
-                />
-              </MotionScreen>
-            )}
-            {currentScreen === 'audio' && (
-              <MotionScreen key="screen-audio">
-                <AudioSettings
-                  onBack={goBack}
-                  settings={audioSettings}
-                  setSettings={setAudioSettings}
-                />
-              </MotionScreen>
-            )}
-            {currentScreen === 'general' && (
-              <MotionScreen key="screen-general">
-                <GeneralSettings onBack={goBack} />
-              </MotionScreen>
-            )}
-          </AnimatePresence>
-        </div>
+            {performanceMode ? currentScreenNode : <AnimatePresence mode="wait" initial={false}>{currentScreenNode}</AnimatePresence>}
+      </div>
+    </>
+  );
+}
+
+function App() {
+  return (
+    <ThemeProvider>
+      <LanguageProvider>
+        <SettingsProvider>
+          <AppContent />
         </SettingsProvider>
       </LanguageProvider>
     </ThemeProvider>

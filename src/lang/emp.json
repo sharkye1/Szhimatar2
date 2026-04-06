@@ -223,6 +223,23 @@
     "title": "",
     "update_available": "",
     "theme": "",
+    "themeNames": {
+      "light": "",
+      "darkRed": "",
+      "blueOcean": "",
+      "darkBlue": "",
+      "darkGray": "",
+      "darkOrange": "",
+      "darkGreen": "",
+      "purplePink": "",
+      "pink": "",
+      "sunnyYellow": "",
+      "mintGlass": "",
+      "paperSepia": "",
+      "nordSoft": "",
+      "graphiteLight": "",
+      "amoledNight": ""
+    },
     "language": "",
     "backgroundSource": "",
     "useImageBackground": "",
@@ -245,7 +262,8 @@
     "save": "",
     "cancel": "",
     "glassOpacity": "Image Dimming",
-    "glassBlur": "Image Blur"
+    "glassBlur": "Image Blur",
+    "performanceMode": "Performance Mode (flat dark gray, no glow/animations)"
   },
   "watermark": {
     "title": "",
@@ -315,7 +333,11 @@
     "deleteFromQueue": "",
     "show": "",
     "showInExplorer": "",
-    "completedWithSize": ""
+    "completedWithSize": "",
+    "trim": "",
+    "trimRange": "",
+    "trimDuration": "",
+    "trimReadonly": ""
   },
   "gpu": {
     "label": "",

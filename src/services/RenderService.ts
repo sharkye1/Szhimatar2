@@ -41,6 +41,8 @@ export interface RenderJob {
   inputPath: string;
   outputPath: string;
   fileName: string;
+  inputSize: string; // Source file size (e.g., "120.3 MB")
+  inputSizeBytes: number; // Source size in bytes for comparisons
   status: RenderStatus;
   progress: number;
   eta: number; // seconds
@@ -59,6 +61,8 @@ export interface RenderJob {
   estimatedFinalSize?: string; // Estimated final size (e.g., "~50.2 MB")
   estimatedFinalSizeBytes?: number; // Estimated final size in bytes
   assignedSlot?: 'cpu' | 'gpu'; // Which slot was used for this render
+  trimStartSec: number; // Start point for trim (seconds)
+  trimEndSec: number; // End point for trim (seconds)
 }
 
 export interface RenderProgress {
@@ -702,6 +706,8 @@ class RenderServiceImpl {
   private outputSuffix: string = '_szhatoe';
   private selectedPresetName: string | null = null;
 
+  private static readonly MIN_TRIM_DURATION_SEC = 1;
+
   constructor() {
     this.setupEventListeners();
   }
@@ -895,11 +901,24 @@ class RenderServiceImpl {
         console.warn('[RenderService] Could not get duration for:', inputPath, error);
       }
 
+      // Get source file size for before/after comparisons
+      let inputSizeBytes = 0;
+      try {
+        inputSizeBytes = await invoke<number>('get_file_size_bytes', { inputPath });
+      } catch (error) {
+        console.warn('[RenderService] Could not get file size for:', inputPath, error);
+      }
+      const inputSize = inputSizeBytes > 0
+        ? this.parseFileSize(`${inputSizeBytes}b`).formatted
+        : '—';
+
       const job: RenderJob = {
         id: jobId,
         inputPath,
         outputPath,
         fileName,
+        inputSize,
+        inputSizeBytes,
         status: 'pending',
         progress: 0,
         eta: 0,
@@ -912,6 +931,8 @@ class RenderServiceImpl {
         frame: 0,
         outputSize: '—',
         outputSizeBytes: 0,
+        trimStartSec: 0,
+        trimEndSec: durationSeconds > 0 ? durationSeconds : 0,
       };
 
       this.jobs.set(jobId, job);
@@ -926,7 +947,12 @@ class RenderServiceImpl {
   /**
    * Add file to render queue with explicit output path (for re-renders)
    */
-  public async addToQueueWithOutput(inputPath: string, outputPath: string): Promise<RenderJob> {
+  public async addToQueueWithOutput(
+    inputPath: string,
+    outputPath: string,
+    trimStartSec?: number,
+    trimEndSec?: number,
+  ): Promise<RenderJob> {
     const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const fileName = inputPath.split(/[\\/]/).pop() || inputPath;
 
@@ -938,11 +964,24 @@ class RenderServiceImpl {
       console.warn('[RenderService] Could not get duration for:', inputPath, error);
     }
 
+    // Get source file size for before/after comparisons
+    let inputSizeBytes = 0;
+    try {
+      inputSizeBytes = await invoke<number>('get_file_size_bytes', { inputPath });
+    } catch (error) {
+      console.warn('[RenderService] Could not get file size for:', inputPath, error);
+    }
+    const inputSize = inputSizeBytes > 0
+      ? this.parseFileSize(`${inputSizeBytes}b`).formatted
+      : '—';
+
     const job: RenderJob = {
       id: jobId,
       inputPath,
       outputPath,
       fileName,
+      inputSize,
+      inputSizeBytes,
       status: 'pending',
       progress: 0,
       eta: 0,
@@ -955,12 +994,41 @@ class RenderServiceImpl {
       frame: 0,
       outputSize: '—',
       outputSizeBytes: 0,
+      trimStartSec: 0,
+      trimEndSec: durationSeconds > 0 ? durationSeconds : 0,
     };
+
+    if (durationSeconds > 0 && typeof trimStartSec === 'number' && typeof trimEndSec === 'number') {
+      const normalized = this.normalizeTrimRange(durationSeconds, trimStartSec, trimEndSec);
+      job.trimStartSec = normalized.start;
+      job.trimEndSec = normalized.end;
+    }
 
     this.jobs.set(jobId, job);
     this.scheduler.enqueue(jobId);
     this.notifyListeners();
     return job;
+  }
+
+  /**
+   * Update trim for a queued job.
+   * Trim can only be edited while job is pending.
+   */
+  public updateJobTrim(jobId: string, trimStartSec: number, trimEndSec: number): boolean {
+    const job = this.jobs.get(jobId);
+    if (!job) return false;
+    if (job.status !== 'pending') return false;
+    if (job.durationSeconds <= 0) return false;
+
+    const normalized = this.normalizeTrimRange(job.durationSeconds, trimStartSec, trimEndSec);
+    if ((normalized.end - normalized.start) < RenderServiceImpl.MIN_TRIM_DURATION_SEC) {
+      return false;
+    }
+
+    job.trimStartSec = normalized.start;
+    job.trimEndSec = normalized.end;
+    this.notifyListeners();
+    return true;
   }
 
   /**
@@ -1065,6 +1133,15 @@ class RenderServiceImpl {
     this.activeJobs.add(jobId);
     this.notifyListeners();
 
+    const trim = this.normalizeTrimRange(job.durationSeconds, job.trimStartSec, job.trimEndSec);
+    const shouldTrim =
+      job.durationSeconds > 0 &&
+      (trim.start > 0.0001 || trim.end < (job.durationSeconds - 0.0001)) &&
+      (trim.end - trim.start) >= RenderServiceImpl.MIN_TRIM_DURATION_SEC;
+    const effectiveDurationSeconds = shouldTrim
+      ? (trim.end - trim.start)
+      : Math.max(0, job.durationSeconds);
+
     // Add to statistics tracking
     try {
       StatisticsService.addRender({
@@ -1087,7 +1164,7 @@ class RenderServiceImpl {
           sampleRate: String(this.audioSettings?.sampleRate || 44100),
           channels: String(this.audioSettings?.channels || 2),
         },
-        duration: job.durationSeconds,
+        duration: effectiveDurationSeconds,
       });
     } catch (statsError) {
       console.warn('[RenderService] Failed to add render to statistics:', statsError);
@@ -1154,9 +1231,12 @@ class RenderServiceImpl {
       }
 
       const ffmpegArgs = builder.buildArgs();
+      const ffmpegArgsWithTrim = shouldTrim
+        ? ['-ss', trim.start.toFixed(3), '-t', effectiveDurationSeconds.toFixed(3), ...ffmpegArgs]
+        : ffmpegArgs;
       
       // CRITICAL: Log FINAL command for comparison with preview
-      console.log('[FINAL CMD] FFmpeg args:', ffmpegArgs.join(' '));
+      console.log('[FINAL CMD] FFmpeg args:', ffmpegArgsWithTrim.join(' '));
       console.log('[FINAL CMD] Settings summary:', builder.getSettingsDescription());
       console.log('[FINAL CMD] Rate control params:', {
         codec: effectiveVideoSettings.codec,
@@ -1167,9 +1247,48 @@ class RenderServiceImpl {
       });
 
       // Log to file
+      const runtimeDiagnostics = {
+        timestamp: new Date().toISOString(),
+        job: {
+          id: jobId,
+          fileName: job.fileName,
+          inputPath: job.inputPath,
+          outputPath: job.outputPath,
+          assignedSlot: slot,
+          renderMode: this.renderMode,
+          gpuAvailable: this.gpuAvailable,
+          selectedPresetName: this.selectedPresetName || 'Custom',
+          sourceDurationSeconds: job.durationSeconds,
+          effectiveDurationSeconds,
+          trim: {
+            enabled: shouldTrim,
+            startSec: trim.start,
+            endSec: trim.end,
+          },
+        },
+        ffmpeg: {
+          args: ffmpegArgsWithTrim,
+          argsText: ffmpegArgsWithTrim.join(' '),
+          inferredCommand: `ffmpeg -i \"${job.inputPath}\" ${ffmpegArgsWithTrim.join(' ')} \"${job.outputPath}\"`,
+        },
+        settings: {
+          videoEffective: effectiveVideoSettings,
+          audio: this.audioSettings,
+          watermark: this.watermarkSettings,
+          mainScreen: this.mainScreenSettings,
+        },
+      };
+
       await invoke('write_render_log', {
         jobId,
-        message: `Starting render: ${job.inputPath} -> ${job.outputPath}\nSettings: ${builder.getSettingsDescription()}\nArgs: ${ffmpegArgs.join(' ')}`
+        message: [
+          `Starting render: ${job.inputPath} -> ${job.outputPath}`,
+          `Settings: ${builder.getSettingsDescription()}`,
+          `Trim: ${shouldTrim ? `${trim.start.toFixed(3)}s..${trim.end.toFixed(3)}s` : 'full'}`,
+          `Args: ${ffmpegArgsWithTrim.join(' ')}`,
+          'Diagnostics JSON:',
+          JSON.stringify(runtimeDiagnostics, null, 2),
+        ].join('\n')
       });
 
       // Start render
@@ -1178,8 +1297,8 @@ class RenderServiceImpl {
           job_id: jobId,
           input_path: job.inputPath,
           output_path: job.outputPath,
-          ffmpeg_args: ffmpegArgs,
-          duration_seconds: job.durationSeconds,
+          ffmpeg_args: ffmpegArgsWithTrim,
+          duration_seconds: effectiveDurationSeconds,
         }
       });
 
@@ -1583,6 +1702,23 @@ class RenderServiceImpl {
     const secs = Math.floor(seconds % 60);
 
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  private normalizeTrimRange(durationSeconds: number, startSec: number, endSec: number): { start: number; end: number } {
+    if (!isFinite(durationSeconds) || durationSeconds <= 0) {
+      return { start: 0, end: 0 };
+    }
+
+    const safeStart = Number.isFinite(startSec) ? startSec : 0;
+    const safeEnd = Number.isFinite(endSec) ? endSec : durationSeconds;
+    const clampedStart = Math.max(0, Math.min(durationSeconds, safeStart));
+    const clampedEnd = Math.max(0, Math.min(durationSeconds, safeEnd));
+
+    if (clampedEnd < clampedStart) {
+      return { start: clampedEnd, end: clampedStart };
+    }
+
+    return { start: clampedStart, end: clampedEnd };
   }
 
   /**

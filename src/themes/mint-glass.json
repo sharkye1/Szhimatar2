@@ -1,0 +1,16 @@
+{
+    "name": "mint-glass",
+    "colors": {
+        "background": "#f2fffb",
+        "surface": "#e6faf3",
+        "primary": "#21b389",
+        "secondary": "#7bcfb2",
+        "text": "#12392f",
+        "textSecondary": "#3d6e61",
+        "border": "#bde7da",
+        "success": "#2e9f57",
+        "warning": "#d09b2f",
+        "error": "#d95757",
+        "hover": "#dff6ee"
+    }
+}

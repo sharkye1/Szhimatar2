@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { open } from '@tauri-apps/api/dialog';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -10,7 +10,7 @@ import PreviewPanel from '../components/PreviewPanel';
 import useRenderQueue from '../hooks/useRenderQueue';
 import StatisticsPanel from '../components/StatisticsPanel';
 import { UpdateService, UpdateState } from '../services/UpdateService';
-import { Film, Volume2, Settings, BarChart3, Folder, Play, Pause, Square, RefreshCw, Sparkles, HardDrive, Check, X, Clock, AlertTriangle } from 'lucide-react';
+import { Film, Volume2, Settings, BarChart3, Folder, Play, Pause, Square, RefreshCw, Sparkles, HardDrive, Check, X, Clock, AlertTriangle, Trash2 } from 'lucide-react';
 import type { RenderJob } from '../services/RenderService';
 import type {
   AppPreset,
@@ -95,6 +95,17 @@ interface NetworkProxyVpnStatus {
   warning_needed: boolean;
 }
 
+type TrimHandleType = 'start' | 'end';
+
+interface TrimFramePreviewState {
+  jobId: string;
+  handle: TrimHandleType;
+  timeSec: number;
+  leftPercent: number;
+  imageDataUrl: string | null;
+  loading: boolean;
+}
+
 const MainWindow: React.FC<MainWindowProps> = ({
   onNavigate,
   videoSettings,
@@ -126,6 +137,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
     pendingJobs,
     addFiles,
     addToQueue,
+    updateJobTrim,
     removeJob,
     clearCompleted,
     start,
@@ -139,11 +151,19 @@ const MainWindow: React.FC<MainWindowProps> = ({
     setRenderMode,
   } = useRenderQueue();
 
+  const trimStepSec = 0.5;
+  const minTrimDurationSec = 1;
+
   const [showStats, setShowStats] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [selectedPreviewPath, setSelectedPreviewPath] = useState<string>('');
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [networkWarning, setNetworkWarning] = useState<string | null>(null);
+  const [trimFramePreview, setTrimFramePreview] = useState<TrimFramePreviewState | null>(null);
+  const trimPreviewDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trimPreviewHideRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trimPreviewRequestRef = useRef(0);
+  const trimPreviewCacheRef = useRef<Map<string, string>>(new Map());
 
   // Check for updates after 2 seconds
   useEffect(() => {
@@ -196,9 +216,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
           logDetails.push(`clash=${result.clash_details.join(' | ')}`);
         }
 
-        await invoke('write_log', {
-          message: `[MainWindow] Network warning shown at startup. ${logDetails.join(' || ') || 'No extra details'}`,
-        });
+        // Intentionally no app.log write here to keep app.log clean from network diagnostics.
       } catch (error) {
         console.warn('Network proxy/VPN check failed:', error);
       }
@@ -270,7 +288,6 @@ const MainWindow: React.FC<MainWindowProps> = ({
 
       if (selected && Array.isArray(selected)) {
         await addFiles(selected);
-        await invoke('write_log', { message: `Added ${selected.length} files to queue` });
       }
     } catch (error) {
       console.error('Failed to select files:', error);
@@ -299,7 +316,6 @@ const MainWindow: React.FC<MainWindowProps> = ({
   const handleStart = async () => {
     try {
       await start();
-      await invoke('write_log', { message: 'Started processing queue' });
     } catch (error) {
       console.error('Failed to start processing:', error);
       await invoke('write_log', { message: `Error starting: ${error}` });
@@ -351,7 +367,6 @@ const MainWindow: React.FC<MainWindowProps> = ({
       setWatermarkSettings(preset.watermark);
     }
     setSelectedPresetName(preset.name || '');
-    invoke('write_log', { message: `Applied preset: ${preset.name}` });
   };
 
   const handleShowInExplorer = async (filePath: string) => {
@@ -362,6 +377,134 @@ const MainWindow: React.FC<MainWindowProps> = ({
       // Optionally show a notification to user
     }
   };
+
+  const formatTrimTime = (seconds: number): string => {
+    const safeSeconds = Math.max(0, seconds);
+    const minutes = Math.floor(safeSeconds / 60);
+    const secs = safeSeconds % 60;
+    return `${minutes}:${secs.toFixed(1).padStart(4, '0')}`;
+  };
+
+  const formatDurationCompact = (seconds: number): string => {
+    const safeSeconds = Math.max(0, seconds);
+    if (safeSeconds < 60) {
+      return `${safeSeconds.toFixed(1)}s`;
+    }
+    const minutes = Math.floor(safeSeconds / 60);
+    const secs = safeSeconds - minutes * 60;
+    return `${minutes}m ${secs.toFixed(1)}s`;
+  };
+
+  const needsTopPreviewSpace = Boolean(
+    trimFramePreview && jobs.length > 0 && trimFramePreview.jobId === jobs[0].id,
+  );
+
+  const hideTrimFramePreview = useCallback((delayMs: number = 450) => {
+    if (trimPreviewHideRef.current) {
+      clearTimeout(trimPreviewHideRef.current);
+    }
+    trimPreviewHideRef.current = setTimeout(() => {
+      setTrimFramePreview(null);
+    }, delayMs);
+  }, []);
+
+  const requestTrimFramePreview = useCallback((
+    jobId: string,
+    inputPath: string,
+    timeSec: number,
+    leftPercent: number,
+    handle: TrimHandleType,
+  ) => {
+    if (!inputPath) return;
+
+    if (trimPreviewHideRef.current) {
+      clearTimeout(trimPreviewHideRef.current);
+    }
+
+    const roundedTimeSec = Math.max(0, Math.round(timeSec * 2) / 2);
+    const cacheKey = `${inputPath}|${roundedTimeSec.toFixed(1)}`;
+    const cachedFrame = trimPreviewCacheRef.current.get(cacheKey) || null;
+
+    setTrimFramePreview({
+      jobId,
+      handle,
+      timeSec: roundedTimeSec,
+      leftPercent,
+      imageDataUrl: cachedFrame,
+      loading: !cachedFrame,
+    });
+
+    if (cachedFrame) {
+      return;
+    }
+
+    if (trimPreviewDebounceRef.current) {
+      clearTimeout(trimPreviewDebounceRef.current);
+    }
+
+    trimPreviewDebounceRef.current = setTimeout(async () => {
+      const requestId = ++trimPreviewRequestRef.current;
+
+      try {
+        const frame = await invoke<string>('get_preview_frame', {
+          inputPath,
+          timeSeconds: roundedTimeSec,
+          settings: {
+            codec: '',
+            crf: '23',
+            fps: '',
+            resolution: '',
+            filters: [],
+            resampling_enabled: false,
+            resampling_intensity: 0,
+          },
+        });
+
+        if (requestId !== trimPreviewRequestRef.current) {
+          return;
+        }
+
+        const dataUrl = `data:image/jpeg;base64,${frame}`;
+        trimPreviewCacheRef.current.set(cacheKey, dataUrl);
+
+        setTrimFramePreview((prev) => {
+          if (!prev) return prev;
+          if (prev.jobId !== jobId || prev.handle !== handle) return prev;
+          if (Math.abs(prev.timeSec - roundedTimeSec) > 0.001) return prev;
+          return {
+            ...prev,
+            imageDataUrl: dataUrl,
+            loading: false,
+          };
+        });
+      } catch (error) {
+        console.warn('[MainWindow] Failed to load trim frame preview:', error);
+        if (requestId !== trimPreviewRequestRef.current) {
+          return;
+        }
+        setTrimFramePreview((prev) => {
+          if (!prev) return prev;
+          if (prev.jobId !== jobId || prev.handle !== handle) return prev;
+          if (Math.abs(prev.timeSec - roundedTimeSec) > 0.001) return prev;
+          return {
+            ...prev,
+            loading: false,
+          };
+        });
+      }
+    }, 80);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (trimPreviewDebounceRef.current) {
+        clearTimeout(trimPreviewDebounceRef.current);
+      }
+      if (trimPreviewHideRef.current) {
+        clearTimeout(trimPreviewHideRef.current);
+      }
+    };
+  }, []);
 
   return ( 
     <div className="main-window fade-in" style={{ color: theme.colors.text }}>
@@ -468,11 +611,12 @@ const MainWindow: React.FC<MainWindowProps> = ({
                 />
 
         <div className="file-selection">
-          <button onClick={handleSelectFiles} style={{ background: theme.colors.primary, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button className="main-action-button" onClick={handleSelectFiles} style={{ background: theme.colors.primary, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Folder size={18} strokeWidth={1.5} /> {t('main.selectFiles')}
           </button>
           <div className="output-controls" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <button
+              className="main-action-button"
               onClick={handleSelectOutputFolder}
               style={{
                 background: theme.colors.primary,
@@ -489,6 +633,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
             </button>
 
             <motion.button
+              className="source-dir-toggle"
               type="button"
               aria-pressed={mainScreenSettings.saveInSourceDirectory}
               onClick={handleToggleSaveInSourceDirectory}
@@ -522,7 +667,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
           )}
 
           {/* CPU/GPU/Duo Toggle - Advanced visual selector */}
-          <div style={{ padding: '8px 0' }}>
+          <div className="render-mode-inline" style={{ padding: '8px 0' }}>
             <RenderModeSelector
               mode={renderMode}
               onModeChange={handleSetRenderMode}
@@ -560,7 +705,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
               )}
             </div>
           </div>
-          <div className="queue-list" style={{ borderColor: theme.colors.border }}>
+          <div className={`queue-list ${needsTopPreviewSpace ? 'has-top-preview-room' : ''}`} style={{ borderColor: theme.colors.border }}>
             {jobs.length === 0 ? (
               <div className="empty-queue" style={{ color: theme.colors.textSecondary }}>
                 {t('main.selectFiles')}...
@@ -571,7 +716,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
                 return (
                   <div key={item.id} className="queue-item" style={{ borderColor: theme.colors.border }}>
                     <div className="item-info">
-                      <div className="item-main-info" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div className="item-main-info" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', minHeight: '32px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
                           {/* Status badge with icon */}
                           <span style={{
@@ -625,7 +770,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
                           {item.status === 'completed' && (
                             <>
                               <button
-                                onClick={() => addToQueue(item.inputPath, item.outputPath)}
+                                onClick={() => addToQueue(item.inputPath, item.outputPath, item.trimStartSec, item.trimEndSec)}
                                 style={{
                                   display: 'flex',
                                   alignItems: 'center',
@@ -658,7 +803,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
                                   const outputPathNew = lastDot > 0 
                                     ? item.outputPath.substring(0, lastDot) + '_2' + item.outputPath.substring(lastDot)
                                     : item.outputPath + '_2';
-                                  addToQueue(item.inputPath, outputPathNew);
+                                  addToQueue(item.inputPath, outputPathNew, item.trimStartSec, item.trimEndSec);
                                 }}
                                 style={{
                                   display: 'flex',
@@ -750,11 +895,135 @@ const MainWindow: React.FC<MainWindowProps> = ({
                               }}
                               title={t('queue.deleteFromQueue')}
                             >
-                              ×
+                              <Trash2 size={14} strokeWidth={2} />
                             </button>
                           )}
                         </div>
                       </div>
+                      {item.status === 'pending' && item.durationSeconds > 0 && (() => {
+                        const duration = item.durationSeconds;
+                        const trimStart = Math.max(0, Math.min(duration, item.trimStartSec ?? 0));
+                        const trimEnd = Math.max(trimStart, Math.min(duration, item.trimEndSec ?? duration));
+                        const editable = item.status === 'pending';
+                        const startPercent = duration > 0 ? (trimStart / duration) * 100 : 0;
+                        const endPercent = duration > 0 ? (trimEnd / duration) * 100 : 0;
+                        const selectedPercent = duration > 0 ? ((trimEnd - trimStart) / duration) * 100 : 0;
+                        return (
+                          <div
+                            className={`trim-control ${editable ? 'is-editable' : 'is-readonly'}`}
+                            style={{
+                              ['--trim-accent' as string]: theme.colors.primary,
+                              borderColor: theme.colors.border,
+                              background: 'rgba(var(--theme-bg-rgb), 0.12)'
+                            }}
+                          >
+                            <div className="trim-head" style={{ color: theme.colors.textSecondary }}>
+                              <span>{t('queue.trim') || 'Trim'}</span>
+                              <span>
+                                {t('queue.trimRange') || 'Range'}: {formatTrimTime(trimStart)} - {formatTrimTime(trimEnd)}
+                              </span>
+                              <span>
+                                {t('queue.trimDuration') || 'Length'}: {formatTrimTime(trimEnd - trimStart)}
+                              </span>
+                            </div>
+
+                            <div className="trim-slider-wrap">
+                              {trimFramePreview && trimFramePreview.jobId === item.id && (
+                                <div
+                                  className="trim-frame-preview"
+                                  style={{ left: `${trimFramePreview.leftPercent}%` }}
+                                >
+                                  {trimFramePreview.imageDataUrl ? (
+                                    <img
+                                      src={trimFramePreview.imageDataUrl}
+                                      alt={`${item.fileName} ${formatTrimTime(trimFramePreview.timeSec)}`}
+                                      className="trim-frame-preview-image"
+                                    />
+                                  ) : (
+                                    <div className="trim-frame-preview-skeleton" />
+                                  )}
+                                  <span className="trim-frame-preview-time">
+                                    {trimFramePreview.loading ? '...' : formatTrimTime(trimFramePreview.timeSec)}
+                                  </span>
+                                </div>
+                              )}
+
+                              <div className="trim-slider-track" style={{ background: `${theme.colors.border}99` }} />
+                              <div
+                                className="trim-slider-selected"
+                                style={{
+                                  left: `${startPercent}%`,
+                                  width: `${selectedPercent}%`,
+                                  background: `${theme.colors.primary}66`
+                                }}
+                              />
+
+                              <input
+                                type="range"
+                                className="trim-range trim-range-start"
+                                min={0}
+                                max={duration}
+                                step={trimStepSec}
+                                value={trimStart}
+                                disabled={!editable}
+                                onMouseDown={() => {
+                                  requestTrimFramePreview(item.id, item.inputPath, trimStart, startPercent, 'start');
+                                }}
+                                onTouchStart={() => {
+                                  requestTrimFramePreview(item.id, item.inputPath, trimStart, startPercent, 'start');
+                                }}
+                                onChange={(e) => {
+                                  const nextStart = Math.min(
+                                    parseFloat(e.target.value),
+                                    trimEnd - minTrimDurationSec,
+                                  );
+                                  updateJobTrim(item.id, nextStart, trimEnd);
+                                  const nextStartPercent = duration > 0 ? (nextStart / duration) * 100 : 0;
+                                  requestTrimFramePreview(item.id, item.inputPath, nextStart, nextStartPercent, 'start');
+                                }}
+                                onMouseUp={() => hideTrimFramePreview()}
+                                onTouchEnd={() => hideTrimFramePreview()}
+                                onBlur={() => hideTrimFramePreview()}
+                                aria-label={`${item.fileName} trim start`}
+                              />
+                              <input
+                                type="range"
+                                className="trim-range trim-range-end"
+                                min={0}
+                                max={duration}
+                                step={trimStepSec}
+                                value={trimEnd}
+                                disabled={!editable}
+                                onMouseDown={() => {
+                                  requestTrimFramePreview(item.id, item.inputPath, trimEnd, endPercent, 'end');
+                                }}
+                                onTouchStart={() => {
+                                  requestTrimFramePreview(item.id, item.inputPath, trimEnd, endPercent, 'end');
+                                }}
+                                onChange={(e) => {
+                                  const nextEnd = Math.max(
+                                    parseFloat(e.target.value),
+                                    trimStart + minTrimDurationSec,
+                                  );
+                                  updateJobTrim(item.id, trimStart, nextEnd);
+                                  const nextEndPercent = duration > 0 ? (nextEnd / duration) * 100 : 0;
+                                  requestTrimFramePreview(item.id, item.inputPath, nextEnd, nextEndPercent, 'end');
+                                }}
+                                onMouseUp={() => hideTrimFramePreview()}
+                                onTouchEnd={() => hideTrimFramePreview()}
+                                onBlur={() => hideTrimFramePreview()}
+                                aria-label={`${item.fileName} trim end`}
+                              />
+                            </div>
+
+                            {!editable && (
+                              <div className="trim-readonly-note" style={{ color: theme.colors.textSecondary }}>
+                                {t('queue.trimReadonly') || 'Trim can be edited only while item is pending'}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                       {item.error && (
                         <div className="item-error" style={{ 
                           fontSize: '0.8rem', 
@@ -806,7 +1075,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
                         </div>
                       </div>
                     )}
-                    {item.status === 'completed' && item.outputSizeBytes > 0 && (
+                    {item.status === 'completed' && (
                       <div className="completed-info" style={{ 
                         fontSize: '0.8rem', 
                         color: theme.colors.success,
@@ -816,7 +1085,16 @@ const MainWindow: React.FC<MainWindowProps> = ({
                       }}>
                         <span>{t('queue.completedWithSize')}</span>
                         <span style={{ color: theme.colors.textSecondary, fontFamily: 'monospace' }}>
-                          ({item.outputSize})
+                          {(() => {
+                            const sourceDuration = Math.max(0, item.durationSeconds || 0);
+                            const trimStart = Math.max(0, Math.min(sourceDuration, item.trimStartSec ?? 0));
+                            const trimEnd = Math.max(trimStart, Math.min(sourceDuration, item.trimEndSec ?? sourceDuration));
+                            const resultDuration = sourceDuration > 0 ? Math.max(0, trimEnd - trimStart) : 0;
+                            const sourceSize = item.inputSize || '—';
+                            const resultSize = item.outputSizeBytes > 0 ? item.outputSize : '—';
+
+                            return `(${sourceSize} → ${resultSize} | ${formatDurationCompact(sourceDuration)} → ${formatDurationCompact(resultDuration)})`;
+                          })()}
                         </span>
                       </div>
                     )}
@@ -871,12 +1149,6 @@ const MainWindow: React.FC<MainWindowProps> = ({
               transition={{ duration: 0.25, ease: 'easeOut' }}
               style={{ color: theme.colors.text }}
             >
-              <div className="stats-modal-header">
-                <div className="stats-modal-title">{t('stats.title') || 'Render Statistics'}</div>
-                <button className="stats-modal-close" onClick={closeStats} aria-label="Close statistics">
-                  ×
-                </button>
-              </div>
               <StatisticsPanel onClose={closeStats} />
             </motion.div>
           </motion.div>
