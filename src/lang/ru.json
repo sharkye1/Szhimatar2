@@ -221,7 +221,7 @@
   },
   "settings": {
     "title": "Настройки",
-    "update_available": "Доступно обновление",
+    "update_available": "Проверьте обновления!",
     "theme": "Тема",
     "themeNames": {
       "light": "Облачный день",

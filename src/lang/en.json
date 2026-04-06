@@ -221,7 +221,7 @@
   },
   "settings": {
     "title": "Settings",
-    "update_available": "Update Available",
+    "update_available": "Check for updates!",
     "theme": "Theme",
     "themeNames": {
       "light": "Cloud Day",

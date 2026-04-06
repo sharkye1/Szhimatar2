@@ -221,7 +221,7 @@
   },
   "settings": {
     "title": "设置",
-    "update_available": "可用更新",
+    "update_available": "检查更新！",
     "theme": "主题",
     "themeNames": {
       "light": "晴云白昼",
