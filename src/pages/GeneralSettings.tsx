@@ -48,6 +48,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
   const [showLogsWarning, setShowLogsWarning] = useState(false);
   const [logsPath, setLogsPath] = useState<string>('');
   const [warningTimer, setWarningTimer] = useState<number>(9);
+  const [isInitialized, setIsInitialized] = useState(false);
   const [contextMenuStatus, setContextMenuStatus] = useState<{
     enabled: boolean;
     exe_valid: boolean;
@@ -73,6 +74,49 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
       unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!isInitialized) {
+      return;
+    }
+
+    setAppTheme(themeName);
+    setAppModifiedTheme(modifiedTheme);
+    setAppLanguage(language);
+    setScreenAnimation(screenAnimationLocal);
+    setPerformanceMode(performanceModeLocal);
+    setAppUseImageBackground(useImageBackground);
+    setAppBackgroundImagePath(backgroundImagePath);
+    setAppGlassOpacity(glassOpacity);
+    setAppGlassBlur(glassBlur);
+
+    const timeout = window.setTimeout(() => {
+      void persistSettings();
+    }, 150);
+
+    return () => window.clearTimeout(timeout);
+  }, [
+    isInitialized,
+    themeName,
+    modifiedTheme,
+    language,
+    outputSuffix,
+    useImageBackground,
+    backgroundImagePath,
+    glassOpacity,
+    glassBlur,
+    screenAnimationLocal,
+    performanceModeLocal,
+    setAppTheme,
+    setAppModifiedTheme,
+    setAppLanguage,
+    setScreenAnimation,
+    setPerformanceMode,
+    setAppUseImageBackground,
+    setAppBackgroundImagePath,
+    setAppGlassOpacity,
+    setAppGlassBlur,
+  ]);
 
   // Live preview for background effects
   useEffect(() => {
@@ -137,6 +181,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
           console.warn('GPU check failed:', e);
         }
       }
+      setIsInitialized(true);
     } catch (error) {
       console.error('Failed to load settings:', error);
     }
@@ -243,7 +288,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
     await UpdateService.applyUpdate();
   };
 
-  const saveSettings = async () => {
+  const persistSettings = async () => {
     try {
       const settings = await invoke<any>('load_settings');
       await invoke('save_settings', {
@@ -263,20 +308,8 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
           performance_mode: performanceModeLocal,
         }
       });
-
-      setAppTheme(themeName);
-      setAppModifiedTheme(modifiedTheme);
-      setAppLanguage(language);
-      setScreenAnimation(screenAnimationLocal);
-      setPerformanceMode(performanceModeLocal);
-      setAppUseImageBackground(useImageBackground);
-      setAppBackgroundImagePath(backgroundImagePath);
-      setAppGlassOpacity(glassOpacity);
-      setAppGlassBlur(glassBlur);
-      alert('Settings saved!');
     } catch (error) {
       console.error('Failed to save settings:', error);
-      alert('Failed to save settings');
     }
   };
 
@@ -874,15 +907,6 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
             )}
           </div>
         </div>
-
-      <div className="settings-footer" style={{ borderColor: theme.colors.border }}>
-        <button onClick={saveSettings} style={{ background: theme.colors.success, color: '#fff' }}>
-          {t('settings.save')}
-        </button>
-        <button onClick={loadSettings} style={{ background: theme.colors.secondary, color: '#fff' }}>
-          {t('settings.cancel')}
-        </button>
-      </div>
 
       {/* Logs Warning Modal */}
       {showLogsWarning && (
