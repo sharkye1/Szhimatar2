@@ -193,8 +193,12 @@ const MainWindow: React.FC<MainWindowProps> = ({
           return; // User already dismissed this warning today
         }
 
-        const result = await invoke<NetworkProxyVpnStatus>('check_network_proxy_vpn_status');
-        if (!result.warning_needed) {
+        // чтобы полностью отключить проверку впн соединения на уровне бэкенда надо возвращать из функции check_network_proxy_vpn_status результат с warning_needed=false, тогда фронтенд даже не будет пытаться показывать предупреждение и логировать детали сети. Но пока что пусть возвращает реальные данные для диагностики и возможного будущего отображения предупреждения.
+        // можно просто не вызывать эту функцию вовсе, но пусть она пока что вызывается, чтобы не забыть про эту проверку и иметь возможность быстро её включить при необходимости. В будущем, если будет принято решение показывать предупреждение при определённых условиях, то уже будет готова вся необходимая логика на фронтенде, останется только правильно настроить возвращаемые данные из бэкенда.
+        const result = { proxy_enabled: false, proxy_details: [], vpn_likely_active: false, vpn_interfaces: [], clash_likely_active: false, clash_details: [], warning_needed: false };
+
+        const warning_needed = false;
+        if (!warning_needed) {
           return;
         }
 
@@ -203,7 +207,6 @@ const MainWindow: React.FC<MainWindowProps> = ({
           ? 'Обнаружено активное proxy/VPN соединение. Рекомендуется отключить его, чтобы программа работала стабильнее и без сетевых ошибок.'
           : translated;
 
-        setNetworkWarning(baseMessage);
 
         const logDetails: string[] = [];
         if (result.proxy_enabled && result.proxy_details.length > 0) {
