@@ -1,0 +1,38 @@
+name: Build macOS App
+
+on:
+  workflow_dispatch: # чтобы запускать одной кнопкой
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    runs-on: macos-latest # гитхаб сам поттянет 
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4 
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4 
+        with:
+          node-version: lts/*
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin # под М-процессоры
+
+      - name: Install dependencies
+        run: |
+          npm install
+
+      - name: Build Tauri App
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__ # автоматически возьмет версию из tauri.conf.json
+          releaseName: "Szhimatar2 macOS v__VERSION__"
+          releaseDraft: true # черновик
+          prerelease: false
