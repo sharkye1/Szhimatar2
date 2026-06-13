@@ -1,38 +1,49 @@
 name: Build macOS App
 
 on:
-  workflow_dispatch: # чтобы запускать одной кнопкой
+  workflow_dispatch:
+
+# Отключаем ворнинг Node 20 на глобальном уровне
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
-    permissions:
-      contents: write
-    runs-on: macos-latest # гитхаб сам поттянет 
+    runs-on: macos-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4 
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4 
+        uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version: 22 # Явно ставим свежую Node.js
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin # под М-процессоры
+          targets: aarch64-apple-darwin
 
-      - name: Install dependencies
+      - name: Install npm dependencies
+        run: npm install
+
+      - name: Build Tauri App via CLI
+        # Запускаем сборку напрямую через таури-клиент без создания релизов в гит
+        run: npx tauri build --target aarch64-apple-darwin
+
+      - name: Check where the files are
+        # Этот шаг выведет в логи список всех собранных файлов, чтобы мы их точно нашли
         run: |
-          npm install
+          echo "=== Ищем собранные артефакты ==="
+          find src-tauri/target/aarch64-apple-darwin/release/bundle -maxdepth 3 2>/dev/null || echo "Папка не найдена"
 
-      - name: Build Tauri App
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          tagName: v__VERSION__ # автоматически возьмет версию из tauri.conf.json
-          releaseName: "Szhimatar2 macOS v__VERSION__"
-          releaseDraft: true # черновик
-          prerelease: false
+          name: szhimatar-mac-build
+          # Маска поиска, которая заберет всё: и .dmg, и .app из нужной папки архитектуры M1
+          path: |
+            src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
+          if-no-files-found: error
