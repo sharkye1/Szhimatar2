@@ -5,10 +5,12 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useSettings, ScreenAnimationType } from '../contexts/SettingsContext';
 import { FfmpegManager } from '../components/FfmpegManager';
+import RenderModeSelector from '../components/RenderModeSelector';
 import { VideoGuide } from '../components/VideoGuide';
 import { APP_VERSION } from '../version';
 import { UpdateService, UpdateState } from '../services/UpdateService';
 import { AlertTriangle, FolderOpen, Plus, Minus } from 'lucide-react';
+import useRenderQueue from '../hooks/useRenderQueue';
 import '../styles/SettingsWindow.css';
 
 interface GeneralSettingsProps {
@@ -16,39 +18,15 @@ interface GeneralSettingsProps {
 }
 
 const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
-  const { t, setLanguage: setAppLanguage } = useLanguage();
-  const {
-    theme,
-    modifiedTheme: appModifiedTheme,
-    setModifiedTheme: setAppModifiedTheme,
-    setTheme: setAppTheme,
-    useImageBackground: appUseImageBackground,
-    backgroundImagePath: appBackgroundImagePath,
-    glassOpacity: appGlassOpacity,
-    glassBlur: appGlassBlur,
-    setUseImageBackground: setAppUseImageBackground,
-    setBackgroundImagePath: setAppBackgroundImagePath,
-    setGlassOpacity: setAppGlassOpacity,
-    setGlassBlur: setAppGlassBlur,
-  } = useTheme();
-  const { screenAnimation, setScreenAnimation, performanceMode, setPerformanceMode } = useSettings();
+  const { t } = useLanguage();
+  const { theme } = useTheme();
+  const { settings, updateSettings, flushSettings } = useSettings();
+  const { gpuAvailable, renderMode, setRenderMode, setGpuAvailability } = useRenderQueue();
 
-  const [themeName, setThemeName] = useState('light');
-  const [modifiedTheme, setModifiedTheme] = useState<boolean>(appModifiedTheme);
-  const [language, setLanguage] = useState('ru');
-  const [outputSuffix, setOutputSuffix] = useState('_szhatoe');
-  const [useImageBackground, setUseImageBackground] = useState<boolean>(appUseImageBackground);
-  const [backgroundImagePath, setBackgroundImagePath] = useState<string>(appBackgroundImagePath);
-  const [glassOpacity, setGlassOpacity] = useState<number>(appGlassOpacity);
-  const [glassBlur, setGlassBlur] = useState<number>(appGlassBlur);
-  const [screenAnimationLocal, setScreenAnimationLocal] = useState<ScreenAnimationType>(screenAnimation);
-  const [performanceModeLocal, setPerformanceModeLocal] = useState<boolean>(performanceMode);
-  const [gpuAvailable, setGpuAvailable] = useState<boolean>(false);
   const [showFfmpegManager, setShowFfmpegManager] = useState(false);
   const [showLogsWarning, setShowLogsWarning] = useState(false);
   const [logsPath, setLogsPath] = useState<string>('');
   const [warningTimer, setWarningTimer] = useState<number>(9);
-  const [isInitialized, setIsInitialized] = useState(false);
   const [contextMenuStatus, setContextMenuStatus] = useState<{
     enabled: boolean;
     exe_valid: boolean;
@@ -60,131 +38,24 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
   const [showRestartPrompt, setShowRestartPrompt] = useState(false);
 
   useEffect(() => {
-    loadSettings();
     loadLogsPath();
     checkContextMenuStatus();
-    
+
     // Subscribe to update state changes
     const unsubscribe = UpdateService.subscribe(setUpdateState);
-    
+
     // Initialize update service (silent check on mount)
     UpdateService.checkSilently();
-    
+
     return () => {
       unsubscribe();
+      void flushSettings();
     };
-  }, []);
+  }, [flushSettings]);
 
-  useEffect(() => {
-    if (!isInitialized) {
-      return;
-    }
-
-    setAppTheme(themeName);
-    setAppModifiedTheme(modifiedTheme);
-    setAppLanguage(language);
-    setScreenAnimation(screenAnimationLocal);
-    setPerformanceMode(performanceModeLocal);
-    setAppUseImageBackground(useImageBackground);
-    setAppBackgroundImagePath(backgroundImagePath);
-    setAppGlassOpacity(glassOpacity);
-    setAppGlassBlur(glassBlur);
-
-    const timeout = window.setTimeout(() => {
-      void persistSettings();
-    }, 150);
-
-    return () => window.clearTimeout(timeout);
-  }, [
-    isInitialized,
-    themeName,
-    modifiedTheme,
-    language,
-    outputSuffix,
-    useImageBackground,
-    backgroundImagePath,
-    glassOpacity,
-    glassBlur,
-    screenAnimationLocal,
-    performanceModeLocal,
-    setAppTheme,
-    setAppModifiedTheme,
-    setAppLanguage,
-    setScreenAnimation,
-    setPerformanceMode,
-    setAppUseImageBackground,
-    setAppBackgroundImagePath,
-    setAppGlassOpacity,
-    setAppGlassBlur,
-  ]);
-
-  // Live preview for background effects
-  useEffect(() => {
-    if (!useImageBackground) return;
-    const root = document.documentElement;
-    const imgBrightness = Math.max(0, 100 - glassOpacity);
-    root.style.setProperty('--bg-image-brightness', `${imgBrightness}%`);
-  }, [glassOpacity, useImageBackground]);
-
-  useEffect(() => {
-    if (!useImageBackground) return;
-    const root = document.documentElement;
-    root.style.setProperty('--bg-image-blur', `${glassBlur}px`);
-    const scale = 1 + (glassBlur * 0.003);
-    root.style.setProperty('--bg-image-scale', `${scale}`);
-  }, [glassBlur, useImageBackground]);
-
-  useEffect(() => {
-    return () => {
-      // Revert live preview if closed without saving
-      const root = document.documentElement;
-      const imgBrightness = Math.max(0, 100 - appGlassOpacity);
-      root.style.setProperty('--bg-image-brightness', `${imgBrightness}%`);
-      root.style.setProperty('--bg-image-blur', `${appGlassBlur}px`);
-      const scale = 1 + (appGlassBlur * 0.003);
-      root.style.setProperty('--bg-image-scale', `${scale}`);
-    };
-  }, [appGlassOpacity, appGlassBlur]);
-
-  const loadSettings = async () => {
-    try {
-      const settings = await invoke<any>('load_settings');
-      setThemeName(settings.theme);
-      if (settings.modifiedTheme !== undefined) {
-        setModifiedTheme(settings.modifiedTheme);
-      } else if (settings.modified_theme !== undefined) {
-        setModifiedTheme(settings.modified_theme);
-      }
-      setLanguage(settings.language);
-      setOutputSuffix(settings.output_suffix);
-      setUseImageBackground(!!settings.use_background_image);
-      setBackgroundImagePath(settings.background_image_path || '');
-      if (settings.glassOpacity !== undefined) setGlassOpacity(settings.glassOpacity);
-      if (settings.glassBlur !== undefined) setGlassBlur(settings.glassBlur);
-      setGpuAvailable(!!settings.gpuAvailable);
-      if (settings.screenAnimation) {
-        setScreenAnimationLocal(settings.screenAnimation as ScreenAnimationType);
-      } else if (settings.screen_animation) {
-        setScreenAnimationLocal(settings.screen_animation as ScreenAnimationType);
-      }
-      if (settings.performanceMode !== undefined) {
-        setPerformanceModeLocal(!!settings.performanceMode);
-      } else if (settings.performance_mode !== undefined) {
-        setPerformanceModeLocal(!!settings.performance_mode);
-      }
-      // First run GPU check if key missing
-      if (settings.gpuAvailable === undefined) {
-        try {
-          const available = await invoke<boolean>('check_gpu_compatibility');
-          setGpuAvailable(!!available);
-        } catch (e) {
-          console.warn('GPU check failed:', e);
-        }
-      }
-      setIsInitialized(true);
-    } catch (error) {
-      console.error('Failed to load settings:', error);
-    }
+  const handleBack = async () => {
+    await flushSettings();
+    onBack();
   };
 
   const loadLogsPath = async () => {
@@ -219,7 +90,6 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
       await checkContextMenuStatus();
       alert(t('contextMenu.added'));
     } catch (error: unknown) {
-      // Tauri errors can come as string or object with message
       const errorStr = typeof error === 'string' ? error : String(error);
       if (errorStr === 'ADMIN_REQUIRED' || errorStr.includes('ADMIN_REQUIRED')) {
         alert(t('contextMenu.adminRequired'));
@@ -236,7 +106,6 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
       await checkContextMenuStatus();
       alert(t('contextMenu.removed'));
     } catch (error: unknown) {
-      // Tauri errors can come as string or object with message
       const errorStr = typeof error === 'string' ? error : String(error);
       if (errorStr === 'ADMIN_REQUIRED' || errorStr.includes('ADMIN_REQUIRED')) {
         alert(t('contextMenu.adminRequired'));
@@ -284,55 +153,35 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
   };
 
   const handleRestartApp = async () => {
-    // Apply update and restart
     await UpdateService.applyUpdate();
-  };
-
-  const persistSettings = async () => {
-    try {
-      const settings = await invoke<any>('load_settings');
-      await invoke('save_settings', {
-        settings: {
-          ...settings,
-          theme: themeName,
-          modifiedTheme: modifiedTheme,
-          language,
-          output_suffix: outputSuffix,
-          use_background_image: useImageBackground,
-          background_image_path: backgroundImagePath,
-          glassOpacity: glassOpacity,
-          glassBlur: glassBlur,
-          screenAnimation: screenAnimationLocal,
-          screen_animation: screenAnimationLocal,
-          performanceMode: performanceModeLocal,
-          performance_mode: performanceModeLocal,
-        }
-      });
-    } catch (error) {
-      console.error('Failed to save settings:', error);
-    }
   };
 
   return (
     <div className="settings-window fade-in" style={{ color: theme.colors.text }}>
       <header className="settings-header" style={{ borderColor: theme.colors.border }}>
-        <button onClick={onBack} className="back-button" style={{ color: theme.colors.primary }}>
+        <button onClick={handleBack} className="back-button" style={{ color: theme.colors.primary }}>
           ← {t('buttons.back')}
         </button>
         <h1>{t('settings.title')}</h1>
       </header>
-      
+
       <div className="settings-content">
         {/* Horizontal layout for theme, language, and screen animation */}
-        <div style={{ 
-          display: 'flex', 
-          gap: '16px', 
-          flexWrap: 'wrap', 
-          marginBottom: '20px' 
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: '16px',
+            flexWrap: 'wrap',
+            marginBottom: '20px',
+          }}
+        >
           <div className="setting-group" style={{ flex: '1 1 200px', minWidth: '200px' }}>
             <label>{t('settings.theme')}</label>
-            <select value={themeName} onChange={(e) => setThemeName(e.target.value)} style={{ marginBottom: '8px' }}>
+            <select
+              value={settings.theme}
+              onChange={(e) => updateSettings({ theme: e.target.value }, true)}
+              style={{ marginBottom: '8px' }}
+            >
               <option value="light">{t('settings.themeNames.light') || 'Cloud Day'}</option>
               <option value="dark-red">{t('settings.themeNames.darkRed') || 'Crimson Cellar'}</option>
               <option value="blue-ocean">{t('settings.themeNames.blueOcean') || 'Blue Ocean'}</option>
@@ -349,11 +198,14 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
               <option value="graphite-light">{t('settings.themeNames.graphiteLight') || 'Graphite Light'}</option>
               <option value="amoled-night">{t('settings.themeNames.amoledNight') || 'AMOLED Night'}</option>
             </select>
-            <label className="checkbox-label" style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <label
+              className="checkbox-label"
+              style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+            >
               <input
                 type="checkbox"
-                checked={modifiedTheme}
-                onChange={(e) => setModifiedTheme(e.target.checked)}
+                checked={settings.modifiedTheme}
+                onChange={(e) => updateSettings({ modifiedTheme: e.target.checked }, true)}
               />
               Modified Theme
             </label>
@@ -361,7 +213,10 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
 
           <div className="setting-group" style={{ flex: '1 1 200px', minWidth: '200px' }}>
             <label>{t('settings.language')}</label>
-            <select value={language} onChange={(e) => setLanguage(e.target.value)}>
+            <select
+              value={settings.language}
+              onChange={(e) => updateSettings({ language: e.target.value }, true)}
+            >
               <option value="ru">Русский</option>
               <option value="en">English</option>
               <option value="ch">中文</option>
@@ -374,9 +229,9 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
 
           <div className="setting-group" style={{ flex: '1 1 200px', minWidth: '200px' }}>
             <label>{t('settings.screenAnimation')}</label>
-            <select 
-              value={screenAnimationLocal} 
-              onChange={(e) => setScreenAnimationLocal(e.target.value as ScreenAnimationType)}
+            <select
+              value={settings.screenAnimation}
+              onChange={(e) => updateSettings({ screenAnimation: e.target.value as ScreenAnimationType }, true)}
             >
               <option value="default">{t('settings.animations.default')}</option>
               <option value="soft-blur">{t('settings.animations.softBlur')}</option>
@@ -384,14 +239,6 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
               <option value="scale-fade">{t('settings.animations.scaleFade')}</option>
               <option value="none">{t('settings.animations.none')}</option>
             </select>
-            <label className="checkbox-label" style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={performanceModeLocal}
-                onChange={(e) => setPerformanceModeLocal(e.target.checked)}
-              />
-              {t('settings.performanceMode')}
-            </label>
           </div>
         </div>
 
@@ -409,14 +256,14 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
               <button
                 type="button"
                 role="switch"
-                aria-checked={useImageBackground}
-                onClick={() => setUseImageBackground((prev) => !prev)}
+                aria-checked={settings.use_background_image}
+                onClick={() => updateSettings({ use_background_image: !settings.use_background_image }, true)}
                 style={{
                   width: 56,
                   height: 30,
                   borderRadius: 30,
-                  border: `1px solid ${useImageBackground ? theme.colors.primary : theme.colors.border}`,
-                  background: useImageBackground ? `${theme.colors.primary}CC` : 'rgba(var(--theme-bg-rgb), 0.3)',
+                  border: `1px solid ${settings.use_background_image ? theme.colors.primary : theme.colors.border}`,
+                  background: settings.use_background_image ? `${theme.colors.primary}CC` : 'rgba(var(--theme-bg-rgb), 0.3)',
                   position: 'relative',
                   transition: 'all 0.22s ease',
                   padding: 0,
@@ -428,7 +275,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
                   style={{
                     position: 'absolute',
                     top: 3,
-                    left: useImageBackground ? 29 : 3,
+                    left: settings.use_background_image ? 29 : 3,
                     width: 22,
                     height: 22,
                     borderRadius: '50%',
@@ -439,7 +286,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
                 />
               </button>
               <span>
-                {useImageBackground ? t('settings.useImageBackground') : t('settings.useThemeBackground')}
+                {settings.use_background_image ? t('settings.useImageBackground') : t('settings.useThemeBackground')}
               </span>
             </div>
           </div>
@@ -449,10 +296,10 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <input
                 type="text"
-                value={backgroundImagePath}
-                onChange={(e) => setBackgroundImagePath(e.target.value)}
+                value={settings.background_image_path}
+                onChange={(e) => updateSettings({ background_image_path: e.target.value }, true)}
                 placeholder={t('settings.noBackgroundImage')}
-                disabled={!useImageBackground}
+                disabled={!settings.use_background_image}
                 style={{ flex: 1 }}
               />
               <button
@@ -469,18 +316,18 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
                   });
 
                   if (selected && typeof selected === 'string') {
-                    setBackgroundImagePath(selected);
+                    updateSettings({ background_image_path: selected }, true);
                   }
                 }}
-                disabled={!useImageBackground}
+                disabled={!settings.use_background_image}
                 style={{
                   background: theme.colors.primary,
                   color: '#fff',
                   padding: '8px 12px',
                   border: 'none',
                   borderRadius: 4,
-                  opacity: useImageBackground ? 1 : 0.5,
-                  cursor: useImageBackground ? 'pointer' : 'not-allowed',
+                  opacity: settings.use_background_image ? 1 : 0.5,
+                  cursor: settings.use_background_image ? 'pointer' : 'not-allowed',
                 }}
               >
                 {t('settings.chooseBackgroundImage')}
@@ -490,34 +337,37 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
         </div>
 
         {/* Glass effect controls for the image backdrop */}
-        <div style={{
-          display: 'flex',
-          gap: '16px',
-          flexWrap: 'wrap',
-          marginBottom: '20px',
-          opacity: useImageBackground ? 1 : 0.5,
-          pointerEvents: useImageBackground ? 'auto' : 'none',
-          background: 'rgba(0,0,0,0.1)',
-          padding: '12px',
-          borderRadius: '8px'
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: '16px',
+            flexWrap: 'wrap',
+            marginBottom: '20px',
+            opacity: settings.use_background_image ? 1 : 0.5,
+            pointerEvents: settings.use_background_image ? 'auto' : 'none',
+            background: 'rgba(0,0,0,0.1)',
+            padding: '12px',
+            borderRadius: '8px',
+          }}
+        >
           <div style={{ width: '100%' }}>
             <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', opacity: 0.9 }}>
-              {t('settings.backgroundImage')} - Эффекты
+              {t('settings.imageEffects')}
             </h4>
           </div>
 
           <div className="setting-group" style={{ flex: '1 1 200px' }}>
             <label style={{ display: 'block', marginBottom: '8px' }}>
-              {t('settings.glassOpacity')} ({glassOpacity}%)
+              {t('settings.glassOpacity')} ({settings.glassOpacity}%)
             </label>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <span style={{ fontSize: 12, opacity: 0.7 }}>0%</span>
-              <input 
-                type="range" 
-                min="0" max="100" 
-                value={glassOpacity} 
-                onChange={(e) => setGlassOpacity(Number(e.target.value))} 
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={settings.glassOpacity}
+                onChange={(e) => updateSettings({ glassOpacity: Number(e.target.value) })}
                 style={{ flex: 1, accentColor: theme.colors.primary }}
               />
               <span style={{ fontSize: 12, opacity: 0.7 }}>100%</span>
@@ -526,15 +376,16 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
 
           <div className="setting-group" style={{ flex: '1 1 200px' }}>
             <label style={{ display: 'block', marginBottom: '8px' }}>
-              {t('settings.glassBlur')} ({glassBlur}px)
+              {t('settings.glassBlur')} ({settings.glassBlur}px)
             </label>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <span style={{ fontSize: 12, opacity: 0.7 }}>0px</span>
-              <input 
-                type="range" 
-                min="0" max="40" 
-                value={glassBlur} 
-                onChange={(e) => setGlassBlur(Number(e.target.value))} 
+              <input
+                type="range"
+                min="0"
+                max="40"
+                value={settings.glassBlur}
+                onChange={(e) => updateSettings({ glassBlur: Number(e.target.value) })}
                 style={{ flex: 1, accentColor: theme.colors.primary }}
               />
               <span style={{ fontSize: 12, opacity: 0.7 }}>40px</span>
@@ -544,15 +395,26 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
 
         <div className="setting-group">
           <label>{t('settings.outputSuffix')}</label>
-          <input type="text" value={outputSuffix} onChange={(e) => setOutputSuffix(e.target.value)}
-                 placeholder="_szhatoe" />
+          <input
+            type="text"
+            value={settings.output_suffix}
+            onChange={(e) => updateSettings({ output_suffix: e.target.value })}
+            placeholder="_szhatoe"
+          />
         </div>
 
         <div className="setting-group">
           <label>{t('ffmpeg.configurationLabel')}</label>
-          <button 
+          <button
             onClick={() => setShowFfmpegManager(!showFfmpegManager)}
-            style={{ background: theme.colors.primary, color: '#fff', padding: '8px 16px', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+            style={{
+              background: theme.colors.primary,
+              color: '#fff',
+              padding: '8px 16px',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+            }}
           >
             {showFfmpegManager ? t('ffmpeg.toggleHide') : t('ffmpeg.toggleConfigure')}
           </button>
@@ -565,37 +427,67 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
         )}
 
         <div className="setting-group">
-          <label>{t('gpu.label')}</label>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button
-              onClick={async () => {
-                try {
-                  // Validate FFmpeg paths before checking GPU
-                  const ffmpegStatus = await invoke<any>('load_ffmpeg_paths');
-                  const hasFfmpeg = !!ffmpegStatus?.ffmpeg_path?.trim();
-                  const hasFfprobe = !!ffmpegStatus?.ffprobe_path?.trim();
-                  
-                  if (!hasFfmpeg || !hasFfprobe) {
-                    alert(t('gpu.pathsNotConfigured'));
-                    return;
+          <label>{t('gpu.label')} / {t('settings.rendering')}</label>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+            {/* GPU Check section */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button
+                onClick={async () => {
+                  try {
+                    const ffmpegStatus = await invoke<any>('load_ffmpeg_paths');
+                    const hasFfmpeg = !!ffmpegStatus?.ffmpeg_path?.trim();
+                    const hasFfprobe = !!ffmpegStatus?.ffprobe_path?.trim();
+
+                    if (!hasFfmpeg || !hasFfprobe) {
+                      alert(t('gpu.pathsNotConfigured'));
+                      return;
+                    }
+
+                    const available = await invoke<boolean>('check_gpu_compatibility');
+                    setGpuAvailability(!!available);
+                    updateSettings({ gpuAvailable: !!available }, true);
+                    await invoke('write_log', { message: `GPU NVENC available: ${available}` });
+                    alert(available ? t('gpu.compatibleFound') : t('gpu.notFoundOrUnavailable'));
+                  } catch (e) {
+                    console.error('GPU check error', e);
+                    alert(t('gpu.checkError'));
                   }
-                  
-                  const available = await invoke<boolean>('check_gpu_compatibility');
-                  setGpuAvailable(!!available);
-                  await invoke('write_log', { message: `GPU NVENC available: ${available}` });
-                  alert(available ? t('gpu.compatibleFound') : t('gpu.notFoundOrUnavailable'));
-                } catch (e) {
-                  console.error('GPU check error', e);
-                  alert(t('gpu.checkError'));
-                }
+                }}
+                style={{
+                  background: theme.colors.primary,
+                  color: '#fff',
+                  padding: '8px 16px',
+                  border: 'none',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                }}
+              >
+                {t('gpu.checkCompatibility')}
+              </button>
+              <span style={{ color: gpuAvailable ? theme.colors.success : theme.colors.error }}>
+                {gpuAvailable ? t('gpu.available') : t('gpu.unavailable')}
+              </span>
+            </div>
+
+            {/* DUO Mode section */}
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+                borderLeft: `1px solid ${theme.colors.border}`,
+                paddingLeft: 16,
               }}
-              style={{ background: theme.colors.primary, color: '#fff', padding: '8px 16px', border: 'none', borderRadius: 4 }}
             >
-              {t('gpu.checkCompatibility')}
-            </button>
-            <span style={{ color: gpuAvailable ? theme.colors.success : theme.colors.error }}>
-              {gpuAvailable ? t('gpu.available') : t('gpu.unavailable')}
-            </span>
+              <RenderModeSelector
+                mode={renderMode}
+                onModeChange={(mode) => {
+                  setRenderMode(mode);
+                  updateSettings({ renderMode: mode }, true);
+                }}
+                gpuAvailable={gpuAvailable}
+              />
+            </div>
           </div>
         </div>
 
@@ -617,13 +509,16 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
               {contextMenuStatus.loading ? (
                 <span style={{ color: theme.colors.textSecondary }}>...</span>
               ) : (
-                <span style={{ 
-                  color: contextMenuStatus.enabled && contextMenuStatus.exe_valid 
-                    ? theme.colors.success 
-                    : contextMenuStatus.enabled && !contextMenuStatus.exe_valid
-                    ? theme.colors.warning || '#f59e0b'
-                    : theme.colors.error 
-                }}>
+                <span
+                  style={{
+                    color:
+                      contextMenuStatus.enabled && contextMenuStatus.exe_valid
+                        ? theme.colors.success
+                        : contextMenuStatus.enabled && !contextMenuStatus.exe_valid
+                        ? theme.colors.warning || '#f59e0b'
+                        : theme.colors.error,
+                  }}
+                >
                   {contextMenuStatus.enabled && contextMenuStatus.exe_valid
                     ? t('contextMenu.statusAdded')
                     : contextMenuStatus.enabled && !contextMenuStatus.exe_valid
@@ -634,16 +529,18 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
             </div>
 
             {contextMenuStatus.enabled && !contextMenuStatus.exe_valid && (
-              <div style={{ 
-                padding: 8, 
-                background: (theme.colors.warning || '#f59e0b') + '20', 
-                borderRadius: 4,
-                fontSize: 13,
-                color: theme.colors.text,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
+              <div
+                style={{
+                  padding: 8,
+                  background: (theme.colors.warning || '#f59e0b') + '20',
+                  borderRadius: 4,
+                  fontSize: 13,
+                  color: theme.colors.text,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
                 <AlertTriangle size={16} strokeWidth={2} /> {t('contextMenu.exeMovedWarning')}
               </div>
             )}
@@ -662,12 +559,18 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '6px'
+                gap: '6px',
               }}
             >
-              {contextMenuStatus.enabled 
-                ? <><Minus size={16} strokeWidth={1.5} /> {t('contextMenu.remove')}</>
-                : <><Plus size={16} strokeWidth={1.5} /> {t('contextMenu.add')}</>}
+              {contextMenuStatus.enabled ? (
+                <>
+                  <Minus size={16} strokeWidth={1.5} /> {t('contextMenu.remove')}
+                </>
+              ) : (
+                <>
+                  <Plus size={16} strokeWidth={1.5} /> {t('contextMenu.add')}
+                </>
+              )}
             </button>
 
             <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
@@ -676,7 +579,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
           </div>
         </div>
 
-        <VideoGuide title={t('videoGuide.title')} /> 
+        <VideoGuide title={t('videoGuide.title')} />
 
         <div className="setting-group">
           <label>{t('logs.title')}</label>
@@ -702,7 +605,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '6px'
+                gap: '6px',
               }}
             >
               <FolderOpen size={16} strokeWidth={1.5} /> {t('logs.viewFolder')}
@@ -712,17 +615,20 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
 
         <div className="setting-group">
           <label>{t('app.version')}</label>
-          <div style={{ 
-            display: 'flex', 
-            flexDirection: 'column',
-            gap: 12,
-            padding: 12,
-            borderRadius: 8,
-          }} className="glass-card">
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+              padding: 12,
+              borderRadius: 8,
+            }}
+            className="glass-card"
+          >
             {/* Current version */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ color: theme.colors.textSecondary }}>v{APP_VERSION}</span>
-              
+
               {/* Check for updates button */}
               <button
                 onClick={handleCheckUpdate}
@@ -731,14 +637,16 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
                   background: 'transparent',
                   color: theme.colors.primary,
                   border: 'none',
-                  cursor: updateState.status === 'checking' || updateState.status === 'downloading' 
-                    ? 'not-allowed' : 'pointer',
+                  cursor:
+                    updateState.status === 'checking' || updateState.status === 'downloading'
+                      ? 'not-allowed'
+                      : 'pointer',
                   fontSize: 13,
                   opacity: updateState.status === 'checking' ? 0.7 : 1,
                   padding: '4px 8px',
                 }}
               >
-                {updateState.status === 'checking' 
+                {updateState.status === 'checking'
                   ? t('update.checking')
                   : t('update.checkForUpdates')}
               </button>
@@ -746,18 +654,22 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
 
             {/* Update available card */}
             {updateState.status === 'update-available' && updateState.info && (
-              <div style={{
-                padding: 12,
-                background: theme.colors.primary + '15',
-                borderRadius: 6,
-                border: `1px solid ${theme.colors.primary}40`,
-              }}>
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  alignItems: 'center',
-                  marginBottom: 8,
-                }}>
+              <div
+                style={{
+                  padding: 12,
+                  background: theme.colors.primary + '15',
+                  borderRadius: 6,
+                  border: `1px solid ${theme.colors.primary}40`,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 8,
+                  }}
+                >
                   <div>
                     <span style={{ color: theme.colors.textSecondary }}>
                       v{updateState.info.currentVersion}
@@ -784,13 +696,15 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
                   </button>
                 </div>
                 {updateState.info.releaseNotes && (
-                  <div style={{ 
-                    fontSize: 12, 
-                    color: theme.colors.textSecondary,
-                    maxHeight: 60,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: theme.colors.textSecondary,
+                      maxHeight: 60,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
                     {updateState.info.releaseNotes.slice(0, 150)}
                     {updateState.info.releaseNotes.length > 150 && '...'}
                   </div>
@@ -800,25 +714,32 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
 
             {/* Downloading progress */}
             {updateState.status === 'downloading' && (
-              <div className="glass-card" style={{
-                padding: 12,
-                borderRadius: 6,
-              }}>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: 8,
-                  color: theme.colors.primary,
-                }}>
-                  <span style={{ 
-                    display: 'inline-block',
-                    width: 14,
-                    height: 14,
-                    border: `2px solid ${theme.colors.primary}`,
-                    borderTopColor: 'transparent',
-                    borderRadius: '50%',
-                    animation: 'spin 1s linear infinite',
-                  }} />
+              <div
+                className="glass-card"
+                style={{
+                  padding: 12,
+                  borderRadius: 6,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    color: theme.colors.primary,
+                  }}
+                >
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: 14,
+                      height: 14,
+                      border: `2px solid ${theme.colors.primary}`,
+                      borderTopColor: 'transparent',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite',
+                    }}
+                  />
                   {t('update.downloading')}
                   {updateState.progress && updateState.progress.percent > 0 && (
                     <span style={{ marginLeft: 8 }}>
@@ -828,19 +749,23 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
                 </div>
                 {/* Progress bar */}
                 {updateState.progress && updateState.progress.total > 0 && (
-                  <div style={{
-                    marginTop: 8,
-                    height: 4,
-                    background: theme.colors.border,
-                    borderRadius: 2,
-                    overflow: 'hidden',
-                  }}>
-                    <div style={{
-                      height: '100%',
-                      width: `${updateState.progress.percent}%`,
-                      background: theme.colors.primary,
-                      transition: 'width 0.3s ease',
-                    }} />
+                  <div
+                    style={{
+                      marginTop: 8,
+                      height: 4,
+                      background: theme.colors.border,
+                      borderRadius: 2,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${updateState.progress.percent}%`,
+                        background: theme.colors.primary,
+                        transition: 'width 0.3s ease',
+                      }}
+                    />
                   </div>
                 )}
               </div>
@@ -848,18 +773,22 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
 
             {/* Ready to install */}
             {updateState.status === 'ready-to-install' && (
-              <div style={{
-                padding: 12,
-                background: theme.colors.success + '15',
-                borderRadius: 6,
-                border: `1px solid ${theme.colors.success}40`,
-              }}>
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  color: theme.colors.success,
-                }}>
+              <div
+                style={{
+                  padding: 12,
+                  background: theme.colors.success + '15',
+                  borderRadius: 6,
+                  border: `1px solid ${theme.colors.success}40`,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    color: theme.colors.success,
+                  }}
+                >
                   <span>✓ {t('update.readyToInstall')}</span>
                   <button
                     onClick={() => setShowRestartPrompt(true)}
@@ -882,200 +811,224 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
 
             {/* Up to date message */}
             {updateState.status === 'up-to-date' && (
-              <div style={{ 
-                fontSize: 13, 
-                color: theme.colors.success,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-              }}>
+              <div
+                style={{
+                  fontSize: 13,
+                  color: theme.colors.success,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
                 ✓ {t('update.upToDate')}
               </div>
             )}
 
             {/* Error message */}
             {updateState.status === 'error' && updateState.error && (
-              <div style={{ 
-                fontSize: 13, 
-                color: theme.colors.error,
-                padding: 8,
-                background: theme.colors.error + '15',
-                borderRadius: 4,
-              }}>
+              <div
+                style={{
+                  fontSize: 13,
+                  color: theme.colors.error,
+                  padding: 8,
+                  background: theme.colors.error + '15',
+                  borderRadius: 4,
+                }}
+              >
                 {updateState.error}
               </div>
             )}
           </div>
         </div>
 
-      {/* Logs Warning Modal */}
-      {showLogsWarning && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.7)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
-        >
+        {/* Logs Warning Modal */}
+        {showLogsWarning && (
           <div
             style={{
-              background: theme.colors.background,
-              borderRadius: 12,
-              padding: 24,
-              maxWidth: 500,
-              width: '90%',
-              border: `2px solid ${theme.colors.error}`,
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.7)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
             }}
           >
-            <h2 style={{ marginTop: 0, color: theme.colors.error, display: 'flex', alignItems: 'center', gap: '8px' }}><AlertTriangle size={20} strokeWidth={2} /> {t('logs.warningTitle')}</h2>
-            <p style={{ lineHeight: 1.6, color: theme.colors.text }}>{t('logs.warningMessage')}</p>
-            
-            {logsPath && (
-              <div
-                className="glass-card"
+            <div
+              style={{
+                background: theme.colors.background,
+                borderRadius: 12,
+                padding: 24,
+                maxWidth: 500,
+                width: '90%',
+                border: `2px solid ${theme.colors.error}`,
+              }}
+            >
+              <h2
                 style={{
-                  marginTop: 16,
-                  padding: 12,
-                  borderRadius: 6,
-                  filter: warningTimer > 0 ? 'blur(8px)' : 'none',
-                  opacity: warningTimer > 0 ? 0.3 : 1,
-                  transition: 'filter 0.3s ease, opacity 0.3s ease',
-                  pointerEvents: warningTimer > 0 ? 'none' : 'auto',
+                  marginTop: 0,
+                  color: theme.colors.error,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
                 }}
               >
-                <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginBottom: 4 }}>
-                  {t('logs.pathLabel')}
-                </div>
+                <AlertTriangle size={20} strokeWidth={2} /> {t('logs.warningTitle')}
+              </h2>
+              <p style={{ lineHeight: 1.6, color: theme.colors.text }}>
+                {t('logs.warningMessage')}
+              </p>
+
+              {logsPath && (
                 <div
+                  className="glass-card"
                   style={{
-                    fontFamily: 'monospace',
-                    fontSize: 13,
-                    color: theme.colors.text,
-                    wordBreak: 'break-all',
-                    userSelect: warningTimer > 0 ? 'none' : 'text',
-                    cursor: warningTimer > 0 ? 'default' : 'text',
+                    marginTop: 16,
+                    padding: 12,
+                    borderRadius: 6,
+                    filter: warningTimer > 0 ? 'blur(8px)' : 'none',
+                    opacity: warningTimer > 0 ? 0.3 : 1,
+                    transition: 'filter 0.3s ease, opacity 0.3s ease',
+                    pointerEvents: warningTimer > 0 ? 'none' : 'auto',
                   }}
                 >
-                  {logsPath}
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: theme.colors.textSecondary,
+                      marginBottom: 4,
+                    }}
+                  >
+                    {t('logs.pathLabel')}
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: 'monospace',
+                      fontSize: 13,
+                      color: theme.colors.text,
+                      wordBreak: 'break-all',
+                      userSelect: warningTimer > 0 ? 'none' : 'text',
+                      cursor: warningTimer > 0 ? 'default' : 'text',
+                    }}
+                  >
+                    {logsPath}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-              <button
-                onClick={handleConfirmViewLogs}
-                disabled={warningTimer > 0}
-                style={{
-                  flex: 1,
-                  background: warningTimer > 0 ? theme.colors.border : theme.colors.primary,
-                  color: '#fff',
-                  padding: '12px',
-                  border: 'none',
-                  borderRadius: 6,
-                  cursor: warningTimer > 0 ? 'not-allowed' : 'pointer',
-                  fontWeight: 600,
-                }}
-              >
-                {warningTimer > 0 ? `${t('logs.continue')} (${warningTimer}s)` : t('logs.continue')}
-              </button>
-              <button
-                onClick={() => setShowLogsWarning(false)}
-                style={{
-                  flex: 1,
-                  background: theme.colors.secondary,
-                  color: '#fff',
-                  padding: '12px',
-                  border: 'none',
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                }}
-              >
-                {t('logs.cancel')}
-              </button>
+              <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+                <button
+                  onClick={handleConfirmViewLogs}
+                  disabled={warningTimer > 0}
+                  style={{
+                    flex: 1,
+                    background: warningTimer > 0 ? theme.colors.border : theme.colors.primary,
+                    color: '#fff',
+                    padding: '12px',
+                    border: 'none',
+                    borderRadius: 6,
+                    cursor: warningTimer > 0 ? 'not-allowed' : 'pointer',
+                    fontWeight: 600,
+                  }}
+                >
+                  {warningTimer > 0
+                    ? `${t('logs.continue')} (${warningTimer}s)`
+                    : t('logs.continue')}
+                </button>
+                <button
+                  onClick={() => setShowLogsWarning(false)}
+                  style={{
+                    flex: 1,
+                    background: theme.colors.secondary,
+                    color: '#fff',
+                    padding: '12px',
+                    border: 'none',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                  }}
+                >
+                  {t('logs.cancel')}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Restart Prompt Modal */}
-      {showRestartPrompt && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.7)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
-        >
+        {/* Restart Prompt Modal */}
+        {showRestartPrompt && (
           <div
             style={{
-              background: theme.colors.background,
-              borderRadius: 12,
-              padding: 24,
-              maxWidth: 400,
-              width: '90%',
-              border: `2px solid ${theme.colors.success}`,
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.7)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000,
             }}
           >
-            <h2 style={{ marginTop: 0, color: theme.colors.success }}>
-              ✓ {t('update.installed')}
-            </h2>
-            <p style={{ lineHeight: 1.6, color: theme.colors.text }}>
-              {t('update.restartMessage')}
-            </p>
+            <div
+              style={{
+                background: theme.colors.background,
+                borderRadius: 12,
+                padding: 24,
+                maxWidth: 400,
+                width: '90%',
+                border: `2px solid ${theme.colors.success}`,
+              }}
+            >
+              <h2 style={{ marginTop: 0, color: theme.colors.success }}>
+                ✓ {t('update.installed')}
+              </h2>
+              <p style={{ lineHeight: 1.6, color: theme.colors.text }}>
+                {t('update.restartMessage')}
+              </p>
 
-            <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-              <button
-                onClick={handleRestartApp}
-                style={{
-                  flex: 1,
-                  background: theme.colors.success,
-                  color: '#fff',
-                  padding: '12px',
-                  border: 'none',
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                }}
-              >
-                {t('update.restartNow')}
-              </button>
-              <button
-                onClick={() => setShowRestartPrompt(false)}
-                style={{
-                  flex: 1,
-                  background: theme.colors.secondary,
-                  color: '#fff',
-                  padding: '12px',
-                  border: 'none',
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                }}
-              >
-                {t('update.restartLater')}
-              </button>
+              <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+                <button
+                  onClick={handleRestartApp}
+                  style={{
+                    flex: 1,
+                    background: theme.colors.success,
+                    color: '#fff',
+                    padding: '12px',
+                    border: 'none',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                  }}
+                >
+                  {t('update.restartNow')}
+                </button>
+                <button
+                  onClick={() => setShowRestartPrompt(false)}
+                  style={{
+                    flex: 1,
+                    background: theme.colors.secondary,
+                    color: '#fff',
+                    padding: '12px',
+                    border: 'none',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                  }}
+                >
+                  {t('update.restartLater')}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
-    </div>
-);
-    
+  );
 };
+
 export default GeneralSettings;

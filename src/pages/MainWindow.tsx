@@ -1,16 +1,19 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
+import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/api/dialog';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import PresetManager from '../components/PresetManager';
-import RenderModeSelector from '../components/RenderModeSelector';
+
 import PreviewPanel from '../components/PreviewPanel';
+import RenderJobItem from '../components/RenderJobItem';
 import useRenderQueue from '../hooks/useRenderQueue';
+import useDownloadQueue from '../hooks/useDownloadQueue';
 import StatisticsPanel from '../components/StatisticsPanel';
 import { UpdateService, UpdateState } from '../services/UpdateService';
-import { Film, Volume2, Settings, BarChart3, Folder, Play, Pause, Square, RefreshCw, Sparkles, HardDrive, Check, X, Clock, AlertTriangle, Trash2 } from 'lucide-react';
+import { Film, Volume2, Settings, BarChart3, Folder, Play, Pause, Square, RefreshCw, Sparkles, HardDrive, Check, X, Clock, AlertTriangle, Trash2, Download, Loader2, ChevronDown } from 'lucide-react';
 import type { RenderJob } from '../services/RenderService';
 import type {
   AppPreset,
@@ -20,7 +23,110 @@ import type {
   WatermarkSettings,
 } from '../types';
 import '../styles/MainWindow.css';
-console.log("Импорты завершены")
+console.log("Imports completed");
+
+type DownloadFormatOption = {
+  label: string;
+  quality: string;
+  format: string;
+  ext: string;
+  height?: number | null;
+  filesize?: number | null;
+  is_audio_only: boolean;
+};
+
+type DownloadStatus = 'pending' | 'downloading' | 'completed' | 'error';
+
+interface DownloadQueueItem {
+  id: string;
+  url: string;
+  label: string;
+  quality: string;
+  format: string;
+  savePath: string;
+  status: DownloadStatus;
+  progress: number;
+  eta?: string | null;
+  speed?: string | null;
+  message?: string;
+}
+
+interface DownloadProgressEvent {
+  job_id: string;
+  url: string;
+  progress_percent: number;
+  eta?: string | null;
+  speed?: string | null;
+  line?: string;
+}
+
+interface DownloadCompleteEvent {
+  job_id: string;
+  url: string;
+  save_path: string;
+}
+
+interface DownloadErrorEvent {
+  job_id: string;
+  url: string;
+  error: string;
+}
+
+const DEFAULT_DOWNLOAD_FORMATS: DownloadFormatOption[] = [
+  {
+    label: 'MP4 Best',
+    quality: 'bestvideo+bestaudio/best',
+    format: 'mp4',
+    ext: 'mp4',
+    height: null,
+    filesize: null,
+    is_audio_only: false,
+  },
+  {
+    label: 'MP3',
+    quality: 'bestaudio/best',
+    format: 'mp3',
+    ext: 'mp3',
+    height: null,
+    filesize: null,
+    is_audio_only: true,
+  },
+];
+
+const createDownloadJobId = () => `download-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+const formatDownloadBytes = (bytes?: number | null) => {
+  if (!bytes || bytes <= 0) {
+    return '';
+  }
+
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+};
+
+const formatDownloadHeight = (height?: number | null) => {
+  if (!height) {
+    return 'Best';
+  }
+
+  return `${height}p`;
+};
+
+const normalizeDownloadFormats = (formats: DownloadFormatOption[]) => {
+  const merged = [...formats];
+
+  if (!merged.some((item) => item.format === 'mp4')) {
+    merged.unshift(DEFAULT_DOWNLOAD_FORMATS[0]);
+  }
+
+  if (!merged.some((item) => item.format === 'mp3')) {
+    merged.push(DEFAULT_DOWNLOAD_FORMATS[1]);
+  }
+
+  return merged;
+};
 
 const FolderSyncIcon: React.FC<{ color: string }> = ({ color }) => (
   <svg
@@ -144,12 +250,20 @@ const MainWindow: React.FC<MainWindowProps> = ({
     pause,
     resume,
     stop,
-    // stopJob - available for individual job control if needed
+    stopJob,
     updateSettings,
     renderMode,
     gpuAvailable,
     setRenderMode,
   } = useRenderQueue();
+
+  const {
+    downloadQueue,
+    startDownload,
+    stopDownload,
+    removeDownloadJob,
+    clearCompletedDownloads,
+  } = useDownloadQueue();
 
   const trimStepSec = 0.5;
   const minTrimDurationSec = 1;
@@ -164,6 +278,14 @@ const MainWindow: React.FC<MainWindowProps> = ({
   const trimPreviewHideRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const trimPreviewRequestRef = useRef(0);
   const trimPreviewCacheRef = useRef<Map<string, string>>(new Map());
+  const downloadFormatsRequestRef = useRef(0);
+
+  const [downloadUrl, setDownloadUrl] = useState('');
+  const [downloadFormats, setDownloadFormats] = useState<DownloadFormatOption[]>(DEFAULT_DOWNLOAD_FORMATS);
+  const [selectedDownloadFormat, setSelectedDownloadFormat] = useState(DEFAULT_DOWNLOAD_FORMATS[0].label);
+  const [isLoadingDownloadFormats, setIsLoadingDownloadFormats] = useState(false);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Check for updates after 2 seconds
   useEffect(() => {
@@ -182,6 +304,58 @@ const MainWindow: React.FC<MainWindowProps> = ({
 
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    const trimmed = downloadUrl.trim();
+
+    if (!trimmed) {
+      setDownloadFormats(DEFAULT_DOWNLOAD_FORMATS);
+      setSelectedDownloadFormat(DEFAULT_DOWNLOAD_FORMATS[0].label);
+      setIsLoadingDownloadFormats(false);
+      return;
+    }
+
+    if (!/^https?:\/\//i.test(trimmed)) {
+      setDownloadFormats(DEFAULT_DOWNLOAD_FORMATS);
+      setSelectedDownloadFormat(DEFAULT_DOWNLOAD_FORMATS[0].label);
+      setIsLoadingDownloadFormats(false);
+      return;
+    }
+
+    const requestId = ++downloadFormatsRequestRef.current;
+    setIsLoadingDownloadFormats(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        const formats = await invoke<DownloadFormatOption[]>('get_video_formats', { url: trimmed });
+
+        if (requestId !== downloadFormatsRequestRef.current) {
+          return;
+        }
+
+        const normalized = normalizeDownloadFormats(formats?.length ? formats : DEFAULT_DOWNLOAD_FORMATS);
+        setDownloadFormats(normalized);
+
+        setSelectedDownloadFormat((current) => (
+          normalized.some((item) => item.label === current) ? current : normalized[0]?.label || DEFAULT_DOWNLOAD_FORMATS[0].label
+        ));
+      } catch (error) {
+        if (requestId !== downloadFormatsRequestRef.current) {
+          return;
+        }
+
+        console.warn('[MainWindow] Failed to load download formats:', error);
+        setDownloadFormats(DEFAULT_DOWNLOAD_FORMATS);
+        setSelectedDownloadFormat(DEFAULT_DOWNLOAD_FORMATS[0].label);
+      } finally {
+        if (requestId === downloadFormatsRequestRef.current) {
+          setIsLoadingDownloadFormats(false);
+        }
+      }
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [downloadUrl]);
 
   // Check active VPN/proxy on startup and show safety warning
   useEffect(() => {
@@ -261,6 +435,24 @@ const MainWindow: React.FC<MainWindowProps> = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [showStats, closeStats]);
 
+  useEffect(() => {
+    const handlePaste = async (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        try {
+          const text = await navigator.clipboard.readText();
+          if (/tiktok\.com|youtube\.com|youtu\.be|instagram\.com\/reel/i.test(text.trim())) {
+            setDownloadUrl(text.trim());
+            setShowUrlInput(true);
+          }
+        } catch {
+          // clipboard access denied
+        }
+      }
+    };
+    window.addEventListener('keydown', handlePaste);
+    return () => window.removeEventListener('keydown', handlePaste);
+  }, []);
+
   // Update RenderService settings when preset changes
   useEffect(() => {
     updateSettings(videoSettings, audioSettings, watermarkSettings, mainScreenSettings, undefined, selectedPresetName);
@@ -316,6 +508,31 @@ const MainWindow: React.FC<MainWindowProps> = ({
     }
   };
 
+  const handleDownloadMedia = async () => {
+    const trimmedUrl = downloadUrl.trim();
+    if (!trimmedUrl) {
+      return;
+    }
+
+    const selectedFormat =
+      downloadFormats.find((item) => item.label === selectedDownloadFormat) ||
+      downloadFormats[0] ||
+      DEFAULT_DOWNLOAD_FORMATS[0];
+    const savePath = mainScreenSettings.customOutputPath.trim();
+
+    try {
+      await startDownload(
+        trimmedUrl,
+        selectedFormat.quality,
+        selectedFormat.format,
+        selectedFormat.label,
+        savePath || t('download.defaultDownloadsFolder')
+      );
+    } catch (error) {
+      console.error('[MainWindow] Download failed:', error);
+    }
+  };
+
   const handleStart = async () => {
     try {
       await start();
@@ -340,8 +557,51 @@ const MainWindow: React.FC<MainWindowProps> = ({
     await invoke('write_log', { message: 'Stopped processing' });
   };
 
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files)
+      .filter(f => /\.(mp4|avi|mkv|mov|wmv|flv|webm)$/i.test(f.name))
+      .map(f => (f as File & { path?: string }).path || f.name); // Using fallback to f.name for testing
+      
+    // Filter out undefined/empty paths just in case
+    const validFiles = files.filter(f => f) as string[];
+    if (validFiles.length > 0) {
+      await addFiles(validFiles);
+    }
+  }, [addFiles]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    // Only fire when leaving the element itself, not child elements
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragging(false);
+    }
+  }, []);
+
+
   const handleRemoveJob = (jobId: string) => {
     removeJob(jobId);
+  };
+
+
+
+  const getDownloadStatusDisplay = (status: DownloadStatus) => {
+    switch (status) {
+      case 'downloading':
+        return { text: t('download.status.downloading'), color: theme.colors.primary, icon: <RefreshCw size={14} strokeWidth={2} className="download-spin" /> };
+      case 'completed':
+        return { text: t('download.status.completed'), color: theme.colors.success, icon: <Check size={14} strokeWidth={2} /> };
+      case 'error':
+        return { text: t('download.status.error'), color: theme.colors.error, icon: <X size={14} strokeWidth={2} /> };
+      case 'pending':
+      default:
+        return { text: t('download.status.pending'), color: theme.colors.textSecondary, icon: <Clock size={14} strokeWidth={2} /> };
+    }
   };
 
   const handleClearCompleted = () => {
@@ -602,534 +862,471 @@ const MainWindow: React.FC<MainWindowProps> = ({
       )}
 
       <div className="content">
-                {/* Preset Manager */}
-                <PresetManager
-                  currentVideoSettings={videoSettings}
-                  currentAudioSettings={audioSettings}
-                  currentMainScreenSettings={mainScreenSettings}
-                  currentWatermarkSettings={watermarkSettings}
-                  onApplyPreset={handleApplyPreset}
-                  selectedPresetName={selectedPresetName}
-                  setSelectedPresetName={setSelectedPresetName}
-                />
 
-        <div className="file-selection">
-          <button className="main-action-button" onClick={handleSelectFiles} style={{ background: theme.colors.primary, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Folder size={18} strokeWidth={1.5} /> {t('main.selectFiles')}
+        {/* ══════════════════════════════════════════════════════
+            UNIFIED ACTION BAR — одна горизонтальная строка
+            ══════════════════════════════════════════════════════ */}
+        <div className="action-bar">
+
+          {/* ── Блок пресетов (left) ── */}
+          <PresetManager
+            currentVideoSettings={videoSettings}
+            currentAudioSettings={audioSettings}
+            currentMainScreenSettings={mainScreenSettings}
+            currentWatermarkSettings={watermarkSettings}
+            onApplyPreset={handleApplyPreset}
+            selectedPresetName={selectedPresetName}
+            setSelectedPresetName={setSelectedPresetName}
+          />
+
+          {/* ── Разделитель ── */}
+          <div className="action-bar-divider" style={{ background: theme.colors.border }} />
+
+          {/* ── Блок папки сохранения (right) ── */}
+          <button
+            className="action-bar-btn action-bar-btn--primary"
+            onClick={handleSelectOutputFolder}
+            disabled={mainScreenSettings.saveInSourceDirectory}
+            style={{
+              background: theme.colors.primary,
+              color: '#fff',
+              flexShrink: 0,
+              opacity: mainScreenSettings.saveInSourceDirectory ? 0.5 : 1,
+              cursor: mainScreenSettings.saveInSourceDirectory ? 'not-allowed' : 'pointer',
+            }}
+            title={mainScreenSettings.customOutputPath || t('main.outputFolder')}
+          >
+            <HardDrive size={16} strokeWidth={1.8} />
+            <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {mainScreenSettings.customOutputPath
+                ? mainScreenSettings.customOutputPath.split(/[\\\/]/).pop()
+                : t('main.outputFolder')}
+            </span>
           </button>
-          <div className="output-controls" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <button
-              className="main-action-button"
-              onClick={handleSelectOutputFolder}
-              style={{
-                background: theme.colors.primary,
-                color: '#fff',
-                opacity: mainScreenSettings.saveInSourceDirectory ? 0.5 : 1,
-                cursor: mainScreenSettings.saveInSourceDirectory ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-              disabled={mainScreenSettings.saveInSourceDirectory}
-            >
-              <HardDrive size={18} strokeWidth={1.5} /> {t('main.outputFolder')}
-            </button>
 
-            <motion.button
-              className="source-dir-toggle"
-              type="button"
-              aria-pressed={mainScreenSettings.saveInSourceDirectory}
-              onClick={handleToggleSaveInSourceDirectory}
-              title={t('main.saveInSourceDirectory')}
-              initial={false}
-              animate={{
-                backgroundColor: mainScreenSettings.saveInSourceDirectory ? theme.colors.primary : 'transparent',
-                color: mainScreenSettings.saveInSourceDirectory ? '#fff' : theme.colors.textSecondary,
-                scale: mainScreenSettings.saveInSourceDirectory ? 1.05 : 1,
-              }}
-              transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-              style={{
-                border: `1px solid ${theme.colors.border}`,
-                borderRadius: '6px',
-                padding: '8px 10px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                minWidth: 40,
-              }}
-            >
-              <FolderSyncIcon color={mainScreenSettings.saveInSourceDirectory ? '#fff' : theme.colors.text} />
-            </motion.button>
-          </div>
+          <motion.button
+            className="action-bar-btn action-bar-btn--icon"
+            type="button"
+            aria-pressed={mainScreenSettings.saveInSourceDirectory}
+            onClick={handleToggleSaveInSourceDirectory}
+            title={t('main.saveInSourceDirectory')}
+            initial={false}
+            animate={{
+              backgroundColor: mainScreenSettings.saveInSourceDirectory ? theme.colors.primary : 'rgba(var(--theme-bg-rgb), 0.22)',
+              color: mainScreenSettings.saveInSourceDirectory ? '#fff' : theme.colors.textSecondary,
+            }}
+            transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+            style={{ flexShrink: 0, border: `1px solid ${theme.colors.border}` }}
+          >
+            <FolderSyncIcon color={mainScreenSettings.saveInSourceDirectory ? '#fff' : theme.colors.text} />
+          </motion.button>
 
-          {mainScreenSettings.customOutputPath && (
-            <div className="output-path" style={{ color: theme.colors.textSecondary }}>
-              {mainScreenSettings.customOutputPath}
-            </div>
-          )}
-
-          {/* CPU/GPU/Duo Toggle - Advanced visual selector */}
-          <div className="render-mode-inline" style={{ padding: '8px 0' }}>
-            <RenderModeSelector
-              mode={renderMode}
-              onModeChange={handleSetRenderMode}
-              gpuAvailable={gpuAvailable}
-              isRendering={isProcessing}
-            />
-          </div>
-          
         </div>
+        {/* ══════════════════════════════════════════════════════ */}
 
-        <div className="queue-section">
-          <div className="queue-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2>{t('main.queue')} ({totalJobs})</h2>
-            <div className="queue-stats" style={{ fontSize: '0.85rem', color: theme.colors.textSecondary, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {completedJobs > 0 && <span style={{ color: theme.colors.success, display: 'flex', alignItems: 'center', gap: '4px' }}><Check size={14} strokeWidth={2} /> {completedJobs}</span>}
-              {errorJobs > 0 && <span style={{ color: theme.colors.error, display: 'flex', alignItems: 'center', gap: '4px' }}><X size={14} strokeWidth={2} /> {errorJobs}</span>}
-              {pendingJobs > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={14} strokeWidth={2} /> {pendingJobs}</span>}
-              {completedJobs > 0 && (
-                <button
-                  onClick={handleClearCompleted}
-                  style={{ 
-                    marginLeft: '12px', 
-                    padding: '2px 8px',
-                    fontSize: '0.8rem',
-                    background: 'rgba(var(--theme-bg-rgb), 0.2)',
-                    backdropFilter: 'blur(8px)',
-                    color: theme.colors.text,
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '6px',
-                    cursor: 'pointer'
-                  }}
+        {/* ── EMPTY STATE (shown when no jobs and no downloads) ── */}
+        {jobs.length === 0 && downloadQueue.length === 0 ? (
+          <div
+            className={`empty-state${isDragging ? ' drag-over' : ''}`}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onClick={handleSelectFiles}
+          >
+            <div className="empty-state-icon">
+              <Folder size={48} strokeWidth={1} />
+            </div>
+            <p className="empty-state-title">{t('main.selectFiles')}</p>
+            <p className="empty-state-subtitle" style={{ color: theme.colors.textSecondary }}>
+              {t('main.dropFilesHere')}
+            </p>
+
+            <div className="empty-state-divider" style={{ color: theme.colors.textSecondary }}>
+              <span className="empty-state-line" style={{ background: theme.colors.border }} />
+              <span>{t('common.or')}</span>
+              <span className="empty-state-line" style={{ background: theme.colors.border }} />
+            </div>
+
+            {/* URL download pill */}
+            <div className="empty-state-url-row" onClick={e => e.stopPropagation()}>
+              <input
+                className="action-bar-input"
+                type="text"
+                value={downloadUrl}
+                onChange={(e) => setDownloadUrl(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && downloadUrl.trim()) handleDownloadMedia(); }}
+                placeholder={t('download.urlPlaceholder')}
+                style={{ color: theme.colors.text }}
+              />
+              <span className="url-pill-sep" style={{ background: theme.colors.border }} />
+              <div className="action-bar-format-wrap" style={{ background: theme.colors.surface }}>
+                <select
+                  className="action-bar-format-select"
+                  value={selectedDownloadFormat}
+                  onChange={(e) => setSelectedDownloadFormat(e.target.value)}
+                  style={{ color: theme.colors.text }}
                 >
-                  {t('queue.clearCompleted')}
-                </button>
-              )}
+                  {downloadFormats.map((item) => (
+                    <option key={item.label} value={item.label} style={{ backgroundColor: theme.colors.surface, color: theme.colors.text }}>
+                      {item.label}
+                      {item.height ? ` • ${formatDownloadHeight(item.height)}` : ''}
+                      {item.filesize ? ` • ${formatDownloadBytes(item.filesize)}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={13} strokeWidth={2} className="action-bar-format-caret" style={{ color: theme.colors.textSecondary }} />
+              </div>
+              <button
+                className="action-bar-btn action-bar-btn--success"
+                onClick={handleDownloadMedia}
+                disabled={!downloadUrl.trim()}
+                style={{ background: theme.colors.success, color: '#fff', flexShrink: 0 }}
+              >
+                {isLoadingDownloadFormats
+                  ? <Loader2 size={15} strokeWidth={2} className="download-spinner" />
+                  : <Download size={15} strokeWidth={2} />}
+                <span>{t('download.downloadButton')}</span>
+              </button>
             </div>
           </div>
-          <div className={`queue-list ${needsTopPreviewSpace ? 'has-top-preview-room' : ''}`} style={{ borderColor: theme.colors.border }}>
-            {jobs.length === 0 ? (
-              <div className="empty-queue" style={{ color: theme.colors.textSecondary }}>
-                {t('main.selectFiles')}...
+        ) : (
+          /* ── ACTIVE STATE ── */
+          <div className="queue-section">
+            <div className="queue-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2>{t('main.queue')} ({jobs.length + downloadQueue.length})</h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {/* Quick-add buttons */}
+                <button
+                  className="queue-add-btn"
+                  onClick={handleSelectFiles}
+                  title={t('main.selectFiles')}
+                  style={{ color: theme.colors.text, borderColor: theme.colors.border, background: 'rgba(var(--theme-bg-rgb), 0.2)' }}
+                >
+                  <Folder size={14} strokeWidth={1.8} />
+                  <span>{t('queue.addFile')}</span>
+                </button>
+                <button
+                  className="queue-add-btn"
+                  onClick={() => setShowUrlInput(v => !v)}
+                  title={t('queue.addLinkTooltip')}
+                  style={{ color: theme.colors.text, borderColor: theme.colors.border, background: showUrlInput ? `${theme.colors.primary}22` : 'rgba(var(--theme-bg-rgb), 0.2)' }}
+                >
+                  <Download size={14} strokeWidth={1.8} />
+                  <span>{t('queue.addLink')}</span>
+                </button>
+                {/* Stats */}
+                <div className="queue-stats" style={{ fontSize: '0.85rem', color: theme.colors.textSecondary, display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 8 }}>
+                  {completedJobs > 0 && <span style={{ color: theme.colors.success, display: 'flex', alignItems: 'center', gap: '4px' }}><Check size={14} strokeWidth={2} /> {completedJobs}</span>}
+                  {errorJobs > 0 && <span style={{ color: theme.colors.error, display: 'flex', alignItems: 'center', gap: '4px' }}><X size={14} strokeWidth={2} /> {errorJobs}</span>}
+                  {pendingJobs > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={14} strokeWidth={2} /> {pendingJobs}</span>}
+                  {downloadQueue.length > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Download size={14} strokeWidth={2} /> {downloadQueue.length}</span>}
+                  {completedJobs > 0 && (
+                    <button
+                      onClick={handleClearCompleted}
+                      style={{ marginLeft: '4px', padding: '2px 8px', fontSize: '0.8rem', background: 'rgba(var(--theme-bg-rgb), 0.2)', backdropFilter: 'blur(8px)', color: theme.colors.text, border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', cursor: 'pointer' }}
+                    >
+                      {t('queue.clearCompleted')}
+                    </button>
+                  )}
+                </div>
               </div>
-            ) : (
-              jobs.map(item => {
-                const statusDisplay = getStatusDisplay(item);
-                return (
-                  <div key={item.id} className="queue-item" style={{ borderColor: theme.colors.border }}>
-                    <div className="item-info">
-                      <div className="item-main-info" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', minHeight: '32px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-                          {/* Status badge with icon */}
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            fontSize: '0.75rem',
-                            fontWeight: 'bold',
-                            background: `${statusDisplay.color}20`,
-                            color: statusDisplay.color,
-                            whiteSpace: 'nowrap'
-                          }}>
-                            <span>{statusDisplay.icon}</span>
-                            <span>{statusDisplay.text}</span>
-                          </span>
-                          {/* CPU/GPU slot badge */}
-                          {item.assignedSlot && item.status !== 'pending' && (
-                            <span style={{
-                              background: item.assignedSlot === 'gpu' ? theme.colors.success : theme.colors.primary,
-                              color: '#fff',
-                              padding: '3px 6px',
-                              borderRadius: '4px',
-                              fontSize: '0.7rem',
-                              fontWeight: 'bold'
-                            }}>
-                              {item.assignedSlot.toUpperCase()}
-                            </span>
-                          )}
-                          {/* File name */}
-                          <span className="item-name" title={item.inputPath} style={{ 
-                            overflow: 'hidden', 
-                            textOverflow: 'ellipsis', 
-                            whiteSpace: 'nowrap',
-                            flex: 1
-                          }}>
-                            {item.fileName}
-                          </span>
-                        </div>
-                        <div className="item-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center', marginLeft: '8px' }}>
-                          {/* FPS and speed for processing */}
-                          {item.status === 'processing' && (
-                            <span style={{ fontSize: '0.8rem', color: theme.colors.textSecondary, whiteSpace: 'nowrap' }}>
-                              {item.fps > 0 && `${item.fps.toFixed(1)} fps`}
-                              {item.speed > 0 && ` • ${item.speed.toFixed(2)}x`}
-                            </span>
-                          )}
-  
-                          {/* Re-render buttons for completed tasks */}
-                          {item.status === 'completed' && (
-                            <>
-                              <button
-                                onClick={() => addToQueue(item.inputPath, item.outputPath, item.trimStartSec, item.trimEndSec)}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  padding: '4px 8px',
-                                  background: `${theme.colors.success}15`,
-                                  border: `1px solid ${theme.colors.success}40`,
-                                  borderRadius: '6px',
-                                  color: theme.colors.success,
-                                  cursor: 'pointer',
-                                  fontSize: '0.75rem',
-                                  fontWeight: '500',
-                                  transition: 'all 0.15s ease'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = `${theme.colors.success}30`;
-                                  e.currentTarget.style.borderColor = theme.colors.success;
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = `${theme.colors.success}15`;
-                                  e.currentTarget.style.borderColor = `${theme.colors.success}40`;
-                                }}
-                                title={t('history.re_render_overwrite') || 'Re-render (overwrite)'}
-                              >
-                                ↻
-                              </button>
-                              <button
-                                onClick={() => {
-                                  const lastDot = item.outputPath.lastIndexOf('.');
-                                  const outputPathNew = lastDot > 0 
-                                    ? item.outputPath.substring(0, lastDot) + '_2' + item.outputPath.substring(lastDot)
-                                    : item.outputPath + '_2';
-                                  addToQueue(item.inputPath, outputPathNew, item.trimStartSec, item.trimEndSec);
-                                }}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  padding: '4px 8px',
-                                  background: `${theme.colors.primary}15`,
-                                  border: `1px solid ${theme.colors.primary}40`,
-                                  borderRadius: '6px',
-                                  color: theme.colors.primary,
-                                  cursor: 'pointer',
-                                  fontSize: '0.75rem',
-                                  fontWeight: '500',
-                                  transition: 'all 0.15s ease'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = `${theme.colors.primary}30`;
-                                  e.currentTarget.style.borderColor = theme.colors.primary;
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = `${theme.colors.primary}15`;
-                                  e.currentTarget.style.borderColor = `${theme.colors.primary}40`;
-                                }}
-                                title={t('history.re_render_new') || 'Re-render (new version)'}
-                              >
-                                ↻2
-                              </button>
-                            </>
-                          )}
+            </div>
 
-                          {/* Show in Explorer button for completed tasks */}
-                          {item.status === 'completed' && item.outputPath && (
-                            <button
-                              onClick={() => handleShowInExplorer(item.outputPath)}
-                              style={{
-                                display: 'flex',
+            {/* Collapsible URL input row */}
+            <AnimatePresence>
+              {showUrlInput && (
+                <motion.div
+                  className="queue-url-row"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.18 }}
+                >
+                  <input
+                    className="action-bar-input"
+                    type="text"
+                    value={downloadUrl}
+                    onChange={(e) => setDownloadUrl(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && downloadUrl.trim()) { handleDownloadMedia(); setShowUrlInput(false); } }}
+                    placeholder={t('download.urlPlaceholder')}
+                    autoFocus
+                    style={{ color: theme.colors.text, background: theme.colors.surface, borderColor: theme.colors.border }}
+                  />
+                  <div className="action-bar-format-wrap" style={{ borderColor: theme.colors.border, background: theme.colors.surface }}>
+                    <select
+                      className="action-bar-format-select"
+                      value={selectedDownloadFormat}
+                      onChange={(e) => setSelectedDownloadFormat(e.target.value)}
+                      style={{ color: theme.colors.text }}
+                    >
+                      {downloadFormats.map((item) => (
+                        <option key={item.label} value={item.label} style={{ backgroundColor: theme.colors.surface, color: theme.colors.text }}>
+                          {item.label}
+                          {item.height ? ` • ${formatDownloadHeight(item.height)}` : ''}
+                          {item.filesize ? ` • ${formatDownloadBytes(item.filesize)}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown size={13} strokeWidth={2} className="action-bar-format-caret" style={{ color: theme.colors.textSecondary }} />
+                  </div>
+                  <button
+                    className="action-bar-btn action-bar-btn--success"
+                    onClick={() => { handleDownloadMedia(); setShowUrlInput(false); }}
+                    disabled={!downloadUrl.trim()}
+                    style={{ background: theme.colors.success, color: '#fff', flexShrink: 0 }}
+                  >
+                    {isLoadingDownloadFormats
+                      ? <Loader2 size={15} strokeWidth={2} className="download-spinner" />
+                      : <Download size={15} strokeWidth={2} />}
+                    <span>{t('download.downloadButton')}</span>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div className={`queue-list ${needsTopPreviewSpace ? 'has-top-preview-room' : ''}`} style={{ borderColor: theme.colors.border }}>
+              <>
+                <AnimatePresence initial={false}>
+                  {downloadQueue.map((item) => {
+                    const statusDisplay = getDownloadStatusDisplay(item.status);
+
+                    return (
+                      <motion.div
+                        key={item.id}
+                        className="queue-item"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -8 }}
+                        transition={{ duration: 0.18 }}
+                        style={{ borderColor: theme.colors.border }}
+                      >
+                        <div className="item-info">
+                          <div className="item-main-info" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', minHeight: '32px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                              <span style={{
+                                display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '4px',
-                                padding: '4px 8px',
-                                background: `${theme.colors.success}15`,
-                                border: `1px solid ${theme.colors.success}40`,
-                                borderRadius: '6px',
-                                color: theme.colors.success,
-                                cursor: 'pointer',
+                                padding: '3px 8px',
+                                borderRadius: '4px',
                                 fontSize: '0.75rem',
-                                fontWeight: '500',
-                                transition: 'all 0.15s ease'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.background = `${theme.colors.success}30`;
-                                e.currentTarget.style.borderColor = theme.colors.success;
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.background = `${theme.colors.success}15`;
-                                e.currentTarget.style.borderColor = `${theme.colors.success}40`;
-                              }}
-                              title={t('queue.showInExplorer') || 'Show in Explorer'}
-                            >
-                              <Folder size={14} strokeWidth={1.5} /> {t('queue.show') || 'Show'}
-                            </button>
-                          )}
-
-                          {/* Delete button - larger and more visible */}
-                          {(item.status === 'pending' || item.status === 'completed' || item.status === 'error' || item.status === 'stopped') && (
-                            <button
-                              onClick={() => handleRemoveJob(item.id)}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                width: '28px',
-                                height: '28px',
-                                background: `${theme.colors.error}15`,
-                                border: `1px solid ${theme.colors.error}40`,
-                                borderRadius: '6px',
-                                color: theme.colors.error,
-                                cursor: 'pointer',
-                                fontSize: '1.2rem',
                                 fontWeight: 'bold',
-                                transition: 'all 0.15s ease'
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.background = `${theme.colors.error}30`;
-                                e.currentTarget.style.borderColor = theme.colors.error;
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.background = `${theme.colors.error}15`;
-                                e.currentTarget.style.borderColor = `${theme.colors.error}40`;
-                              }}
-                              title={t('queue.deleteFromQueue')}
-                            >
-                              <Trash2 size={14} strokeWidth={2} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      {item.status === 'pending' && item.durationSeconds > 0 && (() => {
-                        const duration = item.durationSeconds;
-                        const trimStart = Math.max(0, Math.min(duration, item.trimStartSec ?? 0));
-                        const trimEnd = Math.max(trimStart, Math.min(duration, item.trimEndSec ?? duration));
-                        const editable = item.status === 'pending';
-                        const startPercent = duration > 0 ? (trimStart / duration) * 100 : 0;
-                        const endPercent = duration > 0 ? (trimEnd / duration) * 100 : 0;
-                        const selectedPercent = duration > 0 ? ((trimEnd - trimStart) / duration) * 100 : 0;
-                        return (
-                          <div
-                            className={`trim-control ${editable ? 'is-editable' : 'is-readonly'}`}
-                            style={{
-                              ['--trim-accent' as string]: theme.colors.primary,
-                              borderColor: theme.colors.border,
-                              background: 'rgba(var(--theme-bg-rgb), 0.12)'
-                            }}
-                          >
-                            <div className="trim-head" style={{ color: theme.colors.textSecondary }}>
-                              <span>{t('queue.trim') || 'Trim'}</span>
-                              <span>
-                                {t('queue.trimRange') || 'Range'}: {formatTrimTime(trimStart)} - {formatTrimTime(trimEnd)}
+                                background: `${statusDisplay.color}20`,
+                                color: statusDisplay.color,
+                                whiteSpace: 'nowrap'
+                              }}>
+                                <span>{statusDisplay.icon}</span>
+                                <span>{statusDisplay.text}</span>
                               </span>
-                              <span>
-                                {t('queue.trimDuration') || 'Length'}: {formatTrimTime(trimEnd - trimStart)}
+                              <span className="item-name" title={item.url} style={{
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                flex: 1
+                              }}>
+                                {item.label}
                               </span>
                             </div>
-
-                            <div className="trim-slider-wrap">
-                              {trimFramePreview && trimFramePreview.jobId === item.id && (
-                                <div
-                                  className="trim-frame-preview"
-                                  style={{ left: `${trimFramePreview.leftPercent}%` }}
+                            <div className="item-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center', marginLeft: '8px' }}>
+                              {item.status === 'downloading' && (
+                                <button
+                                  onClick={() => stopDownload(item.id)}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    width: '28px',
+                                    height: '28px',
+                                    background: `${theme.colors.warning}15`,
+                                    border: `1px solid ${theme.colors.warning}40`,
+                                    borderRadius: '6px',
+                                    color: theme.colors.warning,
+                                    cursor: 'pointer',
+                                    fontSize: '1rem',
+                                    fontWeight: 'bold',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = `${theme.colors.warning}30`;
+                                    e.currentTarget.style.borderColor = theme.colors.warning;
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = `${theme.colors.warning}15`;
+                                    e.currentTarget.style.borderColor = `${theme.colors.warning}40`;
+                                  }}
+                                  title={t('download.stopDownload') || 'Stop download'}
                                 >
-                                  {trimFramePreview.imageDataUrl ? (
-                                    <img
-                                      src={trimFramePreview.imageDataUrl}
-                                      alt={`${item.fileName} ${formatTrimTime(trimFramePreview.timeSec)}`}
-                                      className="trim-frame-preview-image"
-                                    />
-                                  ) : (
-                                    <div className="trim-frame-preview-skeleton" />
-                                  )}
-                                  <span className="trim-frame-preview-time">
-                                    {trimFramePreview.loading ? '...' : formatTrimTime(trimFramePreview.timeSec)}
-                                  </span>
-                                </div>
+                                  <Square size={13} fill="currentColor" />
+                                </button>
                               )}
-
-                              <div className="trim-slider-track" style={{ background: `${theme.colors.border}99` }} />
-                              <div
-                                className="trim-slider-selected"
+                              <button
+                                onClick={() => removeDownloadJob(item.id)}
                                 style={{
-                                  left: `${startPercent}%`,
-                                  width: `${selectedPercent}%`,
-                                  background: `${theme.colors.primary}66`
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  width: '28px',
+                                  height: '28px',
+                                  background: `${theme.colors.error}15`,
+                                  border: `1px solid ${theme.colors.error}40`,
+                                  borderRadius: '6px',
+                                  color: theme.colors.error,
+                                  cursor: 'pointer',
+                                  fontSize: '1.2rem',
+                                  fontWeight: 'bold',
+                                  transition: 'all 0.15s ease'
                                 }}
-                              />
-
-                              <input
-                                type="range"
-                                className="trim-range trim-range-start"
-                                min={0}
-                                max={duration}
-                                step={trimStepSec}
-                                value={trimStart}
-                                disabled={!editable}
-                                onMouseDown={() => {
-                                  requestTrimFramePreview(item.id, item.inputPath, trimStart, startPercent, 'start');
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = `${theme.colors.error}30`;
+                                  e.currentTarget.style.borderColor = theme.colors.error;
                                 }}
-                                onTouchStart={() => {
-                                  requestTrimFramePreview(item.id, item.inputPath, trimStart, startPercent, 'start');
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = `${theme.colors.error}15`;
+                                  e.currentTarget.style.borderColor = `${theme.colors.error}40`;
                                 }}
-                                onChange={(e) => {
-                                  const nextStart = Math.min(
-                                    parseFloat(e.target.value),
-                                    trimEnd - minTrimDurationSec,
-                                  );
-                                  updateJobTrim(item.id, nextStart, trimEnd);
-                                  const nextStartPercent = duration > 0 ? (nextStart / duration) * 100 : 0;
-                                  requestTrimFramePreview(item.id, item.inputPath, nextStart, nextStartPercent, 'start');
-                                }}
-                                onMouseUp={() => hideTrimFramePreview()}
-                                onTouchEnd={() => hideTrimFramePreview()}
-                                onBlur={() => hideTrimFramePreview()}
-                                aria-label={`${item.fileName} trim start`}
-                              />
-                              <input
-                                type="range"
-                                className="trim-range trim-range-end"
-                                min={0}
-                                max={duration}
-                                step={trimStepSec}
-                                value={trimEnd}
-                                disabled={!editable}
-                                onMouseDown={() => {
-                                  requestTrimFramePreview(item.id, item.inputPath, trimEnd, endPercent, 'end');
-                                }}
-                                onTouchStart={() => {
-                                  requestTrimFramePreview(item.id, item.inputPath, trimEnd, endPercent, 'end');
-                                }}
-                                onChange={(e) => {
-                                  const nextEnd = Math.max(
-                                    parseFloat(e.target.value),
-                                    trimStart + minTrimDurationSec,
-                                  );
-                                  updateJobTrim(item.id, trimStart, nextEnd);
-                                  const nextEndPercent = duration > 0 ? (nextEnd / duration) * 100 : 0;
-                                  requestTrimFramePreview(item.id, item.inputPath, nextEnd, nextEndPercent, 'end');
-                                }}
-                                onMouseUp={() => hideTrimFramePreview()}
-                                onTouchEnd={() => hideTrimFramePreview()}
-                                onBlur={() => hideTrimFramePreview()}
-                                aria-label={`${item.fileName} trim end`}
-                              />
+                                title={t('queue.deleteFromQueue')}
+                              >
+                                <Trash2 size={14} strokeWidth={2} />
+                              </button>
                             </div>
-
-                            {!editable && (
-                              <div className="trim-readonly-note" style={{ color: theme.colors.textSecondary }}>
-                                {t('queue.trimReadonly') || 'Trim can be edited only while item is pending'}
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                            <div className="download-queue-meta">
+                              <span>{item.format.toUpperCase()}</span>
+                              <span>•</span>
+                              <span>{item.savePath}</span>
+                            </div>
+                            <div className="download-queue-url" title={item.url}>
+                              {item.url}
+                            </div>
+                            {item.message && (
+                              <div className="download-queue-message" style={{ color: item.status === 'error' ? theme.colors.error : theme.colors.textSecondary }}>
+                                {item.message}
                               </div>
                             )}
                           </div>
-                        );
-                      })()}
-                      {item.error && (
-                        <div className="item-error" style={{ 
-                          fontSize: '0.8rem', 
-                          color: theme.colors.error,
-                          marginTop: '4px',
-                          padding: '4px 8px',
-                          background: `${theme.colors.error}10`,
-                          borderRadius: '4px'
-                        }}>
-                          {item.error}
                         </div>
-                      )}
-                    </div>
-                    {(item.status === 'processing' || item.status === 'paused') && (
-                      <div className="progress-section" style={{ marginTop: '8px' }}>
-                        <div className="progress-bar" style={{ background: theme.colors.border, height: '8px', borderRadius: '4px' }}>
-                          <div 
-                            className="progress-fill" 
-                            style={{ 
-                              width: `${item.progress}%`, 
-                              background: item.status === 'paused' ? theme.colors.warning : theme.colors.primary,
-                              height: '100%',
-                              borderRadius: '4px',
-                              transition: 'width 0.3s ease'
-                            }}
-                          />
-                        </div>
-                        <div className="progress-details" style={{ 
-                          display: 'flex', 
-                          justifyContent: 'space-between', 
-                          fontSize: '0.8rem', 
-                          color: theme.colors.textSecondary,
-                          marginTop: '4px'
-                        }}>
-                          <span>{item.progress.toFixed(1)}%</span>
-                          <div style={{ display: 'flex', gap: '12px' }}>
-                            {item.outputSizeBytes > 0 && (
-                              <span style={{ fontFamily: 'monospace' }}>
-                                {item.outputSize}
-                                {item.estimatedFinalSize && (
-                                  <span style={{ color: theme.colors.textSecondary }}>
-                                    {' / '}{item.estimatedFinalSize}
-                                  </span>
-                                )}
-                              </span>
-                            )}
-                            <span>ETA: {item.etaFormatted}</span>
+                        {item.status === 'downloading' && (
+                          <div className="progress-section" style={{ marginTop: '8px' }}>
+                            <div className="progress-bar" style={{ background: theme.colors.border, height: '8px', borderRadius: '4px' }}>
+                              <div
+                                className="progress-fill"
+                                style={{
+                                  width: `${item.progress}%`,
+                                  background: theme.colors.primary,
+                                  height: '100%',
+                                  borderRadius: '4px',
+                                  transition: 'width 0.3s ease'
+                                }}
+                              />
+                            </div>
+                            <div className="progress-details" style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              fontSize: '0.8rem',
+                              color: theme.colors.textSecondary,
+                              marginTop: '4px'
+                            }}>
+                              <span>{item.progress.toFixed(1)}%</span>
+                              <div style={{ display: 'flex', gap: '12px' }}>
+                                <span>ETA: {item.eta || '--:--'}</span>
+                                <span>{item.speed || '—'}</span>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      </div>
-                    )}
-                    {item.status === 'completed' && (
-                      <div className="completed-info" style={{ 
-                        fontSize: '0.8rem', 
-                        color: theme.colors.success,
-                        marginTop: '4px',
-                        display: 'flex',
-                        gap: '8px'
-                      }}>
-                        <span>{t('queue.completedWithSize')}</span>
-                        <span style={{ color: theme.colors.textSecondary, fontFamily: 'monospace' }}>
-                          {(() => {
-                            const sourceDuration = Math.max(0, item.durationSeconds || 0);
-                            const trimStart = Math.max(0, Math.min(sourceDuration, item.trimStartSec ?? 0));
-                            const trimEnd = Math.max(trimStart, Math.min(sourceDuration, item.trimEndSec ?? sourceDuration));
-                            const resultDuration = sourceDuration > 0 ? Math.max(0, trimEnd - trimStart) : 0;
-                            const sourceSize = item.inputSize || '—';
-                            const resultSize = item.outputSizeBytes > 0 ? item.outputSize : '—';
+                        )}
+                        {item.status === 'completed' && (
+                          <div className="completed-info" style={{
+                            fontSize: '0.8rem',
+                            color: theme.colors.success,
+                            marginTop: '4px',
+                            display: 'flex',
+                            gap: '8px'
+                          }}>
+                            <span>{t('download.downloadFinished')}</span>
+                            <span style={{ color: theme.colors.textSecondary, fontFamily: 'monospace' }}>
+                              {item.savePath}
+                            </span>
+                          </div>
+                        )}
+                        {item.status === 'pending' && (
+                          <div className="completed-info" style={{
+                            fontSize: '0.8rem',
+                            color: theme.colors.textSecondary,
+                            marginTop: '4px',
+                            display: 'flex',
+                            gap: '8px'
+                          }}>
+                            <span>{t('download.waitingToStart')}</span>
+                          </div>
+                        )}
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
 
-                            return `(${sourceSize} → ${resultSize} | ${formatDurationCompact(sourceDuration)} → ${formatDurationCompact(resultDuration)})`;
-                          })()}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
+                {jobs.length > 0 && downloadQueue.length > 0 && (
+                  <div style={{ height: '1px', background: theme.colors.border, opacity: 0.5, margin: '6px 0' }} />
+                )}
+
+                {jobs.map((item) => (
+                  <RenderJobItem
+                    key={item.id}
+                    job={item}
+                    theme={theme}
+                    t={t}
+                    onAddToQueue={addToQueue}
+                    onShowInExplorer={handleShowInExplorer}
+                    onRemoveJob={handleRemoveJob}
+                    onStopJob={stopJob}
+                    onUpdateJobTrim={updateJobTrim}
+                    onRequestTrimFramePreview={requestTrimFramePreview}
+                    onHideTrimFramePreview={hideTrimFramePreview}
+                    trimFramePreview={trimFramePreview}
+                    formatTrimTime={formatTrimTime}
+                    formatDurationCompact={formatDurationCompact}
+                    getStatusDisplay={getStatusDisplay}
+                  />
+                ))}
+              </>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="controls">
-          <button 
-            onClick={handleStart} 
+          <motion.button
+            className="ctrl-btn"
+            onClick={handleStart}
             disabled={isProcessing || jobs.length === 0 || pendingJobs === 0}
-            style={{ background: theme.colors.success, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}
+            style={{ background: theme.colors.success, color: '#fff' }}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 22 }}
           >
-            <Play size={18} strokeWidth={1.5} /> {t('main.start')}
-          </button>
-          <button 
-            onClick={handlePause} 
+            <Play size={17} strokeWidth={1.8} /> {t('main.start')}
+          </motion.button>
+          <motion.button
+            className="ctrl-btn"
+            onClick={handlePause}
             disabled={!isProcessing}
-            style={{ background: theme.colors.warning, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}
+            style={{ background: theme.colors.warning, color: '#fff' }}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 22 }}
           >
-            {isPaused ? <Play size={18} strokeWidth={1.5} /> : <Pause size={18} strokeWidth={1.5} />} {t('main.pause')}
-          </button>
-          <button 
-            onClick={handleStop} 
+            {isPaused ? <Play size={17} strokeWidth={1.8} /> : <Pause size={17} strokeWidth={1.8} />} {t('main.pause')}
+          </motion.button>
+          <motion.button
+            className="ctrl-btn"
+            onClick={handleStop}
             disabled={!isProcessing}
-            style={{ background: theme.colors.error, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}
+            style={{ background: theme.colors.error, color: '#fff' }}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 22 }}
           >
-            <Square size={18} strokeWidth={1.5} /> {t('main.stop')}
-          </button>
+            <Square size={17} strokeWidth={1.8} /> {t('main.stop')}
+          </motion.button>
         </div>
       </div>
 

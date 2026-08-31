@@ -191,62 +191,71 @@ const PresetManager: React.FC<PresetManagerProps> = ({
     }
   };
 
-  return (
-    <div className="preset-manager" style={{ borderColor: theme.colors.border }}>
-      <div className="preset-selector-row">
-        <label style={{ color: theme.colors.text }}>{t('presets.label')}</label>
-        <div className="preset-controls">
-          <select
-            value={selectedPresetName}
-            onChange={(e) => setSelectedPresetName(e.target.value)}
-            disabled={isLoading}
-          >
-            <option value="">{t('presets.selectPreset')}</option>
-            {presets.map((p) => (
-              <option key={p.name} value={p.name}>
-                {p.isDefault ? `✓ ${p.name}` : p.name}
-              </option>
-            ))}
-          </select>
+  // Auto-apply preset when selection changes
+  const handleSelectChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const name = e.target.value;
+    setSelectedPresetName(name);
+    if (name) {
+      await handleLoadPreset(name);
+    }
+  };
 
+
+  return (
+    <>
+      {/* Compact inline preset row — renders children directly into parent .action-bar */}
+      <div className="preset-compact-row">
+        {/* Dropdown — auto-applies on change */}
+        <select
+          className="preset-compact-select"
+          value={selectedPresetName}
+          onChange={handleSelectChange}
+          disabled={isLoading}
+          title={t('presets.selectPreset')}
+          style={{ color: theme.colors.text, background: theme.colors.surface, borderColor: theme.colors.border }}
+        >
+          <option value="" style={{ backgroundColor: theme.colors.surface, color: theme.colors.text }}>{t('presets.selectPreset')}</option>
+          {presets.map((p) => (
+            <option key={p.name} value={p.name} style={{ backgroundColor: theme.colors.surface, color: theme.colors.text }}>
+              {p.isDefault ? `✓ ${p.name}` : p.name}
+            </option>
+          ))}
+        </select>
+
+        {/* Save icon button — solid green */}
+        <button
+          className="preset-icon-btn"
+          onClick={() => setShowSaveDialog(true)}
+          disabled={isLoading}
+          title={t('presets.save')}
+          style={{ background: theme.colors.success, color: '#fff' }}
+        >
+          <Save size={15} strokeWidth={1.8} />
+        </button>
+
+        {/* Make default icon button — only when preset selected and not already default */}
+        {selectedPresetName && !presets.find((p) => p.name === selectedPresetName)?.isDefault && (
           <button
-            onClick={() => selectedPresetName && handleLoadPreset(selectedPresetName)}
-            disabled={!selectedPresetName || isLoading}
-            className="btn-apply"
+            className="preset-icon-btn"
+            onClick={handleMakeDefault}
+            disabled={isLoading}
+            title={t('presets.makeDefault')}
             style={{ background: theme.colors.primary, color: '#fff' }}
           >
-            {t('presets.apply')}
+            <Zap size={15} strokeWidth={1.8} />
           </button>
+        )}
 
-          <button
-            onClick={() => setShowSaveDialog(true)}
-            disabled={isLoading}
-            className="btn-save"
-            style={{ background: theme.colors.success, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <Save size={16} strokeWidth={1.5} /> {t('presets.save')}
-          </button>
-
-          {selectedPresetName && !presets.find((p) => p.name === selectedPresetName)?.isDefault && (
-            <button
-              onClick={handleMakeDefault}
-              disabled={isLoading}
-              className="btn-apply"
-              style={{ background: theme.colors.secondary, color: theme.colors.text, display: 'flex', alignItems: 'center', gap: '6px' }}
-            >
-              <Zap size={16} strokeWidth={1.5} /> {t('presets.makeDefault')}
-            </button>
-          )}
-
-          <button
-            onClick={() => setShowDeleteDialog(true)}
-            disabled={!selectedPresetName || isLoading}
-            className="btn-delete"
-            style={{ background: theme.colors.error, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <Trash2 size={16} strokeWidth={1.5} /> {t('presets.delete')}
-          </button>
-        </div>
+        {/* Delete icon button — solid red */}
+        <button
+          className="preset-icon-btn"
+          onClick={() => setShowDeleteDialog(true)}
+          disabled={!selectedPresetName || isLoading}
+          title={t('presets.delete')}
+          style={{ background: theme.colors.error, color: '#fff' }}
+        >
+          <Trash2 size={15} strokeWidth={1.8} />
+        </button>
       </div>
 
       {/* Save Dialog */}
@@ -339,7 +348,7 @@ const PresetManager: React.FC<PresetManagerProps> = ({
           {notification}
         </div>
       )}
-    </div>
+    </>
   );
 };
 

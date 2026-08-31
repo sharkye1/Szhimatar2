@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+﻿import React, { createContext, useContext, ReactNode } from 'react';
+import { useSettings } from './SettingsContext';
 import ruTranslations from '../lang/ru.json';
 import enTranslations from '../lang/en.json';
 import chTranslations from '../lang/ch.json';
@@ -6,7 +7,7 @@ import eoTranslations from '../lang/eo.json';
 import myTranslations from '../lang/my.json';
 import vzTranslations from '../lang/vz.json';
 import empTranslations from '../lang/emp.json';
-// To new lang add <option> tag to GeneralSettings.tsx after import it here
+
 type Translations = typeof ruTranslations;
 
 interface LanguageContextType {
@@ -29,45 +30,28 @@ const languages: Record<string, Translations> = {
 };
 
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [language, setLanguageState] = useState<string>('ru');
-  const [translations, setTranslations] = useState<Translations>(languages.ru);
-
-  useEffect(() => {
-    // Load language from settings
-    const loadLanguage = async () => {
-      try {
-        const { invoke } = await import('@tauri-apps/api/tauri');
-        const settings = await invoke<any>('load_settings');
-        if (settings.language && languages[settings.language]) {
-          setLanguageState(settings.language);
-          setTranslations(languages[settings.language]);
-        }
-      } catch (error) {
-        console.error('Failed to load language:', error);
-      }
-    };
-    loadLanguage();
-  }, []);
+  const { settings, updateSettings } = useSettings();
+  const language = settings.language || 'ru';
+  const translations = languages[language] || languages.ru;
 
   const setLanguage = (lang: string) => {
     if (languages[lang]) {
-      setLanguageState(lang);
-      setTranslations(languages[lang]);
+      updateSettings({ language: lang }, true);
     }
   };
 
   const t = (path: string): string => {
     const keys = path.split('.');
     let value: any = translations;
-    
+
     for (const key of keys) {
       if (value && typeof value === 'object' && key in value) {
         value = value[key];
       } else {
-        return path; // Return path if translation not found
+        return path;
       }
     }
-    
+
     return typeof value === 'string' ? value : path;
   };
 
@@ -85,3 +69,5 @@ export const useLanguage = () => {
   }
   return context;
 };
+
+export default LanguageContext;

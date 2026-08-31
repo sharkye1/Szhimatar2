@@ -4,7 +4,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { VideoSettings as VideoSettingsType, WatermarkSettings as WatermarkSettingsType } from '../types/index';
 import PreviewPanel from '../components/PreviewPanel';
-import useRenderQueue from '../hooks/useRenderQueue';
+import { useFirstJobInputPath } from '../hooks/useRenderQueue';
 import { Info, AlertTriangle } from 'lucide-react';
 import '../styles/VideoSettings.css';
 import '../styles/SettingsWindow.css';
@@ -30,8 +30,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
   const [showPreview, setShowPreview] = useState(true);
   
   // Get first file from render queue for preview
-  const { jobs } = useRenderQueue();
-  const previewFilePath = jobs.length > 0 ? jobs[0].inputPath : '';
+  const previewFilePath = useFirstJobInputPath();
 
   // Resolution presets
   const resolutions = [

@@ -5,6 +5,7 @@
   },
   "main": {
     "selectFiles": "选择文件",
+    "dropFilesHere": "或将文件拖放到此处",
     "selectFolder": "选择文件夹",
     "outputFolder": "输出文件夹",
     "saveInSourceDirectory": "保存在源文件目录",
@@ -14,6 +15,9 @@
     "stop": "停止",
     "progress": "进度",
     "preview": "预览"
+  },
+  "common": {
+    "or": "或"
   },
   "video": {
     "title": "视频设置",
@@ -221,6 +225,7 @@
   },
   "settings": {
     "title": "设置",
+    "rendering": "渲染",
     "update_available": "检查更新！",
     "theme": "主题",
     "themeNames": {
@@ -245,6 +250,7 @@
     "useImageBackground": "使用图片作为背景",
     "useThemeBackground": "使用主题配色作为背景",
     "backgroundImage": "背景图片",
+    "imageEffects": "图像效果",
     "chooseBackgroundImage": "选择图片",
     "noBackgroundImage": "未选择图片",
     "ffmpegPath": "FFmpeg路径",
@@ -262,8 +268,7 @@
     "save": "保存",
     "cancel": "取消",
     "glassOpacity": "Image Dimming",
-    "glassBlur": "Image Blur",
-    "performanceMode": "Performance Mode (flat dark gray, no glow/animations)"
+    "glassBlur": "Image Blur"
   },
   "watermark": {
     "title": "水印设置",
@@ -331,13 +336,19 @@
     },
     "clearCompleted": "清除已完成",
     "deleteFromQueue": "从队列删除",
+    "addFile": "+ 文件",
+    "addLink": "+ 链接",
+    "addLinkTooltip": "通过链接添加",
     "show": "显示",
     "showInExplorer": "在资源管理器中显示",
     "completedWithSize": "完成",
     "trim": "裁剪",
     "trimRange": "范围",
     "trimDuration": "时长",
-    "trimReadonly": "仅在队列等待状态下可编辑裁剪"
+    "trimReadonly": "仅在队列等待状态下可编辑裁剪",
+    "retry": "重试（覆盖）",
+    "retryNewFile": "重新渲染为新版本",
+    "stopJob": "停止任务"
   },
   "gpu": {
     "label": "GPU (NVENC)",
@@ -446,5 +457,21 @@
   "history": {
     "re_render_overwrite": "重新渲染并覆盖",
     "re_render_new": "重新渲染为新版本"
+  },
+  "download": {
+    "downloadButton": "下载",
+    "urlPlaceholder": "粘贴 TikTok / Reels / YouTube 链接...",
+    "defaultDownloadsFolder": "下载文件夹",
+    "loadingFormats": "正在获取可用格式...",
+    "noWatermarkHint": "如果源和格式支持，则无水印",
+    "downloadFinished": "下载完成",
+    "waitingToStart": "等待开始",
+    "stopDownload": "停止下载",
+    "status": {
+      "downloading": "下载中",
+      "completed": "完成",
+      "error": "错误",
+      "pending": "排队中"
+    }
   }
 }

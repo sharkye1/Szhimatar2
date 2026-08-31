@@ -5,6 +5,7 @@
   },
   "main": {
     "selectFiles": "Select Files",
+    "dropFilesHere": "or drag and drop files here",
     "selectFolder": "Select Folder",
     "outputFolder": "Output Folder",
     "saveInSourceDirectory": "Same as source",
@@ -14,6 +15,9 @@
     "stop": "Stop",
     "progress": "Progress",
     "preview": "Preview"
+  },
+  "common": {
+    "or": "OR"
   },
   "video": {
     "title": "Video Settings",
@@ -221,6 +225,7 @@
   },
   "settings": {
     "title": "Settings",
+    "rendering": "Rendering",
     "update_available": "Check for updates!",
     "theme": "Theme",
     "themeNames": {
@@ -244,7 +249,8 @@
     "backgroundSource": "Background Source",
     "useImageBackground": "Use image as background",
     "useThemeBackground": "Use theme color scheme as background",
-    "backgroundImage": "Background Image",
+    "backgroundImage": "Background image",
+    "imageEffects": "Image Effects",
     "chooseBackgroundImage": "Choose image",
     "noBackgroundImage": "No image selected",
     "ffmpegPath": "FFmpeg Path",
@@ -262,8 +268,7 @@
     "save": "Save",
     "cancel": "Cancel",
     "glassOpacity": "Image Dimming",
-    "glassBlur": "Image Blur",
-    "performanceMode": "Performance Mode (flat dark gray, no glow/animations)"
+    "glassBlur": "Image Blur"
   },
   "watermark": {
     "title": "Watermark Settings",
@@ -331,13 +336,19 @@
     },
     "clearCompleted": "Clear completed",
     "deleteFromQueue": "Delete from queue",
+    "addFile": "+ File",
+    "addLink": "+ Link",
+    "addLinkTooltip": "Add by link",
     "show": "Show",
     "showInExplorer": "Show in Explorer",
     "completedWithSize": "Done",
     "trim": "Trim",
     "trimRange": "Range",
     "trimDuration": "Length",
-    "trimReadonly": "Trim can be edited only while item is pending"
+    "trimReadonly": "Trim can be edited only while item is pending",
+    "retry": "Retry (overwrite)",
+    "retryNewFile": "Re-render as new version",
+    "stopJob": "Stop task"
   },
   "gpu": {
     "label": "GPU (NVENC)",
@@ -446,5 +457,21 @@
     "refresh": "Refresh Preview",
     "lowBitrateWarning": "Low bitrate for high FPS. Recommend ≥6M for NVENC to avoid compression artifacts.",
     "videoLoadError": "Failed to load video preview. Try refreshing."
+  },
+  "download": {
+    "downloadButton": "Download",
+    "urlPlaceholder": "Paste TikTok / Reels / YouTube link...",
+    "defaultDownloadsFolder": "Downloads folder",
+    "loadingFormats": "Searching for available formats...",
+    "noWatermarkHint": "No watermark if source and format allow",
+    "downloadFinished": "Download complete",
+    "waitingToStart": "Waiting to start",
+    "stopDownload": "Stop download",
+    "status": {
+      "downloading": "Downloading",
+      "completed": "Completed",
+      "error": "Error",
+      "pending": "Queued"
+    }
   }
 }

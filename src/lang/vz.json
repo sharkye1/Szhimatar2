@@ -5,6 +5,7 @@
   },
   "main": {
     "selectFiles": "Взорвать файлы",
+    "dropFilesHere": "или взорвите файлы сюда",
     "selectFolder": "Взорвать папку",
     "outputFolder": "Папка сохранения взрыва",
     "saveInSourceDirectory": "Взрыванать в директории исходного взрыва",
@@ -14,6 +15,9 @@
     "stop": "Ликвидировать",
     "progress": "Прогресс взрыва",
     "preview": "Предпросмотр взрыва"
+  },
+  "common": {
+    "or": "ИЛИ"
   },
   "video": {
     "title": "Настройки взрыва",
@@ -221,6 +225,7 @@
   },
   "settings": {
     "title": "Настройки",
+    "rendering": "Взрыв-рендеринг",
     "update_available": "🚀 ОБНОВЛЕНИЕ!!!",
     "theme": "Тема",
     "themeNames": {
@@ -245,6 +250,7 @@
     "useImageBackground": "🖼️ Использовать картинку как фон",
     "useThemeBackground": "🎨 Использовать цветовую схему как фон",
     "backgroundImage": "🖼️ Фоновое изображение",
+    "imageEffects": "💥 Эффекты фона",
     "chooseBackgroundImage": "📂 Выбрать изображение",
     "noBackgroundImage": "❌ Изображение не выбрано",
     "ffmpegPath": "Путь к FFmpeg",
@@ -262,8 +268,7 @@
     "save": "Сохранить",
     "cancel": "Отмена",
     "glassOpacity": "Image Dimming",
-    "glassBlur": "Image Blur",
-    "performanceMode": "⚡ Режим производительности (тёмно-серый, без glow/анимаций)"
+    "glassBlur": "Image Blur"
   },
   "watermark": {
     "title": "Настройки водяного знака",
@@ -331,13 +336,19 @@
     },
     "clearCompleted": "Очистить взорванные",
     "deleteFromQueue": "Удалить из взрывной очереди",
+    "addFile": "+ Взрыв-Файл",
+    "addLink": "+ Взрыв-Ссылка",
+    "addLinkTooltip": "Взорвать по ссылке",
     "show": "Показать взрыв",
     "showInExplorer": "Показать в взрывном проводнике",
     "completedWithSize": "Взорвано",
     "trim": "Обрезка взрыва",
     "trimRange": "Диапазон",
     "trimDuration": "Длина",
-    "trimReadonly": "Обрезку можно менять только пока элемент ждёт взрыва"
+    "trimReadonly": "Обрезку можно менять только пока элемент ждёт взрыва",
+    "retry": "💣 Взорвать ещё раз (переписать)",
+    "retryNewFile": "🎆 Новый взрыв копией",
+    "stopJob": "⛔ Прекратить взрыв"
   },
   "gpu": {
     "label": "GPU (NVENC) ",
@@ -446,5 +457,21 @@
   },
   "network": {
     "vpnProxyWarningMessage": "🚨 Обнаружен активный proxy/VPN! Лучше отключить его, чтобы приложение работало стабильнее и без сетевых ошибок."
+  },
+  "download": {
+    "downloadButton": "Взорвать загрузку",
+    "urlPlaceholder": "Вставьте взрывную ссылку TikTok / Reels / YouTube...",
+    "defaultDownloadsFolder": "Папка взрывных загрузок",
+    "loadingFormats": "Поиск взрывных форматов...",
+    "noWatermarkHint": "Без водяного знака, если источник позволяет",
+    "downloadFinished": "Взрыв-загрузка завершена",
+    "waitingToStart": "Ожидание взрыва",
+    "stopDownload": "Остановить загрузку",
+    "status": {
+      "downloading": "Взрывается",
+      "completed": "Взорвано",
+      "error": "Осечка",
+      "pending": "В очереди на взрыв"
+    }
   }
 }

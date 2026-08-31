@@ -27,6 +27,7 @@ body {
 
   background: transparent;
   color: var(--color-text);
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 #root {
@@ -35,6 +36,7 @@ body {
   background: transparent;
   color: var(--color-text);
   position: relative;
+  transition: color 0.25s ease;
 }
 
 /* ========== GLASSMORPHISM BACKGROUND LAYER ========== */
@@ -49,11 +51,30 @@ body {
   background-size: 200% 200%;
   background-position: center;
   animation: gradientShift 15s ease infinite;
+  transition: background 0.25s ease;
+}
+
+/* Depth radial glow overlay — subtle surface highlight at top center */
+.app-background::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 80% 55% at 50% 0%,
+    rgba(var(--primary-rgb), 0.07) 0%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 1;
 }
 
 .app-background.has-image-background {
   filter: blur(var(--bg-image-blur, 0px)) brightness(var(--bg-image-brightness, 100%));
   transform: scale(var(--bg-image-scale, 1));
+}
+
+.app-background.has-image-background::before {
+  display: none;
 }
 
 @keyframes gradientShift {
@@ -226,46 +247,6 @@ pre,
 
 .slide-in {
   animation: slideIn 0.3s ease;
-}
-
-/* Performance mode: prioritize startup/render speed over visual effects */
-:root.performance-mode {
-  --color-background: #2a2a2a;
-  --color-surface: #333333;
-  --color-primary: #9a9a9a;
-  --color-secondary: #7d7d7d;
-  --color-text: #e2e2e2;
-  --color-textSecondary: #bbbbbb;
-  --color-border: #4a4a4a;
-  --theme-bg-rgb: 42, 42, 42;
-  --primary-rgb: 154, 154, 154;
-}
-
-:root.performance-mode .app-background {
-  background: #2a2a2a !important;
-  background-image: none !important;
-  animation: none !important;
-}
-
-:root.performance-mode .app-background::after {
-  background: transparent !important;
-}
-
-:root.performance-mode * {
-  animation: none !important;
-  transition: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  box-shadow: none !important;
-  text-shadow: none !important;
-  filter: none !important;
-}
-
-:root.performance-mode button::before,
-:root.performance-mode .app-background::before,
-:root.performance-mode .app-background::after {
-  display: none !important;
-  content: none !important;
 }
 
 /* Scrollbar styles */

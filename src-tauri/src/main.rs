@@ -3,9 +3,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use tauri::Manager;
 use walkdir::WalkDir;
 
@@ -17,6 +16,87 @@ use winreg::RegKey;
 // Process manager module
 mod process_manager;
 use process_manager::PROCESS_MANAGER;
+
+mod yt_dlp_manager;
+
+#[cfg(windows)]
+mod job_object {
+    use std::mem::size_of;
+    use std::os::raw::c_void;
+
+    type HANDLE = *mut c_void;
+    type BOOL = i32;
+    type DWORD = u32;
+
+    const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: DWORD = 0x00002000;
+    const JOB_OBJECT_EXTENDED_LIMIT_INFORMATION: u32 = 9;
+
+    #[repr(C)]
+    struct IO_COUNTERS {
+        read_operation_count: u64,
+        write_operation_count: u64,
+        other_operation_count: u64,
+        read_transfer_count: u64,
+        write_transfer_count: u64,
+        other_transfer_count: u64,
+    }
+
+    #[repr(C)]
+    struct JOBOBJECT_BASIC_LIMIT_INFORMATION {
+        per_process_user_time_limit: i64,
+        per_job_user_time_limit: i64,
+        limit_flags: DWORD,
+        minimum_working_set_size: usize,
+        maximum_working_set_size: usize,
+        active_process_limit: DWORD,
+        affinity: usize,
+        priority_class: DWORD,
+        scheduling_class: DWORD,
+    }
+
+    #[repr(C)]
+    struct JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
+        basic_limit_information: JOBOBJECT_BASIC_LIMIT_INFORMATION,
+        io_info: IO_COUNTERS,
+        process_memory_limit: usize,
+        job_memory_limit: usize,
+        peak_process_memory_used: usize,
+        peak_job_memory_used: usize,
+    }
+
+    extern "system" {
+        fn CreateJobObjectW(lpJobAttributes: *mut c_void, lpName: *const u16) -> HANDLE;
+        fn SetInformationJobObject(
+            hJob: HANDLE,
+            JobObjectInformationClass: u32,
+            lpJobObjectInformation: *mut c_void,
+            cbJobObjectInformationLength: DWORD,
+        ) -> BOOL;
+        fn AssignProcessToJobObject(hJob: HANDLE, hProcess: HANDLE) -> BOOL;
+        fn GetCurrentProcess() -> HANDLE;
+    }
+
+    pub fn init_job_object() {
+        unsafe {
+            let job = CreateJobObjectW(std::ptr::null_mut(), std::ptr::null());
+            if job.is_null() {
+                return;
+            }
+            let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+            info.basic_limit_information.limit_flags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+            let res = SetInformationJobObject(
+                job,
+                JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+                &mut info as *mut _ as *mut c_void,
+                size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as DWORD,
+            );
+            if res != 0 {
+                AssignProcessToJobObject(job, GetCurrentProcess());
+            }
+        }
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Settings {
@@ -43,8 +123,6 @@ struct Settings {
     render_mode: String,
     #[serde(rename = "screenAnimation", default = "default_screen_animation")]
     screen_animation: String,
-    #[serde(rename = "performanceMode", default)]
-    performance_mode: bool,
 }
 
 fn default_screen_animation() -> String {
@@ -77,12 +155,11 @@ impl Default for Settings {
             gpu_available: false,
             render_mode: "cpu".to_string(),
             screen_animation: "default".to_string(),
-            performance_mode: false,
         }
     }
 }
 
-fn get_app_data_dir() -> PathBuf {
+pub(crate) fn get_app_data_dir() -> PathBuf {
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
     home.join(".szhimatar")
 }
@@ -128,7 +205,7 @@ fn save_settings(settings: Settings) -> Result<(), String> {
 /// WARNING: This can be overridden for UI testing, but actual FFmpeg rendering
 /// will still use real hardware capabilities
 #[tauri::command]
-fn check_gpu_compatibility() -> Result<bool, String> {
+async fn check_gpu_compatibility() -> Result<bool, String> {
     // Check for override first (for UI testing only)
     if let Some(override_config) = load_hardware_override() {
         println!(
@@ -143,22 +220,19 @@ fn check_gpu_compatibility() -> Result<bool, String> {
         return Err("FFmpeg path not configured".to_string());
     }
 
-    // Run `ffmpeg -hide_banner -encoders` and search for nvenc encoders
-    #[cfg(target_os = "windows")]
-    let output = {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        Command::new(&config.ffmpeg_path)
-            .creation_flags(CREATE_NO_WINDOW)
-            .args(["-hide_banner", "-encoders"])
-            .output()
-            .map_err(|e| format!("Failed to run ffmpeg: {}", e))?
-    };
+    // Fast async execution using tokio::process::Command
+    let mut cmd = tokio::process::Command::new(&config.ffmpeg_path);
+    cmd.args(["-hide_banner", "-encoders"]);
 
-    #[cfg(not(target_os = "windows"))]
-    let output = Command::new(&config.ffmpeg_path)
-        .args(["-hide_banner", "-encoders"])
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let output = cmd
         .output()
+        .await
         .map_err(|e| format!("Failed to run ffmpeg: {}", e))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_lowercase();
@@ -174,7 +248,7 @@ fn check_gpu_compatibility() -> Result<bool, String> {
 
 /// Detect hardware information (CPU and GPU vendors)
 #[tauri::command]
-fn detect_hardware_info() -> Result<HardwareInfo, String> {
+async fn detect_hardware_info() -> Result<HardwareInfo, String> {
     // Check for override first (for testing UI only)
     if let Some(override_config) = load_hardware_override() {
         let _ = write_log(format!(
@@ -187,7 +261,7 @@ fn detect_hardware_info() -> Result<HardwareInfo, String> {
         });
     }
 
-    // Use real hardware detection
+    // Use real hardware detection (Registry fast-path)
     let (cpu_vendor, cpu_reason) = detect_cpu_vendor();
     let (gpu_vendor, gpu_reason) = detect_gpu_vendor();
 
@@ -254,10 +328,23 @@ fn summarize_for_log(input: &str, max_len: usize) -> String {
 fn detect_cpu_vendor() -> (String, String) {
     #[cfg(target_os = "windows")]
     {
+        // 1. Ultra-fast path: Windows Registry (<0.1 ms, zero process spawns)
+        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+        if let Ok(cpu_key) = hklm.open_subkey(r"HARDWARE\DESCRIPTION\System\CentralProcessor\0") {
+            if let Ok(name) = cpu_key.get_value::<String, _>("ProcessorNameString") {
+                let lower = name.to_lowercase();
+                if lower.contains("intel") {
+                    return ("intel".to_string(), format!("Registry ProcessorNameString: {}", name.trim()));
+                } else if lower.contains("amd") {
+                    return ("amd".to_string(), format!("Registry ProcessorNameString: {}", name.trim()));
+                }
+            }
+        }
+
+        // 2. Fallback: WMIC (if registry is unavailable)
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-        // Use WMIC to get CPU info
         let output = Command::new("wmic")
             .creation_flags(CREATE_NO_WINDOW)
             .args(["cpu", "get", "name"])
@@ -336,10 +423,33 @@ fn detect_cpu_vendor() -> (String, String) {
 fn detect_gpu_vendor() -> (String, String) {
     #[cfg(target_os = "windows")]
     {
+        // 1. Ultra-fast path: Windows Display Adapter Registry (<0.3 ms, zero process spawns)
+        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+        if let Ok(display_class) = hklm.open_subkey(r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}") {
+            for key_name in display_class.enum_keys().flatten() {
+                if let Ok(sub) = display_class.open_subkey(&key_name) {
+                    if let Ok(desc) = sub.get_value::<String, _>("DriverDesc") {
+                        let lower = desc.to_lowercase();
+                        if lower.contains("nvidia")
+                            || lower.contains("geforce")
+                            || lower.contains("rtx")
+                            || lower.contains("gtx")
+                        {
+                            return ("nvidia".to_string(), format!("Registry DriverDesc: {}", desc.trim()));
+                        } else if lower.contains("amd") || lower.contains("radeon") {
+                            return ("amd".to_string(), format!("Registry DriverDesc: {}", desc.trim()));
+                        } else if lower.contains("intel") {
+                            return ("intel".to_string(), format!("Registry DriverDesc: {}", desc.trim()));
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Fallback: WMIC
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-        // Use WMIC to get GPU info
         let output = Command::new("wmic")
             .creation_flags(CREATE_NO_WINDOW)
             .args(["path", "win32_videocontroller", "get", "name"])
@@ -1170,47 +1280,67 @@ pub struct RenderResult {
     pub output_path: String,
 }
 
-/// Parse FFmpeg progress line and extract metrics
-fn parse_ffmpeg_progress_line(line: &str) -> Option<(u64, f64, String, String, f64, f64)> {
-    // Example line: frame=  150 fps=30 q=28.0 size=    1024kB time=00:00:05.00 bitrate=1677.7kbits/s speed=2.5x
-    let frame_re = regex::Regex::new(r"frame=\s*(\d+)").ok()?;
-    let fps_re = regex::Regex::new(r"fps=\s*([\d.]+)").ok()?;
-    let size_re = regex::Regex::new(r"size=\s*(\S+)").ok()?;
-    let time_re = regex::Regex::new(r"time=(\d+):(\d+):(\d+\.?\d*)").ok()?;
-    let bitrate_re = regex::Regex::new(r"bitrate=\s*(\S+)").ok()?;
-    let speed_re = regex::Regex::new(r"speed=\s*([\d.]+)x").ok()?;
-
-    let frame = frame_re
-        .captures(line)?
-        .get(1)?
-        .as_str()
-        .parse::<u64>()
-        .ok()?;
-    let fps = fps_re
-        .captures(line)
-        .and_then(|c| c.get(1)?.as_str().parse::<f64>().ok())
-        .unwrap_or(0.0);
-    let size = size_re
-        .captures(line)
-        .and_then(|c| Some(c.get(1)?.as_str().to_string()))
-        .unwrap_or_default();
-    let bitrate = bitrate_re
-        .captures(line)
-        .and_then(|c| Some(c.get(1)?.as_str().to_string()))
-        .unwrap_or_default();
-    let speed = speed_re
-        .captures(line)
-        .and_then(|c| c.get(1)?.as_str().parse::<f64>().ok())
-        .unwrap_or(0.0);
-
-    let time_seconds = if let Some(caps) = time_re.captures(line) {
-        let hours: f64 = caps.get(1)?.as_str().parse().ok()?;
-        let minutes: f64 = caps.get(2)?.as_str().parse().ok()?;
-        let seconds: f64 = caps.get(3)?.as_str().parse().ok()?;
-        hours * 3600.0 + minutes * 60.0 + seconds
+/// Zero-allocation helper: extract value after `key=` ignoring leading whitespace
+#[inline]
+fn extract_kv_value<'a>(line: &'a str, key: &str) -> Option<&'a str> {
+    let key_pos = line.find(key)?;
+    let after_key = &line[key_pos + key.len()..];
+    let trimmed = after_key.trim_start();
+    let val_end = trimmed
+        .find(|c: char| c.is_whitespace())
+        .unwrap_or(trimmed.len());
+    let val = &trimmed[..val_end];
+    if val.is_empty() {
+        None
     } else {
-        0.0
-    };
+        Some(val)
+    }
+}
+
+/// Parse timestamp formatted as "HH:MM:SS.ss" or "MM:SS.ss" or "SS.ss" into seconds without regex
+fn parse_time_to_seconds(time_str: &str) -> Option<f64> {
+    let parts: Vec<&str> = time_str.split(':').collect();
+    match parts.len() {
+        3 => {
+            let h: f64 = parts[0].parse().ok()?;
+            let m: f64 = parts[1].parse().ok()?;
+            let s: f64 = parts[2].parse().ok()?;
+            Some(h * 3600.0 + m * 60.0 + s)
+        }
+        2 => {
+            let m: f64 = parts[0].parse().ok()?;
+            let s: f64 = parts[1].parse().ok()?;
+            Some(m * 60.0 + s)
+        }
+        1 => parts[0].parse().ok(),
+        _ => None,
+    }
+}
+
+/// Fast zero-allocation parser for FFmpeg progress line
+pub fn parse_ffmpeg_progress_line(line: &str) -> Option<(u64, f64, String, String, f64, f64)> {
+    let frame_str = extract_kv_value(line, "frame=")?;
+    let frame = frame_str.parse::<u64>().ok()?;
+
+    let fps = extract_kv_value(line, "fps=")
+        .and_then(|s| s.parse::<f64>().ok())
+        .unwrap_or(0.0);
+
+    let size = extract_kv_value(line, "size=")
+        .unwrap_or_default()
+        .to_string();
+
+    let bitrate = extract_kv_value(line, "bitrate=")
+        .unwrap_or_default()
+        .to_string();
+
+    let speed = extract_kv_value(line, "speed=")
+        .and_then(|s| s.trim_end_matches('x').parse::<f64>().ok())
+        .unwrap_or(0.0);
+
+    let time_seconds = extract_kv_value(line, "time=")
+        .and_then(parse_time_to_seconds)
+        .unwrap_or(0.0);
 
     Some((frame, fps, size, bitrate, time_seconds, speed))
 }
@@ -1269,29 +1399,50 @@ async fn run_ffmpeg_render(window: tauri::Window, job: RenderJob) -> Result<Rend
         ),
     );
 
-    // Register process with ProcessManager and get owned child handle
-    let mut child = {
+    // Build async command
+    let mut cmd = tokio::process::Command::new(&config.ffmpeg_path);
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    cmd.arg("-y")
+        .arg("-i")
+        .arg(&job.input_path)
+        .args(&job.ffmpeg_args)
+        .arg("-progress")
+        .arg("pipe:1")
+        .arg("-stats_period")
+        .arg("0.5")
+        .arg(&job.output_path)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Failed to spawn FFmpeg: {}", e))?;
+
+    let pid = child.id();
+    let cancel_token = tokio_util::sync::CancellationToken::new();
+    let cancel_token_clone = cancel_token.clone();
+
+    // Register with ProcessManager
+    {
         let mut manager = PROCESS_MANAGER
             .lock()
             .map_err(|e| format!("Failed to lock ProcessManager: {}", e))?;
+        manager.register(
+            job.job_id.clone(),
+            process_manager::TaskType::Render,
+            pid,
+            cancel_token_clone.clone(),
+        );
+    }
 
-        let (child, pid) = manager
-            .spawn_render(
-                job.job_id.clone(),
-                config.ffmpeg_path.clone(),
-                job.input_path.clone(),
-                job.output_path.clone(),
-                job.ffmpeg_args.clone(),
-            )
-            .map_err(|e| format!("Failed to spawn render: {}", e))?;
-
-        // eprintln!("📡 [run_ffmpeg_render] Process registered - Job: {}, PID: {}", job.job_id, pid);
-        child
-    };
-
-    // Read stderr in a separate thread for progress
-    let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
     let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+    let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
 
     let job_id_stdout = job.job_id.clone();
     let job_id_stderr = job.job_id.clone();
@@ -1301,9 +1452,12 @@ async fn run_ffmpeg_render(window: tauri::Window, job: RenderJob) -> Result<Rend
     let window_stderr = window.clone();
     let window_final = window.clone();
 
-    // Spawn thread to read progress from stdout (pipe:1)
-    let stdout_handle = std::thread::spawn(move || {
-        let reader = BufReader::new(stdout);
+    // Async task to read progress from stdout (pipe:1)
+    let stdout_handle = tokio::spawn(async move {
+        use tokio::io::AsyncBufReadExt;
+        let reader = tokio::io::BufReader::new(stdout);
+        let mut lines = reader.lines();
+
         let mut current_frame: u64 = 0;
         let mut current_fps: f64 = 0.0;
         let mut current_time: f64 = 0.0;
@@ -1311,142 +1465,149 @@ async fn run_ffmpeg_render(window: tauri::Window, job: RenderJob) -> Result<Rend
         let mut current_bitrate = String::new();
         let mut current_size = String::new();
 
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                // Parse progress format from -progress pipe:1
-                // Format is key=value pairs
-                if line.starts_with("frame=") {
-                    if let Ok(val) = line.trim_start_matches("frame=").parse::<u64>() {
-                        current_frame = val;
-                    }
-                } else if line.starts_with("fps=") {
-                    if let Ok(val) = line.trim_start_matches("fps=").parse::<f64>() {
-                        current_fps = val;
-                    }
-                } else if line.starts_with("bitrate=") {
-                    current_bitrate = line.trim_start_matches("bitrate=").to_string();
-                } else if line.starts_with("total_size=") {
-                    current_size = line.trim_start_matches("total_size=").to_string();
-                } else if line.starts_with("out_time_ms=") {
-                    if let Ok(val) = line.trim_start_matches("out_time_ms=").parse::<f64>() {
-                        current_time = val / 1_000_000.0; // Convert microseconds to seconds
-                    }
-                } else if line.starts_with("speed=") {
-                    let speed_str = line.trim_start_matches("speed=").trim_end_matches('x');
-                    if let Ok(val) = speed_str.parse::<f64>() {
-                        current_speed = val;
-                    }
-                } else if line.starts_with("progress=") {
-                    // Emit progress event on each "progress=" line
+        while let Ok(Some(line)) = lines.next_line().await {
+            if line.starts_with("frame=") {
+                if let Ok(val) = line.trim_start_matches("frame=").parse::<u64>() {
+                    current_frame = val;
+                }
+            } else if line.starts_with("fps=") {
+                if let Ok(val) = line.trim_start_matches("fps=").parse::<f64>() {
+                    current_fps = val;
+                }
+            } else if line.starts_with("bitrate=") {
+                current_bitrate = line.trim_start_matches("bitrate=").to_string();
+            } else if line.starts_with("total_size=") {
+                current_size = line.trim_start_matches("total_size=").to_string();
+            } else if line.starts_with("out_time_ms=") {
+                if let Ok(val) = line.trim_start_matches("out_time_ms=").parse::<f64>() {
+                    current_time = val / 1_000_000.0;
+                }
+            } else if line.starts_with("speed=") {
+                let speed_str = line.trim_start_matches("speed=").trim_end_matches('x');
+                if let Ok(val) = speed_str.parse::<f64>() {
+                    current_speed = val;
+                }
+            } else if line.starts_with("progress=") {
+                let progress_percent = if duration > 0.0 {
+                    (current_time / duration * 100.0).min(100.0)
+                } else {
+                    0.0
+                };
+
+                let eta_seconds = if current_speed > 0.0 && duration > 0.0 {
+                    (duration - current_time) / current_speed
+                } else {
+                    0.0
+                };
+
+                let progress = RenderProgress {
+                    job_id: job_id_stdout.clone(),
+                    frame: current_frame,
+                    fps: current_fps,
+                    bitrate: current_bitrate.clone(),
+                    total_size: current_size.clone(),
+                    time_seconds: current_time,
+                    speed: current_speed,
+                    progress_percent,
+                    eta_seconds,
+                };
+
+                let _ = window_stdout.emit("render-progress", &progress);
+            }
+        }
+    });
+
+    // Async task to read stderr for backup progress and errors
+    let stderr_handle = tokio::spawn(async move {
+        use tokio::io::AsyncBufReadExt;
+        let reader = tokio::io::BufReader::new(stderr);
+        let mut lines = reader.lines();
+        let mut errors = Vec::new();
+
+        while let Ok(Some(line)) = lines.next_line().await {
+            if line.contains("frame=") && line.contains("time=") {
+                if let Some((frame, fps, size, bitrate, time, speed)) =
+                    parse_ffmpeg_progress_line(&line)
+                {
                     let progress_percent = if duration > 0.0 {
-                        (current_time / duration * 100.0).min(100.0)
+                        (time / duration * 100.0).min(100.0)
                     } else {
                         0.0
                     };
 
-                    let eta_seconds = if current_speed > 0.0 && duration > 0.0 {
-                        (duration - current_time) / current_speed
+                    let eta_seconds = if speed > 0.0 && duration > 0.0 {
+                        (duration - time) / speed
                     } else {
                         0.0
                     };
 
                     let progress = RenderProgress {
-                        job_id: job_id_stdout.clone(),
-                        frame: current_frame,
-                        fps: current_fps,
-                        bitrate: current_bitrate.clone(),
-                        total_size: current_size.clone(),
-                        time_seconds: current_time,
-                        speed: current_speed,
+                        job_id: job_id_stderr.clone(),
+                        frame,
+                        fps,
+                        bitrate,
+                        total_size: size,
+                        time_seconds: time,
+                        speed,
                         progress_percent,
                         eta_seconds,
                     };
 
-                    let _ = window_stdout.emit("render-progress", &progress);
+                    let _ = window_stderr.emit("render-progress", &progress);
                 }
             }
-        }
-    });
 
-    // Spawn thread to read stderr for errors
-    let stderr_handle = std::thread::spawn(move || {
-        let reader = BufReader::new(stderr);
-        let mut errors = Vec::new();
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                // Parse traditional stderr output for backup progress
-                if line.contains("frame=") && line.contains("time=") {
-                    if let Some((frame, fps, size, bitrate, time, speed)) =
-                        parse_ffmpeg_progress_line(&line)
-                    {
-                        let progress_percent = if duration > 0.0 {
-                            (time / duration * 100.0).min(100.0)
-                        } else {
-                            0.0
-                        };
-
-                        let eta_seconds = if speed > 0.0 && duration > 0.0 {
-                            (duration - time) / speed
-                        } else {
-                            0.0
-                        };
-
-                        let progress = RenderProgress {
-                            job_id: job_id_stderr.clone(),
-                            frame,
-                            fps,
-                            bitrate,
-                            total_size: size,
-                            time_seconds: time,
-                            speed,
-                            progress_percent,
-                            eta_seconds,
-                        };
-
-                        let _ = window_stderr.emit("render-progress", &progress);
-                    }
-                }
-                // Collect error lines
-                if line.contains("Error") || line.contains("error") || line.contains("Invalid") {
-                    errors.push(line);
-                }
+            if line.contains("Error") || line.contains("error") || line.contains("Invalid") {
+                errors.push(line);
             }
         }
+
         errors
     });
 
-    // Wait for process to complete
-    let status = child
-        .wait()
-        .map_err(|e| format!("FFmpeg process error: {}", e))?;
+    // Wait for process to complete or cancellation
+    let (status_res, was_cancelled): (Option<std::io::Result<std::process::ExitStatus>>, bool) = tokio::select! {
+        res = child.wait() => (Some(res), false),
+        _ = cancel_token_clone.cancelled() => {
+            eprintln!("🛑 [run_ffmpeg_render] Render {} cancelled, killing process...", job_id_final);
+            let _ = child.kill().await;
+            (None, true)
+        }
+    };
 
-    // Check if this job was stopped by user
-    let was_stopped = {
+    let _ = stdout_handle.await;
+    let errors = stderr_handle.await.unwrap_or_default();
+
+    // Check if stopped by user
+    let was_stopped = was_cancelled || {
         let mut manager = PROCESS_MANAGER
             .lock()
             .map_err(|e| format!("Failed to lock ProcessManager: {}", e))?;
         manager.take_stopped(&job_id_final)
     };
 
-    // Wait for threads
-    let _ = stdout_handle.join();
-    let errors = stderr_handle.join().unwrap_or_default();
-
     // Clean up process from manager
     {
         let mut manager = PROCESS_MANAGER
             .lock()
             .map_err(|e| format!("Failed to lock ProcessManager: {}", e))?;
-        manager.remove_process(&job_id_final);
-        // eprintln!("🧹 [run_ffmpeg_render] Process cleaned up - Job: {}", job_id_final);
+        manager.unregister(&job_id_final);
     }
+
+    let is_success = status_res
+        .as_ref()
+        .and_then(|r| r.as_ref().ok())
+        .map(|s| s.success())
+        .unwrap_or(false);
 
     // Log completion
     let log_message = format!(
         "Render job {} completed with status: {}",
         job.job_id,
-        if status.success() {
+        if is_success {
             "success"
+        } else if was_stopped {
+            "stopped"
         } else {
             "failed"
         }
@@ -1468,8 +1629,7 @@ async fn run_ffmpeg_render(window: tauri::Window, job: RenderJob) -> Result<Rend
             error: Some("stopped".to_string()),
             output_path: job.output_path,
         })
-    } else if status.success() {
-        // Emit complete event
+    } else if is_success {
         let _ = window_final.emit("render-complete", &job.job_id);
 
         Ok(RenderResult {
@@ -1479,13 +1639,13 @@ async fn run_ffmpeg_render(window: tauri::Window, job: RenderJob) -> Result<Rend
             output_path: job.output_path,
         })
     } else {
+        let exit_code = status_res.and_then(|r| r.ok()).and_then(|s| s.code());
         let error_msg = if errors.is_empty() {
-            format!("FFmpeg exited with code: {:?}", status.code())
+            format!("FFmpeg exited with code: {:?}", exit_code)
         } else {
             errors.join("\n")
         };
 
-        // Emit error event
         let _ = window_final.emit(
             "render-error",
             serde_json::json!({
@@ -1503,97 +1663,58 @@ async fn run_ffmpeg_render(window: tauri::Window, job: RenderJob) -> Result<Rend
     }
 }
 
-/// Request to stop a rendering job
-#[derive(Debug, Deserialize)]
-struct StopRenderRequest {
-    #[serde(rename = "jobId")]
-    job_id: String,
-}
-
-/// Stop a running FFmpeg render job
+/// Stop a running FFmpeg render job (supports flexible IPC argument formats)
 #[tauri::command]
-fn stop_ffmpeg_render(window: tauri::Window, request: StopRenderRequest) -> Result<bool, String> {
-    let job_id = request.job_id;
+#[allow(non_snake_case)]
+fn stop_ffmpeg_render(
+    window: tauri::Window,
+    job_id: Option<String>,
+    jobId: Option<String>,
+    request: Option<serde_json::Value>,
+) -> Result<bool, String> {
+    let target_id = job_id
+        .or(jobId)
+        .or_else(|| {
+            request.and_then(|r| {
+                r.get("jobId")
+                    .or_else(|| r.get("job_id"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            })
+        })
+        .ok_or_else(|| "Missing job ID to stop".to_string())?;
 
-    // Mark as stopped in ProcessManager
-    let pid = {
-        let mut manager = PROCESS_MANAGER.lock().map_err(|e| e.to_string())?;
-        let marked = manager.stop_render(&job_id);
-
-        if !marked {
-            eprintln!(
-                "❌ [Tauri] stop_ffmpeg_render: Process not found - Job: {}",
-                job_id
-            );
-            manager.diagnose();
-            return Ok(false);
-        }
-
-        // Get PID for killing
-        manager.get_pid(&job_id)
+    let stopped = {
+        let mut manager = PROCESS_MANAGER
+            .lock()
+            .map_err(|e| format!("Failed to lock ProcessManager: {}", e))?;
+        manager.cancel_task(&target_id)
     };
 
-    // Kill the process by PID if we found it
-    if let Some(pid) = pid {
-        #[cfg(target_os = "windows")]
-        {
-            // On Windows, use taskkill command
-            let _ = Command::new("taskkill")
-                .arg("/PID")
-                .arg(pid.to_string())
-                .arg("/F") // Force kill
-                .output();
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            // On Unix/Linux, use kill command
-            let _ = Command::new("kill").arg("-9").arg(pid.to_string()).output();
-        }
-
-        // eprintln!("✅ [Tauri] stop_ffmpeg_render killed process - Job: {}, PID: {}", job_id, pid);
-    }
-
-    // Emit event that render was stopped
     let _ = window.emit(
         "render-stopped",
         &serde_json::json!({
-            "job_id": job_id,
+            "job_id": target_id,
             "stopped_by": "user"
         }),
     );
 
-    Ok(true)
+    Ok(stopped)
 }
 
 /// Stop all running FFmpeg processes
 #[tauri::command]
 fn stop_all_renders(window: tauri::Window) -> Result<(), String> {
-    let pids = {
-        let mut manager = PROCESS_MANAGER.lock().map_err(|e| e.to_string())?;
-        let active_jobs = manager.active_jobs();
-        let pids = manager.active_pids();
-        manager.stop_all_renders();
-        // eprintln!("✅ [Tauri] stop_all_renders executed for {} jobs", active_jobs.len());
-        pids
+    let active_jobs = {
+        let mut manager = PROCESS_MANAGER
+            .lock()
+            .map_err(|e| format!("Failed to lock ProcessManager: {}", e))?;
+        let jobs = manager.active_jobs();
+        manager.cancel_all();
+        jobs
     };
 
-    // Kill all processes by PID
-    for (job_id, pid) in pids {
-        #[cfg(target_os = "windows")]
-        {
-            let _ = Command::new("taskkill")
-                .arg("/PID")
-                .arg(pid.to_string())
-                .arg("/F")
-                .output();
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            let _ = Command::new("kill").arg("-9").arg(pid.to_string()).output();
-        }
-
+    for job_id in active_jobs {
         let _ = window.emit(
             "render-stopped",
             &serde_json::json!({
@@ -2103,7 +2224,6 @@ fn remove_context_menu() -> Result<(), String> {
 // ============================================================================
 
 use sha2::{Digest, Sha256};
-use std::io::{Read, Write};
 
 /// Get updates directory path
 fn get_updates_dir() -> PathBuf {
@@ -2117,74 +2237,72 @@ async fn download_update(
     url: String,
     expected_hash: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    use std::io::Write;
+    use futures_util::StreamExt;
+    use tokio::io::AsyncWriteExt;
 
     // Create updates directory
     let updates_dir = get_updates_dir();
-    fs::create_dir_all(&updates_dir).map_err(|e| format!("Failed to create updates dir: {}", e))?;
+    tokio::fs::create_dir_all(&updates_dir)
+        .await
+        .map_err(|e| format!("Failed to create updates dir: {}", e))?;
 
     // Determine filename from URL
     let filename = url.split('/').last().unwrap_or("update.exe");
     let download_path = updates_dir.join(filename);
 
-    // Download file using blocking client in spawn_blocking
-    let url_clone = url.clone();
-    let download_path_clone = download_path.clone();
-    let expected_hash_clone = expected_hash.clone();
-    let app_handle_clone = app_handle.clone();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-    let result = tokio::task::spawn_blocking(move || {
-        // Create HTTP client
-        let client = reqwest::blocking::Client::builder()
-            .timeout(std::time::Duration::from_secs(300))
-            .build()
-            .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Download request failed: {}", e))?;
 
-        // Start download
-        let response = client
-            .get(&url_clone)
-            .send()
-            .map_err(|e| format!("Download request failed: {}", e))?;
+    if !response.status().is_success() {
+        return Ok(serde_json::json!({
+            "success": false,
+            "error": format!("Download failed with status: {}", response.status())
+        }));
+    }
 
-        if !response.status().is_success() {
-            return Err(format!(
-                "Download failed with status: {}",
-                response.status()
-            ));
+    let total_size = response.content_length().unwrap_or(0);
+    let mut downloaded: u64 = 0;
+
+    let mut file = tokio::fs::File::create(&download_path)
+        .await
+        .map_err(|e| format!("Failed to create file: {}", e))?;
+
+    let mut hasher = Sha256::new();
+    let mut stream = response.bytes_stream();
+    let mut last_emit = std::time::Instant::now();
+
+    while let Some(chunk_result) = stream.next().await {
+        let chunk = match chunk_result {
+            Ok(c) => c,
+            Err(e) => {
+                return Ok(serde_json::json!({
+                    "success": false,
+                    "error": format!("Failed to read stream chunk: {}", e)
+                }));
+            }
+        };
+
+        if let Err(e) = file.write_all(&chunk).await {
+            return Ok(serde_json::json!({
+                "success": false,
+                "error": format!("Failed to write file: {}", e)
+            }));
         }
 
-        let total_size = response.content_length().unwrap_or(0);
-        let mut downloaded: u64 = 0;
+        hasher.update(&chunk);
+        downloaded += chunk.len() as u64;
 
-        // Create file
-        let mut file = std::fs::File::create(&download_path_clone)
-            .map_err(|e| format!("Failed to create file: {}", e))?;
-
-        // Create hasher for integrity check
-        let mut hasher = Sha256::new();
-
-        // Read and write in chunks with progress
-        let mut reader = response;
-        let mut buffer = [0u8; 8192];
-
-        loop {
-            let bytes_read = reader
-                .read(&mut buffer)
-                .map_err(|e| format!("Failed to read response: {}", e))?;
-
-            if bytes_read == 0 {
-                break;
-            }
-
-            file.write_all(&buffer[..bytes_read])
-                .map_err(|e| format!("Failed to write file: {}", e))?;
-
-            hasher.update(&buffer[..bytes_read]);
-
-            downloaded += bytes_read as u64;
-
-            // Emit progress event
-            let _ = app_handle_clone.emit_all(
+        if last_emit.elapsed() >= std::time::Duration::from_millis(100) || (total_size > 0 && downloaded >= total_size) {
+            last_emit = std::time::Instant::now();
+            let _ = app_handle.emit_all(
                 "update-download-progress",
                 serde_json::json!({
                     "downloaded": downloaded,
@@ -2192,46 +2310,44 @@ async fn download_update(
                 }),
             );
         }
-
-        file.flush()
-            .map_err(|e| format!("Failed to flush file: {}", e))?;
-        drop(file);
-
-        // Verify hash if provided
-        if let Some(expected) = expected_hash_clone {
-            let hash = hex::encode(hasher.finalize());
-            if hash.to_lowercase() != expected.to_lowercase() {
-                // Delete file if hash doesn't match
-                let _ = std::fs::remove_file(&download_path_clone);
-                return Err(format!(
-                    "Hash mismatch: expected {}, got {}",
-                    expected, hash
-                ));
-            }
-        }
-
-        Ok(download_path_clone.to_string_lossy().to_string())
-    })
-    .await
-    .map_err(|e| format!("Task error: {}", e))?;
-
-    match result {
-        Ok(path) => {
-            // If it's a zip file, extract it
-            if filename.ends_with(".zip") {
-                extract_update_zip(&PathBuf::from(&path))?;
-            }
-
-            Ok(serde_json::json!({
-                "success": true,
-                "path": path
-            }))
-        }
-        Err(e) => Ok(serde_json::json!({
-            "success": false,
-            "error": e
-        })),
     }
+
+    if let Err(e) = file.flush().await {
+        return Ok(serde_json::json!({
+            "success": false,
+            "error": format!("Failed to flush file: {}", e)
+        }));
+    }
+    drop(file);
+
+    // Verify hash if provided
+    if let Some(expected) = expected_hash {
+        let hash = hex::encode(hasher.finalize());
+        if hash.to_lowercase() != expected.to_lowercase() {
+            let _ = tokio::fs::remove_file(&download_path).await;
+            return Ok(serde_json::json!({
+                "success": false,
+                "error": format!("Hash mismatch: expected {}, got {}", expected, hash)
+            }));
+        }
+    }
+
+    let path_str = download_path.to_string_lossy().to_string();
+
+    // If it's a zip file, extract it
+    if filename.ends_with(".zip") {
+        if let Err(e) = extract_update_zip(&download_path) {
+            return Ok(serde_json::json!({
+                "success": false,
+                "error": format!("Failed to extract zip: {}", e)
+            }));
+        }
+    }
+
+    Ok(serde_json::json!({
+        "success": true,
+        "path": path_str
+    }))
 }
 
 /// Extract zip file to updates directory
@@ -2407,7 +2523,7 @@ struct PreviewSettings {
 }
 
 /// Extract a single frame from video at given time with current settings applied
-/// Returns base64-encoded JPEG image
+/// Returns base64-encoded JPEG image directly from memory without writing to disk
 #[tauri::command]
 async fn get_preview_frame(
     input_path: String,
@@ -2418,10 +2534,6 @@ async fn get_preview_frame(
     if config.ffmpeg_path.trim().is_empty() {
         return Err("FFmpeg not configured".to_string());
     }
-
-    // Create temp file for output
-    let temp_dir = std::env::temp_dir();
-    let temp_file = temp_dir.join(format!("szhimatar_preview_{}.jpg", std::process::id()));
 
     // Build filter chain
     let mut filters: Vec<String> = Vec::new();
@@ -2449,7 +2561,7 @@ async fn get_preview_frame(
         "-ss".to_string(),
         format!("{:.3}", time_seconds),
         "-i".to_string(),
-        input_path.clone(),
+        input_path,
         "-vframes".to_string(),
         "1".to_string(),
     ];
@@ -2459,47 +2571,40 @@ async fn get_preview_frame(
         cmd_args.push(filters.join(","));
     }
 
-    // Quality settings for preview
+    // Output directly to memory stdout pipe as MJPEG image (zero disk I/O)
     cmd_args.extend([
+        "-f".to_string(),
+        "image2pipe".to_string(),
+        "-vcodec".to_string(),
+        "mjpeg".to_string(),
         "-q:v".to_string(),
         "2".to_string(),
-        "-y".to_string(),
-        temp_file.to_string_lossy().to_string(),
+        "-".to_string(),
     ]);
 
-    // Run FFmpeg
-    #[cfg(target_os = "windows")]
-    let output = {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        Command::new(&config.ffmpeg_path)
-            .creation_flags(CREATE_NO_WINDOW)
-            .args(&cmd_args)
-            .output()
-            .map_err(|e| format!("Failed to run FFmpeg: {}", e))?
-    };
+    // Run FFmpeg asynchronously using tokio::process::Command
+    let mut cmd = tokio::process::Command::new(&config.ffmpeg_path);
+    cmd.args(&cmd_args);
 
-    #[cfg(not(target_os = "windows"))]
-    let output = Command::new(&config.ffmpeg_path)
-        .args(&cmd_args)
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let output = cmd
         .output()
+        .await
         .map_err(|e| format!("Failed to run FFmpeg: {}", e))?;
 
-    if !output.status.success() {
+    if !output.status.success() || output.stdout.is_empty() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!("FFmpeg error: {}", stderr));
     }
 
-    // Read file and encode to base64
-    let image_data =
-        fs::read(&temp_file).map_err(|e| format!("Failed to read preview image: {}", e))?;
-
-    // Cleanup temp file
-    let _ = fs::remove_file(&temp_file);
-
-    // Return base64 encoded
+    // Return base64 encoded directly from memory
     use base64::{engine::general_purpose::STANDARD, Engine as _};
-    Ok(STANDARD.encode(&image_data))
+    Ok(STANDARD.encode(&output.stdout))
 }
 
 /// Extract a short video clip (3 seconds) from video at given time with settings applied
@@ -2800,22 +2905,19 @@ async fn get_preview_video(
     // Also log to stderr so it appears in DevTools
     eprintln!("{}", full_cmd);
 
-    // Run FFmpeg
-    #[cfg(target_os = "windows")]
-    let output = {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        Command::new(&config.ffmpeg_path)
-            .creation_flags(CREATE_NO_WINDOW)
-            .args(&cmd_args)
-            .output()
-            .map_err(|e| format!("Failed to run FFmpeg: {}", e))?
-    };
+    // Run FFmpeg asynchronously using tokio::process::Command
+    let mut cmd = tokio::process::Command::new(&config.ffmpeg_path);
+    cmd.args(&cmd_args);
 
-    #[cfg(not(target_os = "windows"))]
-    let output = Command::new(&config.ffmpeg_path)
-        .args(&cmd_args)
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let output = cmd
         .output()
+        .await
         .map_err(|e| format!("Failed to run FFmpeg: {}", e))?;
 
     if !output.status.success() {
@@ -2825,17 +2927,17 @@ async fn get_preview_video(
 
     // Validate output file exists and has content
     let metadata =
-        std::fs::metadata(&temp_file).map_err(|e| format!("Preview file not created: {}", e))?;
+        tokio::fs::metadata(&temp_file).await.map_err(|e| format!("Preview file not created: {}", e))?;
 
     if metadata.len() == 0 {
         return Err("Preview generation failed: output file is empty".to_string());
     }
 
     // Small delay to ensure file is fully flushed to disk and OS releases handles
-    std::thread::sleep(std::time::Duration::from_millis(50));
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
     // Verify file is still accessible after delay
-    let final_size = std::fs::metadata(&temp_file).map(|m| m.len()).unwrap_or(0);
+    let final_size = tokio::fs::metadata(&temp_file).await.map(|m| m.len()).unwrap_or(0);
 
     println!(
         "[Preview] Output file ready: {} bytes at {}",
@@ -2846,7 +2948,7 @@ async fn get_preview_video(
     Ok(temp_file.to_string_lossy().to_string())
 }
 
-/// Get video duration using ffprobe
+/// Get video duration using ffprobe asynchronously
 #[tauri::command]
 async fn get_video_info_for_preview(input_path: String) -> Result<VideoPreviewInfo, String> {
     let config = load_ffmpeg_config();
@@ -2854,37 +2956,26 @@ async fn get_video_info_for_preview(input_path: String) -> Result<VideoPreviewIn
         return Err("FFprobe not configured".to_string());
     }
 
-    #[cfg(target_os = "windows")]
-    let output = {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        Command::new(&config.ffprobe_path)
-            .creation_flags(CREATE_NO_WINDOW)
-            .args([
-                "-v",
-                "quiet",
-                "-show_entries",
-                "format=duration:stream=width,height,r_frame_rate",
-                "-of",
-                "json",
-                &input_path,
-            ])
-            .output()
-            .map_err(|e| format!("Failed to run ffprobe: {}", e))?
-    };
+    let mut cmd = tokio::process::Command::new(&config.ffprobe_path);
+    cmd.args([
+        "-v",
+        "quiet",
+        "-show_entries",
+        "format=duration:stream=width,height,r_frame_rate",
+        "-of",
+        "json",
+        &input_path,
+    ]);
 
-    #[cfg(not(target_os = "windows"))]
-    let output = Command::new(&config.ffprobe_path)
-        .args([
-            "-v",
-            "quiet",
-            "-show_entries",
-            "format=duration:stream=width,height,r_frame_rate",
-            "-of",
-            "json",
-            &input_path,
-        ])
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let output = cmd
         .output()
+        .await
         .map_err(|e| format!("Failed to run ffprobe: {}", e))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -3223,12 +3314,27 @@ fn check_network_proxy_vpn_status() -> Result<NetworkProxyVpnStatus, String> {
 }
 
 fn main() {
+    #[cfg(windows)]
+    job_object::init_job_object();
+
     // Ensure app directories exist
     if let Err(e) = ensure_app_dirs() {
         eprintln!("Failed to create app directories: {}", e);
     }
 
     tauri::Builder::default()
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+            yt_dlp_manager::bootstrap_yt_dlp(app_handle);
+            Ok(())
+        })
+        .on_window_event(|event| {
+            if let tauri::WindowEvent::Destroyed = event.event() {
+                if let Ok(mut manager) = PROCESS_MANAGER.lock() {
+                    manager.cancel_all();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             load_settings,
             save_settings,
@@ -3284,7 +3390,80 @@ fn main() {
             get_video_info_for_preview,
             // Network safety checks
             check_network_proxy_vpn_status,
+            // yt-dlp commands
+            yt_dlp_manager::get_video_formats,
+            yt_dlp_manager::download_media_link,
+            yt_dlp_manager::stop_media_download,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_kv_value() {
+        let line = "frame=  123 fps= 59.8 q=28.0 size=    2048kB time=00:01:23.45 bitrate=1523.4kbits/s speed=2.14x";
+        assert_eq!(extract_kv_value(line, "frame="), Some("123"));
+        assert_eq!(extract_kv_value(line, "fps="), Some("59.8"));
+        assert_eq!(extract_kv_value(line, "q="), Some("28.0"));
+        assert_eq!(extract_kv_value(line, "size="), Some("2048kB"));
+        assert_eq!(extract_kv_value(line, "time="), Some("00:01:23.45"));
+        assert_eq!(extract_kv_value(line, "bitrate="), Some("1523.4kbits/s"));
+        assert_eq!(extract_kv_value(line, "speed="), Some("2.14x"));
+        assert_eq!(extract_kv_value(line, "missing="), None);
+    }
+
+    #[test]
+    fn test_parse_time_to_seconds() {
+        assert_eq!(parse_time_to_seconds("00:00:05.50"), Some(5.50));
+        assert_eq!(parse_time_to_seconds("00:01:23.45"), Some(83.45));
+        assert_eq!(parse_time_to_seconds("01:00:00.00"), Some(3600.0));
+        assert_eq!(parse_time_to_seconds("01:30:15.50"), Some(5415.50));
+        assert_eq!(parse_time_to_seconds("invalid"), None);
+    }
+
+    #[test]
+    fn test_parse_ffmpeg_progress_line_standard() {
+        let line = "frame=  1245 fps=59.8 q=28.0 size=    2048kB time=00:01:23.45 bitrate=1523.4kbits/s speed=2.14x";
+        let parsed = parse_ffmpeg_progress_line(line);
+        assert!(parsed.is_some());
+        let (frame, fps, size, bitrate, time, speed) = parsed.unwrap();
+        assert_eq!(frame, 1245);
+        assert!((fps - 59.8).abs() < 1e-4);
+        assert_eq!(size, "2048kB");
+        assert_eq!(bitrate, "1523.4kbits/s");
+        assert!((time - 83.45).abs() < 1e-4);
+        assert!((speed - 2.14).abs() < 1e-4);
+    }
+
+    #[test]
+    fn test_parse_ffmpeg_progress_line_zero_and_na() {
+        let line = "frame=     0 fps= 0.0 q= 0.0 size=       0kB time=00:00:00.00 bitrate=   0.0kbits/s speed=N/Ax";
+        let parsed = parse_ffmpeg_progress_line(line);
+        assert!(parsed.is_some());
+        let (frame, fps, size, bitrate, time, speed) = parsed.unwrap();
+        assert_eq!(frame, 0);
+        assert_eq!(fps, 0.0);
+        assert_eq!(size, "0kB");
+        assert_eq!(bitrate, "0.0kbits/s");
+        assert_eq!(time, 0.0);
+        assert_eq!(speed, 0.0);
+    }
+
+    #[test]
+    fn test_parse_ffmpeg_progress_line_compact() {
+        let line = "frame=100 fps=30.0 size=512kB time=00:00:03.33 bitrate=1258.9kbits/s speed=1.0x";
+        let parsed = parse_ffmpeg_progress_line(line);
+        assert!(parsed.is_some());
+        let (frame, fps, size, bitrate, time, speed) = parsed.unwrap();
+        assert_eq!(frame, 100);
+        assert!((fps - 30.0).abs() < 1e-4);
+        assert_eq!(size, "512kB");
+        assert_eq!(bitrate, "1258.9kbits/s");
+        assert!((time - 3.33).abs() < 1e-4);
+        assert!((speed - 1.0).abs() < 1e-4);
+    }
 }

@@ -5,6 +5,7 @@
   },
   "main": {
     "selectFiles": "Elekti dosierojn",
+    "dropFilesHere": "aŭ trenu dosierojn ĉi tien",
     "selectFolder": "Elekti dosierujon",
     "outputFolder": "Eliga dosierujo",
     "saveInSourceDirectory": "Konservi en fonta dosieruja adresaro",
@@ -14,6 +15,9 @@
     "stop": "Halti",
     "progress": "Progreso",
     "preview": "Antaŭrigardo"
+  },
+  "common": {
+    "or": "AŬ"
   },
   "video": {
     "title": "Video-agordoj",
@@ -221,6 +225,7 @@
   },
   "settings": {
     "title": "Agordoj",
+    "rendering": "Bildigo",
     "update_available": "Kontrolu ĝisdatigojn!",
     "theme": "Etoso",
     "themeNames": {
@@ -245,6 +250,7 @@
     "useImageBackground": "Uzi bildon kiel fonon",
     "useThemeBackground": "Uzi teman kolorskemon kiel fonon",
     "backgroundImage": "Fona bildo",
+    "imageEffects": "Bildefikoj",
     "chooseBackgroundImage": "Elekti bildon",
     "noBackgroundImage": "Neniu bildo elektita",
     "ffmpegPath": "FFmpeg-vojo",
@@ -262,8 +268,7 @@
     "save": "Konservi",
     "cancel": "Nuligi",
     "glassOpacity": "Image Dimming",
-    "glassBlur": "Image Blur",
-    "performanceMode": "Performance Mode (flat dark gray, no glow/animations)"
+    "glassBlur": "Image Blur"
   },
   "watermark": {
     "title": "Agordoj de akvomarko",
@@ -331,13 +336,19 @@
     },
     "clearCompleted": "Viŝi kompletiĝintajn",
     "deleteFromQueue": "Forigi el atendovico",
+    "addFile": "+ Dosiero",
+    "addLink": "+ Ligilo",
+    "addLinkTooltip": "Aldoni per ligilo",
     "show": "Montri",
     "showInExplorer": "Montri en dosieradministrilo",
     "completedWithSize": "Finita",
     "trim": "Tondi",
     "trimRange": "Intervalo",
     "trimDuration": "Daŭro",
-    "trimReadonly": "Tondado redakteblas nur dum la ero estas atendanta"
+    "trimReadonly": "Tondado redakteblas nur dum la ero estas atendanta",
+    "retry": "Reprovi (anstataŭigi)",
+    "retryNewFile": "Re-bildigi kiel nova versio",
+    "stopJob": "Haltigi taskon"
   },
   "gpu": {
     "label": "GPU (NVENC)",
@@ -446,5 +457,21 @@
   "history": {
     "re_render_overwrite": "Re-bildigi kaj anstataŭigi",
     "re_render_new": "Re-bildigi kiel nova versio"
+  },
+  "download": {
+    "downloadButton": "Elŝuti",
+    "urlPlaceholder": "Algluu ligilon de TikTok / Reels / YouTube...",
+    "defaultDownloadsFolder": "Elŝuta dosierujo",
+    "loadingFormats": "Serĉante disponeblajn formatojn...",
+    "noWatermarkHint": "Sen akvomarko se fonto kaj formato permesas",
+    "downloadFinished": "Elŝuto finita",
+    "waitingToStart": "Atendas komencon",
+    "stopDownload": "Haltigi elŝuton",
+    "status": {
+      "downloading": "Elŝutante",
+      "completed": "Preta",
+      "error": "Eraro",
+      "pending": "En vico"
+    }
   }
 }

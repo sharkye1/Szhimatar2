@@ -187,4 +187,63 @@ export function useRenderQueue(): UseRenderQueueReturn {
   };
 }
 
+/**
+ * Granular hook for subscribing ONLY to a single job's progress updates
+ * Prevents full queue list / MainWindow re-renders on progress ticks
+ */
+export function useJobProgress(jobId: string): import('../services/RenderService').JobProgressData | null {
+  const [progress, setProgress] = useState<import('../services/RenderService').JobProgressData | null>(() =>
+    RenderService.getJobProgress(jobId)
+  );
+
+  useEffect(() => {
+    const unsubscribe = RenderService.subscribeJobProgress(jobId, (data) => {
+      setProgress(data);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [jobId]);
+
+  return progress;
+}
+
+/**
+ * Granular hook for CursorGlow / UI indicators that only care about isProcessing boolean
+ * Never triggers re-renders on queue progress ticks
+ */
+export function useIsProcessing(): boolean {
+  const [isProcessing, setIsProcessing] = useState<boolean>(() =>
+    RenderService.isProcessingState()
+  );
+
+  useEffect(() => {
+    return RenderService.subscribeProcessing((processing) => {
+      setIsProcessing(processing);
+    });
+  }, []);
+
+  return isProcessing;
+}
+
+/**
+ * Granular hook for settings/preview panels that only care about the first file input path
+ */
+export function useFirstJobInputPath(): string {
+  const [firstPath, setFirstPath] = useState<string>(() => {
+    const jobs = RenderService.getState().jobs;
+    return jobs.length > 0 ? jobs[0].inputPath : '';
+  });
+
+  useEffect(() => {
+    return RenderService.subscribe((jobs) => {
+      const nextPath = jobs.length > 0 ? jobs[0].inputPath : '';
+      setFirstPath((prev) => (prev !== nextPath ? nextPath : prev));
+    });
+  }, []);
+
+  return firstPath;
+}
+
 export default useRenderQueue;

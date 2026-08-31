@@ -5,6 +5,7 @@
   },
   "main": {
     "selectFiles": "Выбрать файлы",
+    "dropFilesHere": "или перетащите файлы сюда",
     "selectFolder": "Выбрать папку",
     "outputFolder": "Папка сохранения",
     "saveInSourceDirectory": "В папку источника",
@@ -14,6 +15,9 @@
     "stop": "Стоп",
     "progress": "Прогресс",
     "preview": "Предпросмотр"
+  },
+  "common": {
+    "or": "ИЛИ"
   },
   "video": {
     "title": "Настройки видео",
@@ -221,6 +225,7 @@
   },
   "settings": {
     "title": "Настройки",
+    "rendering": "Рендеринг",
     "update_available": "Проверьте обновления!",
     "theme": "Тема",
     "themeNames": {
@@ -245,6 +250,7 @@
     "useImageBackground": "Использовать изображение как фон",
     "useThemeBackground": "Использовать цветовую схему как фон",
     "backgroundImage": "Фоновое изображение",
+    "imageEffects": "Эффекты изображения",
     "chooseBackgroundImage": "Выбрать изображение",
     "noBackgroundImage": "Изображение не выбрано",
     "ffmpegPath": "Путь к FFmpeg",
@@ -262,8 +268,7 @@
     "save": "Сохранить",
     "cancel": "Отмена",
     "glassOpacity": "Затенение картинки",
-    "glassBlur": "Размытие картинки",
-    "performanceMode": "Режим производительности (плоский темно-серый, без glow/анимаций)"
+    "glassBlur": "Размытие картинки"
   },
   "watermark": {
     "title": "Настройки водяного знака",
@@ -331,13 +336,19 @@
     },
     "clearCompleted": "Очистить выполненные",
     "deleteFromQueue": "Удалить из очереди",
+    "addFile": "+ Файл",
+    "addLink": "+ Ссылка",
+    "addLinkTooltip": "Добавить по ссылке",
     "show": "Показать",
     "showInExplorer": "Показать в проводнике",
     "completedWithSize": "Готово",
     "trim": "Обрезка",
     "trimRange": "Диапазон",
     "trimDuration": "Длина",
-    "trimReadonly": "Обрезку можно менять только пока элемент в ожидании"
+    "trimReadonly": "Обрезку можно менять только пока элемент в ожидании",
+    "retry": "Повторить (перезаписать)",
+    "retryNewFile": "Сжать копией (новая версия)",
+    "stopJob": "Остановить задачу"
   },
   "gpu": {
     "label": "GPU (NVENC)",
@@ -446,5 +457,21 @@
   "history": {
     "re_render_overwrite": "Повторить и перезаписать",
     "re_render_new": "Повторить как новую версию"
+  },
+  "download": {
+    "downloadButton": "Скачать",
+    "urlPlaceholder": "Вставьте ссылку TikTok / Reels / YouTube...",
+    "defaultDownloadsFolder": "Папка загрузок",
+    "loadingFormats": "Ищем доступные форматы...",
+    "noWatermarkHint": "Без водяного знака, если источник и формат это позволяют",
+    "downloadFinished": "Загрузка завершена",
+    "waitingToStart": "Ожидание запуска",
+    "stopDownload": "Остановить загрузку",
+    "status": {
+      "downloading": "Скачивание",
+      "completed": "Готово",
+      "error": "Ошибка",
+      "pending": "В очереди"
+    }
   }
 }

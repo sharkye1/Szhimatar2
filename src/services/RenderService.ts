@@ -95,6 +95,23 @@ export interface RenderQueueState {
 
 export type RenderEventCallback = (jobs: RenderJob[]) => void;
 
+export interface JobProgressData {
+  jobId: string;
+  progress: number;
+  fps: number;
+  speed: number;
+  bitrate: string;
+  eta: number;
+  etaFormatted: string;
+  currentTime: number;
+  frame: number;
+  outputSize: string;
+  estimatedFinalSize?: string;
+}
+
+export type JobProgressCallback = (data: JobProgressData) => void;
+export type ProcessingChangeCallback = (isProcessing: boolean) => void;
+
 // ============================================================================
 // FFmpeg Command Builder
 // ============================================================================
@@ -693,6 +710,10 @@ class RenderServiceImpl {
   private gpuAvailable: boolean = false;
   private activeJobs: Set<string> = new Set();
   private listeners: Set<RenderEventCallback> = new Set();
+  private jobProgressListeners: Map<string, Set<JobProgressCallback>> = new Map();
+  private processingListeners: Set<ProcessingChangeCallback> = new Set();
+  private progressThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingJobProgress: Map<string, JobProgressData> = new Map();
   private unlistenProgress: UnlistenFn | null = null;
   private unlistenComplete: UnlistenFn | null = null;
   private unlistenError: UnlistenFn | null = null;
@@ -843,7 +864,7 @@ class RenderServiceImpl {
   }
 
   /**
-   * Subscribe to queue updates
+   * Subscribe to queue updates (structural changes, statuses)
    */
   public subscribe(callback: RenderEventCallback): () => void {
     this.listeners.add(callback);
@@ -851,7 +872,98 @@ class RenderServiceImpl {
   }
 
   /**
-   * Notify all listeners
+   * Subscribe to high-frequency progress updates for a single job
+   */
+  public subscribeJobProgress(jobId: string, callback: JobProgressCallback): () => void {
+    if (!this.jobProgressListeners.has(jobId)) {
+      this.jobProgressListeners.set(jobId, new Set());
+    }
+    this.jobProgressListeners.get(jobId)!.add(callback);
+
+    // Initial snapshot if job exists
+    const job = this.jobs.get(jobId);
+    if (job) {
+      callback({
+        jobId: job.id,
+        progress: job.progress,
+        fps: job.fps,
+        speed: job.speed,
+        bitrate: job.bitrate,
+        eta: job.eta,
+        etaFormatted: job.etaFormatted || '--:--',
+        currentTime: job.currentTime,
+        frame: job.frame,
+        outputSize: job.outputSize || '0 MB',
+        estimatedFinalSize: job.estimatedFinalSize,
+      });
+    }
+
+    return () => {
+      const set = this.jobProgressListeners.get(jobId);
+      if (set) {
+        set.delete(callback);
+        if (set.size === 0) {
+          this.jobProgressListeners.delete(jobId);
+        }
+      }
+    };
+  }
+
+  /**
+   * Subscribe to processing state changes (idle <-> rendering)
+   */
+  public subscribeProcessing(callback: ProcessingChangeCallback): () => void {
+    this.processingListeners.add(callback);
+    callback(this.isProcessing);
+    return () => this.processingListeners.delete(callback);
+  }
+
+  /**
+   * Get progress data snapshot for a specific job
+   */
+  public getJobProgress(jobId: string): JobProgressData | null {
+    const job = this.jobs.get(jobId);
+    if (!job) return null;
+    return {
+      jobId: job.id,
+      progress: job.progress,
+      fps: job.fps,
+      speed: job.speed,
+      bitrate: job.bitrate,
+      eta: job.eta,
+      etaFormatted: job.etaFormatted || '--:--',
+      currentTime: job.currentTime,
+      frame: job.frame,
+      outputSize: job.outputSize || '0 MB',
+      estimatedFinalSize: job.estimatedFinalSize,
+    };
+  }
+
+  /**
+   * Check if queue is currently processing
+   */
+  public isProcessingState(): boolean {
+    return this.isProcessing;
+  }
+
+  /**
+   * Update isProcessing flag and notify listeners if changed
+   */
+  private setProcessing(processing: boolean): void {
+    if (this.isProcessing !== processing) {
+      this.isProcessing = processing;
+      this.processingListeners.forEach((callback) => {
+        try {
+          callback(processing);
+        } catch (e) {
+          console.error('[RenderService] Error in processing listener:', e);
+        }
+      });
+    }
+  }
+
+  /**
+   * Notify all queue listeners
    */
   private notifyListeners(): void {
     const jobs = Array.from(this.jobs.values());
@@ -1082,7 +1194,7 @@ class RenderServiceImpl {
       throw new Error('Settings not configured. Apply a preset first.');
     }
 
-    this.isProcessing = true;
+    this.setProcessing(true);
     this.isPaused = false;
     this.notifyListeners();
     this.dispatch();
@@ -1111,7 +1223,7 @@ class RenderServiceImpl {
         return job && job.status === 'pending';
       });
       if (!pendingExists) {
-        this.isProcessing = false;
+        this.setProcessing(false);
         this.currentJobId = null;
         this.notifyListeners();
       }
@@ -1317,7 +1429,7 @@ class RenderServiceImpl {
   }
 
   /**
-   * Handle progress update from FFmpeg
+   * Handle progress update from FFmpeg (throttled)
    */
   private handleProgressUpdate(progress: RenderProgress): void {
     const job = this.jobs.get(progress.job_id);
@@ -1352,6 +1464,48 @@ class RenderServiceImpl {
       }
     }
 
+    const progressData: JobProgressData = {
+      jobId: job.id,
+      progress: job.progress,
+      fps: job.fps,
+      speed: job.speed,
+      bitrate: job.bitrate,
+      eta: job.eta,
+      etaFormatted: job.etaFormatted || '--:--',
+      currentTime: job.currentTime,
+      frame: job.frame,
+      outputSize: job.outputSize || '0 MB',
+      estimatedFinalSize: job.estimatedFinalSize,
+    };
+
+    this.pendingJobProgress.set(job.id, progressData);
+
+    // Throttled notification (every 80ms)
+    if (!this.progressThrottleTimer) {
+      this.progressThrottleTimer = setTimeout(() => {
+        this.progressThrottleTimer = null;
+        this.flushProgressUpdates();
+      }, 80);
+    }
+  }
+
+  /**
+   * Flush pending progress updates to dedicated and global listeners
+   */
+  private flushProgressUpdates(): void {
+    this.pendingJobProgress.forEach((data, jobId) => {
+      const listeners = this.jobProgressListeners.get(jobId);
+      if (listeners) {
+        listeners.forEach((callback) => {
+          try {
+            callback(data);
+          } catch (e) {
+            console.error('[RenderService] Error in job progress listener:', e);
+          }
+        });
+      }
+    });
+    this.pendingJobProgress.clear();
     this.notifyListeners();
   }
 
@@ -1447,7 +1601,7 @@ class RenderServiceImpl {
         this.activeJobs.delete(jobId);
         this.scheduler.release(jobId);
         this.currentJobId = null;
-        this.isProcessing = false; // stop queue advancement
+        this.setProcessing(false); // stop queue advancement
 
         console.log('[RenderService] Job stopped:', jobId, `by ${stoppedBy}`);
 
@@ -1486,19 +1640,22 @@ class RenderServiceImpl {
           this.currentJobId = null;
         }
 
-        console.error(`[RenderService] Job error on ${slot.toUpperCase()} slot:`, jobId, error);
+        console.error(`[RenderService] Job failed on ${slot.toUpperCase()} slot:`, jobId, error);
+
+        // Update statistics
+        StatisticsService.markRenderError(jobId, error);
 
         // Log error with slot info
         invoke('write_render_log', {
-        jobId,
-        message: `Render failed on ${slot.toUpperCase()} slot: ${error}`
+          jobId,
+          message: `Render failed on ${slot.toUpperCase()} slot: ${error}`
         });
     
     this.notifyListeners();
     
     // Continue with next job - other slot's renders are unaffected
     if (this.isProcessing && !this.isPaused) {
-      console.log(`[RenderService] Continuing queue after ${slot.toUpperCase()} slot error. Active jobs: ${this.activeJobs.size}`);
+      console.log(`[RenderService] Dispatching next job after ${slot.toUpperCase()} error. Active jobs: ${this.activeJobs.size}`);
       this.dispatch();
     }
     }
@@ -1632,7 +1789,7 @@ class RenderServiceImpl {
    * Stop all processing
    */
   public async stop(): Promise<void> {
-    this.isProcessing = false;
+    this.setProcessing(false);
     this.isPaused = false;
     this.scheduler.resetSlots();
 
@@ -1673,7 +1830,9 @@ class RenderServiceImpl {
         this.activeJobs.delete(jobId);
         this.scheduler.release(jobId);
         this.currentJobId = null;
-        this.isProcessing = false;
+        if (this.activeJobs.size === 0) {
+          this.setProcessing(false);
+        }
 
         this.notifyListeners();
         return true;

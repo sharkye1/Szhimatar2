@@ -5,6 +5,7 @@
   },
   "main": {
     "selectFiles": "",
+    "dropFilesHere": "",
     "selectFolder": "",
     "outputFolder": "",
     "saveInSourceDirectory": "",
@@ -14,6 +15,9 @@
     "stop": "",
     "progress": "",
     "preview": ""
+  },
+  "common": {
+    "or": ""
   },
   "video": {
     "title": "",
@@ -221,6 +225,7 @@
   },
   "settings": {
     "title": "",
+    "rendering": "",
     "update_available": "",
     "theme": "",
     "themeNames": {
@@ -245,6 +250,7 @@
     "useImageBackground": "",
     "useThemeBackground": "",
     "backgroundImage": "",
+    "imageEffects": "",
     "chooseBackgroundImage": "",
     "noBackgroundImage": "",
     "ffmpegPath": "",
@@ -262,8 +268,7 @@
     "save": "",
     "cancel": "",
     "glassOpacity": "Image Dimming",
-    "glassBlur": "Image Blur",
-    "performanceMode": "Performance Mode (flat dark gray, no glow/animations)"
+    "glassBlur": "Image Blur"
   },
   "watermark": {
     "title": "",
@@ -331,13 +336,19 @@
     },
     "clearCompleted": "",
     "deleteFromQueue": "",
+    "addFile": "",
+    "addLink": "",
+    "addLinkTooltip": "",
     "show": "",
     "showInExplorer": "",
     "completedWithSize": "",
     "trim": "",
     "trimRange": "",
     "trimDuration": "",
-    "trimReadonly": ""
+    "trimReadonly": "",
+    "retry": "",
+    "retryNewFile": "",
+    "stopJob": ""
   },
   "gpu": {
     "label": "",
@@ -446,5 +457,21 @@
   },
   "network": {
     "vpnProxyWarningMessage": ""
+  },
+  "download": {
+    "downloadButton": "",
+    "urlPlaceholder": "",
+    "defaultDownloadsFolder": "",
+    "loadingFormats": "",
+    "noWatermarkHint": "",
+    "downloadFinished": "",
+    "waitingToStart": "",
+    "stopDownload": "",
+    "status": {
+      "downloading": "",
+      "completed": "",
+      "error": "",
+      "pending": ""
+    }
   }
 }

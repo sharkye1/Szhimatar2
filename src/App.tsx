@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/tauri';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -6,11 +6,12 @@ import { LanguageProvider } from './contexts/LanguageContext';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import MainWindow from './pages/MainWindow';
 import RenderService from './services/RenderService';
-import VideoSettings from './pages/VideoSettings';
-import AudioSettings from './pages/AudioSettings';
-import GeneralSettings from './pages/GeneralSettings';
 import MotionScreen from './components/MotionScreen';
 import CursorGlow from './components/CursorGlow';
+
+const VideoSettings = lazy(() => import('./pages/VideoSettings'));
+const AudioSettings = lazy(() => import('./pages/AudioSettings'));
+const GeneralSettings = lazy(() => import('./pages/GeneralSettings'));
 import {
   VideoSettings as VideoSettingsType,
   AudioSettings as AudioSettingsType,
@@ -31,7 +32,7 @@ type DefaultPresetResponse = {
 };
 
 function AppContent() {
-  const { performanceMode, screenAnimation } = useSettings();
+  const { screenAnimation } = useSettings();
   const [currentScreen, setCurrentScreen] = useState<Screen>('main');
   const [videoSettings, setVideoSettings] = useState<VideoSettingsType>(DEFAULT_VIDEO_SETTINGS);
   const [audioSettings, setAudioSettings] = useState<AudioSettingsType>(DEFAULT_AUDIO_SETTINGS);
@@ -39,13 +40,6 @@ function AppContent() {
   const [watermarkSettings, setWatermarkSettings] = useState<WatermarkSettingsType>(DEFAULT_WATERMARK_SETTINGS);
   const [selectedPresetName, setSelectedPresetName] = useState<string>('');
   const [cliFiles, setCliFiles] = useState<string[]>([]);
-
-  // Mouse tracking for glassmorphism light effects
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const root = document.documentElement;
-    root.style.setProperty('--mouse-x', `${e.clientX}px`);
-    root.style.setProperty('--mouse-y', `${e.clientY}px`);
-  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -134,26 +128,6 @@ function AppContent() {
   const goBack = () => setCurrentScreen('main');
 
   const renderScreen = (key: string, content: JSX.Element) => {
-    if (performanceMode) {
-      return (
-        <div
-          key={key}
-          className="motion-screen"
-          style={{
-            background: 'transparent',
-            width: '100vw',
-            height: '100vh',
-            position: 'relative',
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          {content}
-        </div>
-      );
-    }
-
     return <MotionScreen key={key} animationType={screenAnimation}>{content}</MotionScreen>;
   };
 
@@ -205,16 +179,19 @@ function AppContent() {
 
   return (
     <>
-      {!performanceMode && <div className="app-background" />}
-      {!performanceMode && <CursorGlow />}
+      <div className="app-background" />
+      <CursorGlow />
           
-          {/* Main app container with mouse tracking */}
+          {/* Main app container */}
           <div 
             className="app-root"
-            onMouseMove={performanceMode ? undefined : handleMouseMove}
             style={{ width: '100vw', height: '100vh', display: 'flex', position: 'relative', zIndex: 2 }}
           >
-            {performanceMode ? currentScreenNode : <AnimatePresence mode="wait" initial={false}>{currentScreenNode}</AnimatePresence>}
+            <AnimatePresence mode="wait" initial={false}>
+              <Suspense fallback={null}>
+                {currentScreenNode}
+              </Suspense>
+            </AnimatePresence>
       </div>
     </>
   );
@@ -222,13 +199,13 @@ function AppContent() {
 
 function App() {
   return (
-    <ThemeProvider>
-      <LanguageProvider>
-        <SettingsProvider>
+    <SettingsProvider>
+      <ThemeProvider>
+        <LanguageProvider>
           <AppContent />
-        </SettingsProvider>
-      </LanguageProvider>
-    </ThemeProvider>
+        </LanguageProvider>
+      </ThemeProvider>
+    </SettingsProvider>
   );
 }
 

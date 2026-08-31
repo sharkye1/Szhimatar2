@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+﻿import React, { createContext, useContext, useEffect, ReactNode } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/tauri';
+import { useSettings } from './SettingsContext';
 import lightTheme from '../themes/light.json';
 import darkRedTheme from '../themes/dark-red.json';
 import blueOceanTheme from '../themes/blue-ocean.json';
@@ -16,7 +17,7 @@ import nordSoftTheme from '../themes/nord-soft.json';
 import graphiteLightTheme from '../themes/graphite-light.json';
 import amoledNightTheme from '../themes/amoled-night.json';
 
-interface Theme {
+export interface Theme {
   name: string;
   colors: {
     background: string;
@@ -126,7 +127,6 @@ const resolveBackgroundImageUrl = async (filePath: string): Promise<string | nul
 
   for (const url of candidates) {
     try {
-      // eslint-disable-next-line no-await-in-loop
       const ok = await canLoadImage(url);
       if (ok) {
         return url;
@@ -140,91 +140,41 @@ const resolveBackgroundImageUrl = async (filePath: string): Promise<string | nul
 };
 
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [themeName, setThemeName] = useState<string>('light');
-  const [theme, setThemeState] = useState<Theme>(themes.light);
-  const [modifiedTheme, setModifiedThemeState] = useState<boolean>(false);
-  const [useImageBackground, setUseImageBackground] = useState<boolean>(false);
-  const [backgroundImagePath, setBackgroundImagePath] = useState<string>('');
-  const [glassOpacity, setGlassOpacity] = useState<number>(15);
-  const [glassBlur, setGlassBlur] = useState<number>(12);
+  const { settings, updateSettings } = useSettings();
 
-  useEffect(() => {
-    // Load theme from settings
-    const loadTheme = async () => {
-      try {
-        const { invoke } = await import('@tauri-apps/api/tauri');
-        const settings = await invoke<any>('load_settings');
-        if (settings.theme && themes[settings.theme]) {
-          setThemeName(settings.theme);
-          setThemeState(themes[settings.theme]);
-        }
-        if (settings.modifiedTheme !== undefined) {
-          setModifiedThemeState(settings.modifiedTheme);
-        } else if (settings.modified_theme !== undefined) {
-          setModifiedThemeState(settings.modified_theme);
-        }
-        setUseImageBackground(!!settings.use_background_image);
-        setBackgroundImagePath(settings.background_image_path || '');
-        if (settings.glassOpacity !== undefined) setGlassOpacity(settings.glassOpacity);
-        if (settings.glassBlur !== undefined) setGlassBlur(settings.glassBlur);
-      } catch (error) {
-        console.error('Failed to load theme:', error);
-      }
-    };
-    loadTheme();
-  }, []);
+  const themeName = settings.theme || 'light';
+  const baseTheme = themes[themeName] || themes.light;
+  const modifiedTheme = settings.modifiedTheme;
+  const useImageBackground = settings.use_background_image;
+  const backgroundImagePath = settings.background_image_path;
+  const glassOpacity = settings.glassOpacity;
+  const glassBlur = settings.glassBlur;
 
   useEffect(() => {
     let cancelled = false;
-    let performanceModeEnabled = false;
-
-    try {
-      performanceModeEnabled = localStorage.getItem('performanceMode') === 'true';
-    } catch {
-      performanceModeEnabled = false;
-    }
-
-    if (performanceModeEnabled) {
-      const root = document.documentElement;
-      root.style.setProperty('--theme-bg-rgb', '42, 42, 42');
-      root.style.setProperty('--primary-rgb', '154, 154, 154');
-      root.style.setProperty('--secondary-rgb', '125, 125, 125');
-
-      const bgElement = document.querySelector('.app-background') as HTMLElement;
-      if (bgElement) {
-        bgElement.classList.remove('has-image-background');
-        bgElement.style.background = '#2a2a2a';
-        bgElement.style.backgroundImage = 'none';
-        bgElement.style.animation = 'none';
-      }
-
-      return () => {
-        cancelled = true;
-      };
-    }
 
     // Apply theme colors to CSS variables
     const root = document.documentElement;
-    Object.entries(theme.colors).forEach(([key, value]) => {
+    Object.entries(baseTheme.colors).forEach(([key, value]) => {
       let cssValue = value;
       if (modifiedTheme && (key === 'success' || key === 'warning' || key === 'error')) {
-        cssValue = theme.colors.primary;
+        cssValue = baseTheme.colors.primary;
       }
       root.style.setProperty(`--color-${key}`, cssValue);
     });
-    
+
     // Set RGB variables for glassmorphism
-    root.style.setProperty('--theme-bg-rgb', hexToRgb(theme.colors.background));
-    root.style.setProperty('--primary-rgb', hexToRgb(theme.colors.primary));
-    root.style.setProperty('--secondary-rgb', hexToRgb(theme.colors.secondary));
-    root.style.setProperty('--surface-rgb', hexToRgb(theme.colors.surface));
-    
+    root.style.setProperty('--theme-bg-rgb', hexToRgb(baseTheme.colors.background));
+    root.style.setProperty('--primary-rgb', hexToRgb(baseTheme.colors.primary));
+    root.style.setProperty('--secondary-rgb', hexToRgb(baseTheme.colors.secondary));
+    root.style.setProperty('--surface-rgb', hexToRgb(baseTheme.colors.surface));
+
     // Set light/dark theme specific variables
     const isLight = isLightTheme(themeName);
     root.style.setProperty('--bg-brightness', isLight ? '1.0' : '0.7');
     root.style.setProperty('--bg-overlay-opacity', useImageBackground ? '0.05' : (isLight ? '0.3' : '0.4'));
-    
-    // UI Glass variables (fixed beautiful defaults)
+
+    // UI Glass variables
     root.style.setProperty('--glass-opacity', isLight ? '0.25' : '0.15');
     root.style.setProperty('--glass-border-color', isLight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.1)');
     root.style.setProperty('--glass-blur', '12px');
@@ -232,14 +182,12 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     root.style.setProperty('--glass-blur-light', '8px');
 
     // Background Image variables based on user sliders
-    // glassOpacity is used as "Dimming" (0% -> brightness 100%, 100% -> brightness 0%)
     const imgBrightness = Math.max(0, 100 - glassOpacity);
     root.style.setProperty('--bg-image-brightness', `${imgBrightness}%`);
     root.style.setProperty('--bg-image-blur', `${glassBlur}px`);
-    // Scale up slightly to hide blurry edges (e.g. 40px blur needs ~ 10% scale up)
     const scale = 1 + (glassBlur * 0.003);
     root.style.setProperty('--bg-image-scale', `${scale}`);
-    
+
     // Set background for the app-background element
     const bgElement = document.querySelector('.app-background') as HTMLElement;
     const applyThemeGradient = () => {
@@ -286,28 +234,45 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return () => {
       cancelled = true;
     };
-  }, [theme, themeName, modifiedTheme, useImageBackground, backgroundImagePath, glassOpacity, glassBlur]);
+  }, [baseTheme, themeName, modifiedTheme, useImageBackground, backgroundImagePath, glassOpacity, glassBlur]);
 
   const setTheme = (name: string) => {
     if (themes[name]) {
-      setThemeName(name);
-      setThemeState(themes[name]);
+      updateSettings({ theme: name }, true);
     }
   };
 
   const setModifiedTheme = (value: boolean) => {
-    setModifiedThemeState(value);
+    updateSettings({ modifiedTheme: value }, true);
   };
 
-  const effectiveTheme = modifiedTheme ? {
-    ...theme,
-    colors: {
-      ...theme.colors,
-      success: theme.colors.primary,
-      warning: theme.colors.primary,
-      error: theme.colors.primary,
-    }
-  } : theme;
+  const setUseImageBackground = (value: boolean) => {
+    updateSettings({ use_background_image: value }, true);
+  };
+
+  const setBackgroundImagePath = (path: string) => {
+    updateSettings({ background_image_path: path }, true);
+  };
+
+  const setGlassOpacity = (value: number) => {
+    updateSettings({ glassOpacity: value });
+  };
+
+  const setGlassBlur = (value: number) => {
+    updateSettings({ glassBlur: value });
+  };
+
+  const effectiveTheme = modifiedTheme
+    ? {
+        ...baseTheme,
+        colors: {
+          ...baseTheme.colors,
+          success: baseTheme.colors.primary,
+          warning: baseTheme.colors.primary,
+          error: baseTheme.colors.primary,
+        },
+      }
+    : baseTheme;
 
   return (
     <ThemeContext.Provider
@@ -339,3 +304,5 @@ export const useTheme = () => {
   }
   return context;
 };
+
+export default ThemeContext;

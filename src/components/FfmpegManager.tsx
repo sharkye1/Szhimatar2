@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
-import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/api/dialog';
 import { ffmpegFinder } from '../services/FFmpegFinder';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useTauriEvent } from '../hooks/useTauriEvent';
 import '../styles/FfmpegManager.css';
 
 interface FfmpegStatus {
@@ -46,21 +46,16 @@ export function FfmpegManager() {
   // Check status on mount
   useEffect(() => {
     checkStatus();
-
-    // Listen for search progress events
-    const unlistenStage = listen<string>('ffmpeg-search-stage', (event) => {
-      setSearchMessage(event.payload);
-    });
-
-    const unlistenProgress = listen<number>('ffmpeg-search-progress', (event) => {
-      setFilesChecked(event.payload);
-    });
-
-    return () => {
-      unlistenStage.then((fn) => fn());
-      unlistenProgress.then((fn) => fn());
-    };
   }, []);
+
+  // Listen for search progress events safely without memory leaks
+  useTauriEvent<string>('ffmpeg-search-stage', (event) => {
+    setSearchMessage(event.payload);
+  });
+
+  useTauriEvent<number>('ffmpeg-search-progress', (event) => {
+    setFilesChecked(event.payload);
+  });
 
   const checkStatus = async () => {
     try {

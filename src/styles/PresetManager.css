@@ -1,3 +1,71 @@
+/* Compact inline preset row — integrated inside .action-bar */
+.preset-compact-row {
+    display: contents; /* children flow directly into parent flex */
+}
+
+.preset-compact-select {
+    width: 145px;
+    min-width: 100px;
+    max-width: 145px;
+    height: 40px;
+    padding: 0 10px;
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color 0.18s;
+    background: var(--color-surface, rgba(var(--theme-bg-rgb), 0.2));
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    color: var(--color-text);
+    box-sizing: border-box;
+    flex-shrink: 0;
+}
+
+.preset-compact-select option {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+}
+
+.preset-compact-select:hover:not(:disabled) {
+    border-color: var(--color-primary, rgba(255, 255, 255, 0.22));
+}
+
+.preset-compact-select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Preset icon buttons — solid, same density as action-bar-btn */
+.preset-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: 8px;
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+    cursor: pointer;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    transition: opacity 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease, background 0.15s ease;
+    font-size: 0;
+}
+.preset-icon-btn:hover:not(:disabled) {
+    opacity: 0.88;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
+    background: var(--color-hover, rgba(255, 255, 255, 0.08)) !important;
+}
+.preset-icon-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+.preset-icon-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
 .preset-manager {
     width: 100%;
     padding: 16px;
@@ -10,6 +78,7 @@
     -webkit-backdrop-filter: blur(12px) saturate(1.2);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
 }
+
 
 .preset-selector-row {
     display: flex;
@@ -123,16 +192,21 @@
     width: 100%;
     padding: 10px;
     margin-bottom: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
     border-radius: 8px;
     font-size: 14px;
     font-family: inherit;
     box-sizing: border-box;
     resize: vertical;
-    background: rgba(var(--theme-bg-rgb), 0.2);
+    background: var(--color-surface, rgba(var(--theme-bg-rgb), 0.2));
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
-    color: inherit;
+    color: var(--color-text);
+}
+.preset-dialog input::placeholder,
+.preset-dialog textarea::placeholder {
+    color: var(--color-textSecondary);
+    opacity: 1;
 }
 
 .preset-dialog input:focus,

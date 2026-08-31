@@ -5,6 +5,7 @@
   },
   "main": {
     "selectFiles": "Izbrati fajly",
+    "dropFilesHere": "ili prětegnite fajly sem",
     "selectFolder": "Izbrati folder",
     "outputFolder": "Izhodny folder",
     "saveInSourceDirectory": "Sahraniti v izhodnom direktoriju",
@@ -14,6 +15,9 @@
     "stop": "Stop",
     "progress": "Progres",
     "preview": "Predogled"
+  },
+  "common": {
+    "or": "ILI"
   },
   "video": {
     "title": "Nastavenja videa",
@@ -221,6 +225,7 @@
   },
   "settings": {
     "title": "Nastavenja",
+    "rendering": "Renderovanje",
     "update_available": "Dostupno Ažuriranje",
     "theme": "Tema",
     "themeNames": {
@@ -245,6 +250,7 @@
     "useImageBackground": "Ispolzovati izobraženje jak fon",
     "useThemeBackground": "Ispolzovati cvetovu shemu jak fon",
     "backgroundImage": "Fonovo izobraženje",
+    "imageEffects": "Efekty obraza",
     "chooseBackgroundImage": "Vybrati izobraženje",
     "noBackgroundImage": "Izobraženje ne vybrano",
     "ffmpegPath": "FFmpeg put",
@@ -262,8 +268,7 @@
     "save": "Sahraniti",
     "cancel": "Otkazati",
     "glassOpacity": "Image Dimming",
-    "glassBlur": "Image Blur",
-    "performanceMode": "Performance Mode (flat dark gray, no glow/animations)"
+    "glassBlur": "Image Blur"
   },
   "watermark": {
     "title": "Nastavenja vodoznaka",
@@ -331,13 +336,19 @@
     },
     "clearCompleted": "Očistiti gotove",
     "deleteFromQueue": "Udaliti iz čereda",
+    "addFile": "+ Fajl",
+    "addLink": "+ Link",
+    "addLinkTooltip": "Dodati črěz link",
     "show": "Pokazać",
     "showInExplorer": "Pokazać u pravadniku",
     "completedWithSize": "Gotovo",
     "trim": "Obrezka",
     "trimRange": "Diapazon",
     "trimDuration": "Dlina",
-    "trimReadonly": "Obrezku možno mjenjati tolko poka element čeka"
+    "trimReadonly": "Obrezku možno mjenjati tolko poka element čeka",
+    "retry": "Ponoviti (prepisati)",
+    "retryNewFile": "Ponovi kao novu verziju",
+    "stopJob": "Ostanoviti zadacu"
   },
   "gpu": {
     "label": "GPU (NVENC)",
@@ -446,5 +457,21 @@
   },
   "network": {
     "vpnProxyWarningMessage": "Detected an active proxy/VPN connection. It is recommended to disable it so the app works more reliably and avoids network-related errors."
+  },
+  "download": {
+    "downloadButton": "Stęgnųti",
+    "urlPlaceholder": "Vložite link TikTok / Reels / YouTube...",
+    "defaultDownloadsFolder": "Papkа stęganij",
+    "loadingFormats": "Iskanje dostupnyh formatov...",
+    "noWatermarkHint": "Bez vodnogo znaka, ako izvor i format dozvoljajųt",
+    "downloadFinished": "Zagrųženje gotov",
+    "waitingToStart": "Čeka se na start",
+    "stopDownload": "Ostanoviti zagrųženje",
+    "status": {
+      "downloading": "Stęganje",
+      "completed": "Gotovo",
+      "error": "Giba",
+      "pending": "V črědě"
+    }
   }
 }

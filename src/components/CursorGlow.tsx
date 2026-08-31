@@ -1,55 +1,62 @@
 import React, { useEffect, useRef } from 'react';
 import '../styles/cursor-glow.css';
-import { useRenderQueue } from '../hooks/useRenderQueue';
-import { useSettings } from '../contexts/SettingsContext';
+import { useIsProcessing } from '../hooks/useRenderQueue';
 
 export const CursorGlow: React.FC = () => {
   const glowRef = useRef<HTMLDivElement>(null);
   const auraRef = useRef<HTMLDivElement>(null);
-  const { isProcessing } = useRenderQueue();
-  const { performanceMode } = useSettings();
+  const isProcessing = useIsProcessing();
 
   useEffect(() => {
-    if (performanceMode) {
-      return;
-    }
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    let rafId: number | null = null;
 
-    let idleTimer: ReturnType<typeof setTimeout>;
-    let rafId: number;
-    
-    let currentX = window.innerWidth / 2;
-    let currentY = window.innerHeight / 2;
+    let targetX = window.innerWidth / 2;
+    let targetY = window.innerHeight / 2;
+    let lastRenderedX = -1;
+    let lastRenderedY = -1;
 
-    const updatePos = () => {
-      // Both layers track cursor IMMEDIATELY, zero lag.
-      // We use the CSS `translate` property instead of `transform: translate3d`
-      // because CSS `scale` property shrinks the coordinate system for `transform`,
-      // which causes the glow to lag linearly behind the mouse towards the bottom right.
-      if (glowRef.current) {
-        glowRef.current.style.translate = `${currentX}px ${currentY}px`;
+    const root = document.documentElement;
+
+    const render = () => {
+      rafId = null;
+
+      if (targetX !== lastRenderedX || targetY !== lastRenderedY) {
+        lastRenderedX = targetX;
+        lastRenderedY = targetY;
+
+        const translateVal = `${targetX}px ${targetY}px`;
+        if (glowRef.current) {
+          glowRef.current.style.translate = translateVal;
+        }
+        if (auraRef.current) {
+          auraRef.current.style.translate = translateVal;
+        }
+
+        root.style.setProperty('--mouse-x', `${targetX}px`);
+        root.style.setProperty('--mouse-y', `${targetY}px`);
       }
-      if (auraRef.current) {
-        auraRef.current.style.translate = `${currentX}px ${currentY}px`;
-      }
-      rafId = requestAnimationFrame(updatePos);
     };
-    
-    rafId = requestAnimationFrame(updatePos);
 
     const handleMouseMove = (e: MouseEvent) => {
-      currentX = e.clientX;
-      currentY = e.clientY;
-      
-      if (glowRef.current) {
+      targetX = e.clientX;
+      targetY = e.clientY;
+
+      if (glowRef.current && auraRef.current) {
         glowRef.current.classList.add('moving');
         glowRef.current.classList.remove('idle');
-      }
-      if (auraRef.current) {
         auraRef.current.classList.add('moving');
         auraRef.current.classList.remove('idle');
       }
 
-      clearTimeout(idleTimer);
+      if (rafId === null) {
+        rafId = requestAnimationFrame(render);
+      }
+
+      if (idleTimer) {
+        clearTimeout(idleTimer);
+      }
+
       idleTimer = setTimeout(() => {
         if (glowRef.current) {
           glowRef.current.classList.remove('moving');
@@ -59,22 +66,19 @@ export const CursorGlow: React.FC = () => {
           auraRef.current.classList.remove('moving');
           auraRef.current.classList.add('idle');
         }
-      }, 150); // AFK triggers quickly
+      }, 150);
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
-      clearTimeout(idleTimer);
-      cancelAnimationFrame(rafId);
+      if (idleTimer) clearTimeout(idleTimer);
+      if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, [performanceMode]);
+  }, []);
 
   useEffect(() => {
-    if (performanceMode) {
-      return;
-    }
-
     if (glowRef.current && auraRef.current) {
       if (isProcessing) {
         glowRef.current.classList.add('rendering');
@@ -84,11 +88,7 @@ export const CursorGlow: React.FC = () => {
         auraRef.current.classList.remove('rendering');
       }
     }
-  }, [isProcessing, performanceMode]);
-
-  if (performanceMode) {
-    return null;
-  }
+  }, [isProcessing]);
 
   return (
     <>
@@ -100,3 +100,4 @@ export const CursorGlow: React.FC = () => {
 };
 
 export default CursorGlow;
+
