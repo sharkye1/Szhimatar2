@@ -3,6 +3,10 @@
     "title": "Vzrimatar",
     "version": "Версия взрыва"
   },
+  "header": {
+    "collapse": "Свернуть шапку взрыва",
+    "expand": "Развернуть шапку взрыва"
+  },
   "main": {
     "selectFiles": "Взорвать файлы",
     "dropFilesHere": "или взорвите файлы сюда",
@@ -348,7 +352,14 @@
     "trimReadonly": "Обрезку можно менять только пока элемент ждёт взрыва",
     "retry": "💣 Взорвать ещё раз (переписать)",
     "retryNewFile": "🎆 Новый взрыв копией",
-    "stopJob": "⛔ Прекратить взрыв"
+    "stopJob": "⛔ Прекратить взрыв",
+    "copyToClipboard": "Copy file to clipboard",
+    "copiedToClipboard": "Copied to clipboard",
+    "dragHandleTooltip": "Hold and drag file to Telegram, Discord or folder",
+    "dragOverlayTitle": "Drop file into another program",
+    "dragForExample": "например:",
+    "dragBadgeBrowser": "Browser",
+    "dragBadgeFolder": "Explorer"
   },
   "gpu": {
     "label": "GPU (NVENC) ",
@@ -466,12 +477,14 @@
     "noWatermarkHint": "Без водяного знака, если источник позволяет",
     "downloadFinished": "Взрыв-загрузка завершена",
     "waitingToStart": "Ожидание взрыва",
+    "downloadingMedia": "Взрыв-скачивание медиа...",
     "stopDownload": "Остановить загрузку",
     "status": {
       "downloading": "Взрывается",
       "completed": "Взорвано",
       "error": "Осечка",
-      "pending": "В очереди на взрыв"
+      "pending": "В очереди на взрыв",
+      "stopped": "Взрыв остановлен"
     }
   }
 }

@@ -3,6 +3,10 @@
     "title": "Szhimatar",
     "version": "Versio"
   },
+  "header": {
+    "collapse": "Faldi kapon",
+    "expand": "Malfaldi kapon"
+  },
   "main": {
     "selectFiles": "Elekti dosierojn",
     "dropFilesHere": "aŭ trenu dosierojn ĉi tien",
@@ -348,7 +352,14 @@
     "trimReadonly": "Tondado redakteblas nur dum la ero estas atendanta",
     "retry": "Reprovi (anstataŭigi)",
     "retryNewFile": "Re-bildigi kiel nova versio",
-    "stopJob": "Haltigi taskon"
+    "stopJob": "Haltigi taskon",
+    "copyToClipboard": "Copy file to clipboard",
+    "copiedToClipboard": "Copied to clipboard",
+    "dragHandleTooltip": "Hold and drag file to Telegram, Discord or folder",
+    "dragOverlayTitle": "Drop file into another program",
+    "dragForExample": "ekzemple:",
+    "dragBadgeBrowser": "Browser",
+    "dragBadgeFolder": "Explorer"
   },
   "gpu": {
     "label": "GPU (NVENC)",
@@ -466,12 +477,14 @@
     "noWatermarkHint": "Sen akvomarko se fonto kaj formato permesas",
     "downloadFinished": "Elŝuto finita",
     "waitingToStart": "Atendas komencon",
+    "downloadingMedia": "Elŝutante medion...",
     "stopDownload": "Haltigi elŝuton",
     "status": {
       "downloading": "Elŝutante",
       "completed": "Preta",
       "error": "Eraro",
-      "pending": "En vico"
+      "pending": "En vico",
+      "stopped": "Haltigita"
     }
   }
 }

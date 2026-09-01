@@ -19,6 +19,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
           'vendor-framer': ['framer-motion'],
           'vendor-icons': ['lucide-react'],
           'vendor-tauri': ['@tauri-apps/api'],

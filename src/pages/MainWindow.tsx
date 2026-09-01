@@ -1,20 +1,25 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { appWindow } from '@tauri-apps/api/window';
 import { open } from '@tauri-apps/api/dialog';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
-import PresetManager from '../components/PresetManager';
-
-import PreviewPanel from '../components/PreviewPanel';
+import { Suspense, lazy } from 'react';
 import RenderJobItem from '../components/RenderJobItem';
+import DownloadJobItem from '../components/DownloadJobItem';
 import useRenderQueue from '../hooks/useRenderQueue';
 import useDownloadQueue from '../hooks/useDownloadQueue';
-import StatisticsPanel from '../components/StatisticsPanel';
+import { isSelfDragActive } from '../hooks/useFileDragOut';
+
+const PresetManager = lazy(() => import('../components/PresetManager'));
+const PreviewPanel = lazy(() => import('../components/PreviewPanel'));
+const StatisticsPanel = lazy(() => import('../components/StatisticsPanel'));
 import { UpdateService, UpdateState } from '../services/UpdateService';
-import { Film, Volume2, Settings, BarChart3, Folder, Play, Pause, Square, RefreshCw, Sparkles, HardDrive, Check, X, Clock, AlertTriangle, Trash2, Download, Loader2, ChevronDown } from 'lucide-react';
+import { Film, Volume2, Settings, BarChart3, Folder, Play, Pause, Square, RefreshCw, Sparkles, HardDrive, Check, X, Clock, AlertTriangle, Trash2, Download, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import type { RenderJob } from '../services/RenderService';
+import type { DownloadQueueItem, DownloadStatus } from '../services/DownloadService';
 import type {
   AppPreset,
   VideoSettings,
@@ -24,6 +29,9 @@ import type {
 } from '../types';
 import '../styles/MainWindow.css';
 console.log("Imports completed");
+
+const SUPPORTED_VIDEO_EXTENSIONS = ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v', '3gp', 'ts', 'mts', 'm2ts', 'vob', 'ogv', 'mpg', 'mpeg'];
+const VIDEO_EXT_REGEX = new RegExp(`\\.(${SUPPORTED_VIDEO_EXTENSIONS.join('|')})$`, 'i');
 
 type DownloadFormatOption = {
   label: string;
@@ -35,41 +43,10 @@ type DownloadFormatOption = {
   is_audio_only: boolean;
 };
 
-type DownloadStatus = 'pending' | 'downloading' | 'completed' | 'error';
-
-interface DownloadQueueItem {
-  id: string;
-  url: string;
-  label: string;
-  quality: string;
-  format: string;
-  savePath: string;
-  status: DownloadStatus;
-  progress: number;
-  eta?: string | null;
-  speed?: string | null;
-  message?: string;
-}
-
-interface DownloadProgressEvent {
-  job_id: string;
-  url: string;
-  progress_percent: number;
-  eta?: string | null;
-  speed?: string | null;
-  line?: string;
-}
-
-interface DownloadCompleteEvent {
-  job_id: string;
-  url: string;
-  save_path: string;
-}
-
-interface DownloadErrorEvent {
-  job_id: string;
-  url: string;
-  error: string;
+interface VideoMetadataResponse {
+  title?: string | null;
+  duration?: number | null;
+  formats: DownloadFormatOption[];
 }
 
 const DEFAULT_DOWNLOAD_FORMATS: DownloadFormatOption[] = [
@@ -269,6 +246,26 @@ const MainWindow: React.FC<MainWindowProps> = ({
   const minTrimDurationSec = 1;
 
   const [showStats, setShowStats] = useState(false);
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('isHeaderCollapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleHeaderCollapsed = useCallback((collapsed?: boolean) => {
+    setIsHeaderCollapsed((prev) => {
+      const next = typeof collapsed === 'boolean' ? collapsed : !prev;
+      try {
+        localStorage.setItem('isHeaderCollapsed', String(next));
+      } catch (e) {
+        console.warn('Failed to save isHeaderCollapsed to localStorage:', e);
+      }
+      return next;
+    });
+  }, []);
+
   const [showPreview, setShowPreview] = useState(false);
   const [selectedPreviewPath, setSelectedPreviewPath] = useState<string>('');
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -283,9 +280,64 @@ const MainWindow: React.FC<MainWindowProps> = ({
   const [downloadUrl, setDownloadUrl] = useState('');
   const [downloadFormats, setDownloadFormats] = useState<DownloadFormatOption[]>(DEFAULT_DOWNLOAD_FORMATS);
   const [selectedDownloadFormat, setSelectedDownloadFormat] = useState(DEFAULT_DOWNLOAD_FORMATS[0].label);
+  const [parsedVideoTitle, setParsedVideoTitle] = useState<string>('');
   const [isLoadingDownloadFormats, setIsLoadingDownloadFormats] = useState(false);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isDropError, setIsDropError] = useState(false);
+  const [isDropSuccess, setIsDropSuccess] = useState(false);
+  const [ripplePos, setRipplePos] = useState<{ x: number; y: number } | null>(null);
+  const emptyStateRef = useRef<HTMLDivElement>(null);
+  const queueListRef = useRef<HTMLDivElement>(null);
+  const lastPointerPosRef = useRef<{ clientX: number; clientY: number } | null>(null);
+  const dropErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dropSuccessTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const triggerDropError = useCallback(() => {
+    if (dropErrorTimeoutRef.current) {
+      clearTimeout(dropErrorTimeoutRef.current);
+    }
+    setIsDropError(true);
+    dropErrorTimeoutRef.current = setTimeout(() => {
+      setIsDropError(false);
+    }, 600);
+  }, []);
+
+  const triggerDropSuccess = useCallback((customCoords?: { clientX: number; clientY: number } | null) => {
+    if (dropSuccessTimeoutRef.current) {
+      clearTimeout(dropSuccessTimeoutRef.current);
+    }
+
+    const pointer = customCoords !== undefined ? customCoords : lastPointerPosRef.current;
+    const targetEl = emptyStateRef.current || queueListRef.current;
+
+    if (pointer && targetEl) {
+      const rect = targetEl.getBoundingClientRect();
+      const x = Math.max(0, Math.min(rect.width, pointer.clientX - rect.left));
+      const y = Math.max(0, Math.min(rect.height, pointer.clientY - rect.top));
+      setRipplePos({ x, y });
+    } else {
+      setRipplePos(null);
+    }
+
+    setIsDropSuccess(true);
+    dropSuccessTimeoutRef.current = setTimeout(() => {
+      setIsDropSuccess(false);
+      setRipplePos(null);
+    }, 950);
+  }, []);
+
+  // Cleanup drop timers on unmount
+  useEffect(() => {
+    return () => {
+      if (dropErrorTimeoutRef.current) {
+        clearTimeout(dropErrorTimeoutRef.current);
+      }
+      if (dropSuccessTimeoutRef.current) {
+        clearTimeout(dropSuccessTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Check for updates after 2 seconds
   useEffect(() => {
@@ -311,6 +363,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
     if (!trimmed) {
       setDownloadFormats(DEFAULT_DOWNLOAD_FORMATS);
       setSelectedDownloadFormat(DEFAULT_DOWNLOAD_FORMATS[0].label);
+      setParsedVideoTitle('');
       setIsLoadingDownloadFormats(false);
       return;
     }
@@ -318,6 +371,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
     if (!/^https?:\/\//i.test(trimmed)) {
       setDownloadFormats(DEFAULT_DOWNLOAD_FORMATS);
       setSelectedDownloadFormat(DEFAULT_DOWNLOAD_FORMATS[0].label);
+      setParsedVideoTitle('');
       setIsLoadingDownloadFormats(false);
       return;
     }
@@ -327,13 +381,18 @@ const MainWindow: React.FC<MainWindowProps> = ({
 
     const timer = setTimeout(async () => {
       try {
-        const formats = await invoke<DownloadFormatOption[]>('get_video_formats', { url: trimmed });
+        const metadata = await invoke<VideoMetadataResponse>('get_video_formats', { url: trimmed });
 
         if (requestId !== downloadFormatsRequestRef.current) {
           return;
         }
 
-        const normalized = normalizeDownloadFormats(formats?.length ? formats : DEFAULT_DOWNLOAD_FORMATS);
+        if (metadata.title) {
+          setParsedVideoTitle(metadata.title);
+        }
+
+        const formatsList = metadata.formats?.length ? metadata.formats : DEFAULT_DOWNLOAD_FORMATS;
+        const normalized = normalizeDownloadFormats(formatsList);
         setDownloadFormats(normalized);
 
         setSelectedDownloadFormat((current) => (
@@ -352,7 +411,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
           setIsLoadingDownloadFormats(false);
         }
       }
-    }, 450);
+    }, 350);
 
     return () => clearTimeout(timer);
   }, [downloadUrl]);
@@ -464,12 +523,13 @@ const MainWindow: React.FC<MainWindowProps> = ({
       console.log('[MainWindow] Adding CLI files to queue:', cliFiles);
       addFiles(cliFiles).then(() => {
         console.log('[MainWindow] CLI files added successfully');
+        triggerDropSuccess();
         onCliFilesProcessed?.();
       }).catch(err => {
         console.error('[MainWindow] Failed to add CLI files:', err);
       });
     }
-  }, [cliFiles, addFiles, onCliFilesProcessed]);
+  }, [cliFiles, addFiles, onCliFilesProcessed, triggerDropSuccess]);
 
   const handleSelectFiles = async () => {
     try {
@@ -477,17 +537,96 @@ const MainWindow: React.FC<MainWindowProps> = ({
         multiple: true,
         filters: [{
           name: 'Video',
-          extensions: ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm']
+          extensions: SUPPORTED_VIDEO_EXTENSIONS,
         }]
       });
 
-      if (selected && Array.isArray(selected)) {
+      if (selected && Array.isArray(selected) && selected.length > 0) {
         await addFiles(selected);
+        triggerDropSuccess();
+      } else if (selected && typeof selected === 'string') {
+        await addFiles([selected]);
+        triggerDropSuccess();
       }
     } catch (error) {
       console.error('Failed to select files:', error);
     }
   };
+
+  // Listen for Tauri native file drop events
+  useEffect(() => {
+    let isMounted = true;
+    let unlistenFn: UnlistenFn | undefined;
+
+    const setupFileDrop = async () => {
+      try {
+        const unlisten = await appWindow.onFileDropEvent(async (event) => {
+          if (!isMounted) return;
+
+          // If a file is being dragged out from Szhimatar, ignore self-drop and self-hover events
+          if (isSelfDragActive()) {
+            if (event.payload.type === 'cancel' || event.payload.type === 'drop') {
+              setIsDragging(false);
+            }
+            return;
+          }
+
+          if (event.payload.type === 'hover') {
+            setIsDragging(true);
+          } else if (event.payload.type === 'drop') {
+            setIsDragging(false);
+            const droppedPaths = event.payload.paths;
+            const validFiles = droppedPaths.filter((filePath) =>
+              VIDEO_EXT_REGEX.test(filePath)
+            );
+            if (validFiles.length > 0) {
+              await addFiles(validFiles);
+              triggerDropSuccess();
+            } else if (droppedPaths.length > 0) {
+              triggerDropError();
+            }
+          } else if (event.payload.type === 'cancel') {
+            setIsDragging(false);
+          }
+        });
+
+        if (isMounted) {
+          unlistenFn = unlisten;
+        } else {
+          unlisten();
+        }
+      } catch (error) {
+        console.error('[MainWindow] Failed to register file drop listener:', error);
+      }
+    };
+
+    setupFileDrop();
+
+    return () => {
+      isMounted = false;
+      if (unlistenFn) {
+        unlistenFn();
+      }
+    };
+  }, [addFiles, triggerDropError, triggerDropSuccess]);
+
+  // Prevent default browser drag/drop behavior on window (prevents navigating away) and track cursor
+  useEffect(() => {
+    const preventDragDropDefaults = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.clientX || e.clientY) {
+        lastPointerPosRef.current = { clientX: e.clientX, clientY: e.clientY };
+      }
+    };
+
+    window.addEventListener('dragover', preventDragDropDefaults);
+    window.addEventListener('drop', preventDragDropDefaults);
+
+    return () => {
+      window.removeEventListener('dragover', preventDragDropDefaults);
+      window.removeEventListener('drop', preventDragDropDefaults);
+    };
+  }, []);
 
   const handleSelectOutputFolder = async () => {
     try {
@@ -526,8 +665,11 @@ const MainWindow: React.FC<MainWindowProps> = ({
         selectedFormat.quality,
         selectedFormat.format,
         selectedFormat.label,
-        savePath || t('download.defaultDownloadsFolder')
+        savePath,
+        parsedVideoTitle || undefined
       );
+      setDownloadUrl('');
+      setParsedVideoTitle('');
     } catch (error) {
       console.error('[MainWindow] Download failed:', error);
     }
@@ -561,15 +703,16 @@ const MainWindow: React.FC<MainWindowProps> = ({
     e.preventDefault();
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files)
-      .filter(f => /\.(mp4|avi|mkv|mov|wmv|flv|webm)$/i.test(f.name))
-      .map(f => (f as File & { path?: string }).path || f.name); // Using fallback to f.name for testing
+      .map(f => (f as File & { path?: string }).path)
+      .filter((p): p is string => typeof p === 'string' && VIDEO_EXT_REGEX.test(p));
       
-    // Filter out undefined/empty paths just in case
-    const validFiles = files.filter(f => f) as string[];
-    if (validFiles.length > 0) {
-      await addFiles(validFiles);
+    if (files.length > 0) {
+      await addFiles(files);
+      triggerDropSuccess();
+    } else if (e.dataTransfer.files.length > 0) {
+      triggerDropError();
     }
-  }, [addFiles]);
+  }, [addFiles, triggerDropError, triggerDropSuccess]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -590,22 +733,9 @@ const MainWindow: React.FC<MainWindowProps> = ({
 
 
 
-  const getDownloadStatusDisplay = (status: DownloadStatus) => {
-    switch (status) {
-      case 'downloading':
-        return { text: t('download.status.downloading'), color: theme.colors.primary, icon: <RefreshCw size={14} strokeWidth={2} className="download-spin" /> };
-      case 'completed':
-        return { text: t('download.status.completed'), color: theme.colors.success, icon: <Check size={14} strokeWidth={2} /> };
-      case 'error':
-        return { text: t('download.status.error'), color: theme.colors.error, icon: <X size={14} strokeWidth={2} /> };
-      case 'pending':
-      default:
-        return { text: t('download.status.pending'), color: theme.colors.textSecondary, icon: <Clock size={14} strokeWidth={2} /> };
-    }
-  };
-
   const handleClearCompleted = () => {
     clearCompleted();
+    clearCompletedDownloads();
   };
 
   // Get status display text, color and icon
@@ -771,31 +901,105 @@ const MainWindow: React.FC<MainWindowProps> = ({
 
   return ( 
     <div className="main-window fade-in" style={{ color: theme.colors.text }}>
-      <header className="header" style={{ borderColor: theme.colors.border }}>
-        <h1>{t('app.title')}</h1>
-        <div className="header-buttons">
-          <button onClick={() => onNavigate('video')} style={{ background: theme.colors.primary, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Film size={18} strokeWidth={1.5} /> {t('video.title')}
-          </button>
-          <button onClick={() => onNavigate('audio')} style={{ background: theme.colors.primary, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Volume2 size={18} strokeWidth={1.5} /> {t('audio.title')}
-          </button>
-          <button 
-            onClick={() => onNavigate('general')} 
-            style={{ 
-              background: updateAvailable ? theme.colors.success : theme.colors.secondary, 
-              color: '#fff',
-              animation: updateAvailable ? 'pulse 2s infinite' : 'none',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            {updateAvailable ? <Sparkles size={18} strokeWidth={1.5} /> : <Settings size={18} strokeWidth={1.5} />} {updateAvailable ? t('settings.update_available') : t('settings.title')}
-          </button>
-          <button onClick={() => setShowStats(true)} style={{ background: theme.colors.primary, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <BarChart3 size={18} strokeWidth={1.5} /> {t('stats.title') || 'Statistics'}
-          </button>
+      <header
+        className={`header ${isHeaderCollapsed ? 'header--collapsed' : ''}`}
+        style={{ borderColor: isHeaderCollapsed ? 'transparent' : theme.colors.border }}
+        data-tauri-drag-region
+      >
+        <div className="header-row" data-tauri-drag-region>
+          {/* Left group: Video, Audio */}
+          <div className={`header-group header-group--left ${isHeaderCollapsed ? 'is-hidden' : ''}`} data-tauri-drag-region>
+            <button
+              className="header-nav-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigate('video');
+              }}
+              style={{ background: theme.colors.primary, color: '#fff' }}
+            >
+              <Film size={18} strokeWidth={1.5} /> <span>{t('video.title')}</span>
+            </button>
+            <button
+              className="header-nav-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigate('audio');
+              }}
+              style={{ background: theme.colors.primary, color: '#fff' }}
+            >
+              <Volume2 size={18} strokeWidth={1.5} /> <span>{t('audio.title')}</span>
+            </button>
+          </div>
+
+          {/* Center group: Dynamic Island morphing toggle button */}
+          <div className="header-group header-group--center" data-tauri-drag-region>
+            <button
+              type="button"
+              className={`dynamic-island ${isHeaderCollapsed ? 'dynamic-island--collapsed' : 'dynamic-island--expanded'}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggleHeaderCollapsed(!isHeaderCollapsed);
+              }}
+              title={isHeaderCollapsed ? (t('header.expand') || 'Развернуть шапку') : (t('header.collapse') || 'Свернуть шапку')}
+              aria-label={isHeaderCollapsed ? (t('header.expand') || 'Развернуть шапку') : (t('header.collapse') || 'Свернуть шапку')}
+            >
+              <AnimatePresence mode="wait" initial={false}>
+                {isHeaderCollapsed ? (
+                  <motion.div
+                    key="island-content-collapsed"
+                    className="dynamic-island-inner"
+                    initial={{ opacity: 0, scale: 0.94 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.94 }}
+                    transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                  >
+                    <span className="dynamic-island-title">Szhimatar</span>
+                    <ChevronDown size={15} strokeWidth={2.4} className="dynamic-island-icon" />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="island-content-expanded"
+                    className="dynamic-island-inner"
+                    initial={{ opacity: 0, scale: 0.94 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.94 }}
+                    transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                  >
+                    <span className="dynamic-island-title">Szhimatar</span>
+                    <ChevronUp size={15} strokeWidth={2.4} className="dynamic-island-icon" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </button>
+          </div>
+
+          {/* Right group: Statistics, Settings */}
+          <div className={`header-group header-group--right ${isHeaderCollapsed ? 'is-hidden' : ''}`} data-tauri-drag-region>
+            <button
+              className="header-nav-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowStats(true);
+              }}
+              style={{ background: theme.colors.primary, color: '#fff' }}
+            >
+              <BarChart3 size={18} strokeWidth={1.5} /> <span>{t('stats.title') || 'Statistics'}</span>
+            </button>
+            <button 
+              className="header-nav-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onNavigate('general');
+              }} 
+              style={{ 
+                background: updateAvailable ? theme.colors.success : theme.colors.secondary, 
+                color: '#fff',
+                animation: updateAvailable ? 'pulse 2s infinite' : 'none',
+              }}
+            >
+              {updateAvailable ? <Sparkles size={18} strokeWidth={1.5} /> : <Settings size={18} strokeWidth={1.5} />} <span>{updateAvailable ? t('settings.update_available') : t('settings.title')}</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -861,65 +1065,68 @@ const MainWindow: React.FC<MainWindowProps> = ({
         </div>
       )}
 
-      <div className="content">
+      <div className={`content ${isHeaderCollapsed ? 'content--header-collapsed' : ''}`}>
 
         {/* ══════════════════════════════════════════════════════
-            UNIFIED ACTION BAR — одна горизонтальная строка
+            UNIFIED ACTION BAR — разнесенные края (space-between)
             ══════════════════════════════════════════════════════ */}
         <div className="action-bar">
 
           {/* ── Блок пресетов (left) ── */}
-          <PresetManager
-            currentVideoSettings={videoSettings}
-            currentAudioSettings={audioSettings}
-            currentMainScreenSettings={mainScreenSettings}
-            currentWatermarkSettings={watermarkSettings}
-            onApplyPreset={handleApplyPreset}
-            selectedPresetName={selectedPresetName}
-            setSelectedPresetName={setSelectedPresetName}
-          />
-
-          {/* ── Разделитель ── */}
-          <div className="action-bar-divider" style={{ background: theme.colors.border }} />
+          <div className="action-bar-left">
+            <Suspense fallback={null}>
+              <PresetManager
+                currentVideoSettings={videoSettings}
+                currentAudioSettings={audioSettings}
+                currentMainScreenSettings={mainScreenSettings}
+                currentWatermarkSettings={watermarkSettings}
+                onApplyPreset={handleApplyPreset}
+                selectedPresetName={selectedPresetName}
+                setSelectedPresetName={setSelectedPresetName}
+              />
+            </Suspense>
+          </div>
 
           {/* ── Блок папки сохранения (right) ── */}
-          <button
-            className="action-bar-btn action-bar-btn--primary"
-            onClick={handleSelectOutputFolder}
-            disabled={mainScreenSettings.saveInSourceDirectory}
-            style={{
-              background: theme.colors.primary,
-              color: '#fff',
-              flexShrink: 0,
-              opacity: mainScreenSettings.saveInSourceDirectory ? 0.5 : 1,
-              cursor: mainScreenSettings.saveInSourceDirectory ? 'not-allowed' : 'pointer',
-            }}
-            title={mainScreenSettings.customOutputPath || t('main.outputFolder')}
-          >
-            <HardDrive size={16} strokeWidth={1.8} />
-            <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {mainScreenSettings.customOutputPath
-                ? mainScreenSettings.customOutputPath.split(/[\\\/]/).pop()
-                : t('main.outputFolder')}
-            </span>
-          </button>
+          <div className="action-bar-right">
+            <button
+              className="action-bar-btn action-bar-btn--primary"
+              onClick={handleSelectOutputFolder}
+              disabled={mainScreenSettings.saveInSourceDirectory}
+              style={{
+                background: theme.colors.primary,
+                color: '#fff',
+                flexShrink: 0,
+                opacity: mainScreenSettings.saveInSourceDirectory ? 0.5 : 1,
+                cursor: mainScreenSettings.saveInSourceDirectory ? 'not-allowed' : 'pointer',
+              }}
+              title={mainScreenSettings.customOutputPath || t('main.outputFolder')}
+            >
+              <HardDrive size={15} strokeWidth={1.8} />
+              <span style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {mainScreenSettings.customOutputPath
+                  ? mainScreenSettings.customOutputPath.split(/[\\\/]/).pop()
+                  : t('main.outputFolder')}
+              </span>
+            </button>
 
-          <motion.button
-            className="action-bar-btn action-bar-btn--icon"
-            type="button"
-            aria-pressed={mainScreenSettings.saveInSourceDirectory}
-            onClick={handleToggleSaveInSourceDirectory}
-            title={t('main.saveInSourceDirectory')}
-            initial={false}
-            animate={{
-              backgroundColor: mainScreenSettings.saveInSourceDirectory ? theme.colors.primary : 'rgba(var(--theme-bg-rgb), 0.22)',
-              color: mainScreenSettings.saveInSourceDirectory ? '#fff' : theme.colors.textSecondary,
-            }}
-            transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-            style={{ flexShrink: 0, border: `1px solid ${theme.colors.border}` }}
-          >
-            <FolderSyncIcon color={mainScreenSettings.saveInSourceDirectory ? '#fff' : theme.colors.text} />
-          </motion.button>
+            <motion.button
+              className="action-bar-btn action-bar-btn--icon"
+              type="button"
+              aria-pressed={mainScreenSettings.saveInSourceDirectory}
+              onClick={handleToggleSaveInSourceDirectory}
+              title={t('main.saveInSourceDirectory')}
+              initial={false}
+              animate={{
+                backgroundColor: mainScreenSettings.saveInSourceDirectory ? theme.colors.primary : 'rgba(var(--theme-bg-rgb), 0.22)',
+                color: mainScreenSettings.saveInSourceDirectory ? '#fff' : theme.colors.textSecondary,
+              }}
+              transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+              style={{ flexShrink: 0, border: `1px solid ${theme.colors.border}` }}
+            >
+              <FolderSyncIcon color={mainScreenSettings.saveInSourceDirectory ? '#fff' : theme.colors.text} />
+            </motion.button>
+          </div>
 
         </div>
         {/* ══════════════════════════════════════════════════════ */}
@@ -927,12 +1134,28 @@ const MainWindow: React.FC<MainWindowProps> = ({
         {/* ── EMPTY STATE (shown when no jobs and no downloads) ── */}
         {jobs.length === 0 && downloadQueue.length === 0 ? (
           <div
-            className={`empty-state${isDragging ? ' drag-over' : ''}`}
+            ref={emptyStateRef}
+            className={`empty-state${isDragging ? ' drag-over' : ''}${isDropError ? ' shake-error' : ''}${isDropSuccess ? ' drop-success' : ''}`}
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
-            onClick={handleSelectFiles}
+            onClick={(e) => {
+              lastPointerPosRef.current = { clientX: e.clientX, clientY: e.clientY };
+              handleSelectFiles();
+            }}
           >
+            {isDropSuccess && (
+              <div
+                className="water-ripple-container"
+                style={{
+                  '--ripple-x': ripplePos ? `${ripplePos.x}px` : '50%',
+                  '--ripple-y': ripplePos ? `${ripplePos.y}px` : '50%',
+                } as React.CSSProperties}
+              >
+                <span className="water-ripple-wave" />
+                <span className="water-ripple-wave delay" />
+              </div>
+            )}
             <div className="empty-state-icon">
               <Folder size={48} strokeWidth={1} />
             </div>
@@ -1016,11 +1239,19 @@ const MainWindow: React.FC<MainWindowProps> = ({
                 </button>
                 {/* Stats */}
                 <div className="queue-stats" style={{ fontSize: '0.85rem', color: theme.colors.textSecondary, display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 8 }}>
-                  {completedJobs > 0 && <span style={{ color: theme.colors.success, display: 'flex', alignItems: 'center', gap: '4px' }}><Check size={14} strokeWidth={2} /> {completedJobs}</span>}
+                  {(completedJobs + downloadQueue.filter(i => i.status === 'completed').length) > 0 && (
+                    <span style={{ color: theme.colors.success, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Check size={14} strokeWidth={2} /> {completedJobs + downloadQueue.filter(i => i.status === 'completed').length}
+                    </span>
+                  )}
                   {errorJobs > 0 && <span style={{ color: theme.colors.error, display: 'flex', alignItems: 'center', gap: '4px' }}><X size={14} strokeWidth={2} /> {errorJobs}</span>}
                   {pendingJobs > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={14} strokeWidth={2} /> {pendingJobs}</span>}
-                  {downloadQueue.length > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Download size={14} strokeWidth={2} /> {downloadQueue.length}</span>}
-                  {completedJobs > 0 && (
+                  {downloadQueue.some(i => i.status === 'downloading') && (
+                    <span style={{ color: theme.colors.primary, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Download size={14} strokeWidth={2} /> {downloadQueue.filter(i => i.status === 'downloading').length}
+                    </span>
+                  )}
+                  {(completedJobs + downloadQueue.filter(i => i.status === 'completed').length) > 0 && (
                     <button
                       onClick={handleClearCompleted}
                       style={{ marginLeft: '4px', padding: '2px 8px', fontSize: '0.8rem', background: 'rgba(var(--theme-bg-rgb), 0.2)', backdropFilter: 'blur(8px)', color: theme.colors.text, border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', cursor: 'pointer' }}
@@ -1084,185 +1315,36 @@ const MainWindow: React.FC<MainWindowProps> = ({
               )}
             </AnimatePresence>
 
-            <div className={`queue-list ${needsTopPreviewSpace ? 'has-top-preview-room' : ''}`} style={{ borderColor: theme.colors.border }}>
+            <div
+              ref={queueListRef}
+              className={`queue-list ${needsTopPreviewSpace ? 'has-top-preview-room' : ''}${isDropError ? ' shake-error' : ''}${isDropSuccess ? ' drop-success' : ''}`}
+              style={{ borderColor: theme.colors.border }}
+            >
+              {isDropSuccess && (
+                <div
+                  className="water-ripple-container"
+                  style={{
+                    '--ripple-x': ripplePos ? `${ripplePos.x}px` : '50%',
+                    '--ripple-y': ripplePos ? `${ripplePos.y}px` : '50%',
+                  } as React.CSSProperties}
+                >
+                  <span className="water-ripple-wave" />
+                  <span className="water-ripple-wave delay" />
+                </div>
+              )}
               <>
                 <AnimatePresence initial={false}>
-                  {downloadQueue.map((item) => {
-                    const statusDisplay = getDownloadStatusDisplay(item.status);
-
-                    return (
-                      <motion.div
-                        key={item.id}
-                        className="queue-item"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -8 }}
-                        transition={{ duration: 0.18 }}
-                        style={{ borderColor: theme.colors.border }}
-                      >
-                        <div className="item-info">
-                          <div className="item-main-info" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', minHeight: '32px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-                              <span style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                padding: '3px 8px',
-                                borderRadius: '4px',
-                                fontSize: '0.75rem',
-                                fontWeight: 'bold',
-                                background: `${statusDisplay.color}20`,
-                                color: statusDisplay.color,
-                                whiteSpace: 'nowrap'
-                              }}>
-                                <span>{statusDisplay.icon}</span>
-                                <span>{statusDisplay.text}</span>
-                              </span>
-                              <span className="item-name" title={item.url} style={{
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                                flex: 1
-                              }}>
-                                {item.label}
-                              </span>
-                            </div>
-                            <div className="item-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center', marginLeft: '8px' }}>
-                              {item.status === 'downloading' && (
-                                <button
-                                  onClick={() => stopDownload(item.id)}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    width: '28px',
-                                    height: '28px',
-                                    background: `${theme.colors.warning}15`,
-                                    border: `1px solid ${theme.colors.warning}40`,
-                                    borderRadius: '6px',
-                                    color: theme.colors.warning,
-                                    cursor: 'pointer',
-                                    fontSize: '1rem',
-                                    fontWeight: 'bold',
-                                    transition: 'all 0.15s ease'
-                                  }}
-                                  onMouseEnter={(e) => {
-                                    e.currentTarget.style.background = `${theme.colors.warning}30`;
-                                    e.currentTarget.style.borderColor = theme.colors.warning;
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    e.currentTarget.style.background = `${theme.colors.warning}15`;
-                                    e.currentTarget.style.borderColor = `${theme.colors.warning}40`;
-                                  }}
-                                  title={t('download.stopDownload') || 'Stop download'}
-                                >
-                                  <Square size={13} fill="currentColor" />
-                                </button>
-                              )}
-                              <button
-                                onClick={() => removeDownloadJob(item.id)}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  width: '28px',
-                                  height: '28px',
-                                  background: `${theme.colors.error}15`,
-                                  border: `1px solid ${theme.colors.error}40`,
-                                  borderRadius: '6px',
-                                  color: theme.colors.error,
-                                  cursor: 'pointer',
-                                  fontSize: '1.2rem',
-                                  fontWeight: 'bold',
-                                  transition: 'all 0.15s ease'
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.currentTarget.style.background = `${theme.colors.error}30`;
-                                  e.currentTarget.style.borderColor = theme.colors.error;
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = `${theme.colors.error}15`;
-                                  e.currentTarget.style.borderColor = `${theme.colors.error}40`;
-                                }}
-                                title={t('queue.deleteFromQueue')}
-                              >
-                                <Trash2 size={14} strokeWidth={2} />
-                              </button>
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
-                            <div className="download-queue-meta">
-                              <span>{item.format.toUpperCase()}</span>
-                              <span>•</span>
-                              <span>{item.savePath}</span>
-                            </div>
-                            <div className="download-queue-url" title={item.url}>
-                              {item.url}
-                            </div>
-                            {item.message && (
-                              <div className="download-queue-message" style={{ color: item.status === 'error' ? theme.colors.error : theme.colors.textSecondary }}>
-                                {item.message}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        {item.status === 'downloading' && (
-                          <div className="progress-section" style={{ marginTop: '8px' }}>
-                            <div className="progress-bar" style={{ background: theme.colors.border, height: '8px', borderRadius: '4px' }}>
-                              <div
-                                className="progress-fill"
-                                style={{
-                                  width: `${item.progress}%`,
-                                  background: theme.colors.primary,
-                                  height: '100%',
-                                  borderRadius: '4px',
-                                  transition: 'width 0.3s ease'
-                                }}
-                              />
-                            </div>
-                            <div className="progress-details" style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              fontSize: '0.8rem',
-                              color: theme.colors.textSecondary,
-                              marginTop: '4px'
-                            }}>
-                              <span>{item.progress.toFixed(1)}%</span>
-                              <div style={{ display: 'flex', gap: '12px' }}>
-                                <span>ETA: {item.eta || '--:--'}</span>
-                                <span>{item.speed || '—'}</span>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        {item.status === 'completed' && (
-                          <div className="completed-info" style={{
-                            fontSize: '0.8rem',
-                            color: theme.colors.success,
-                            marginTop: '4px',
-                            display: 'flex',
-                            gap: '8px'
-                          }}>
-                            <span>{t('download.downloadFinished')}</span>
-                            <span style={{ color: theme.colors.textSecondary, fontFamily: 'monospace' }}>
-                              {item.savePath}
-                            </span>
-                          </div>
-                        )}
-                        {item.status === 'pending' && (
-                          <div className="completed-info" style={{
-                            fontSize: '0.8rem',
-                            color: theme.colors.textSecondary,
-                            marginTop: '4px',
-                            display: 'flex',
-                            gap: '8px'
-                          }}>
-                            <span>{t('download.waitingToStart')}</span>
-                          </div>
-                        )}
-                      </motion.div>
-                    );
-                  })}
+                  {downloadQueue.map((item) => (
+                    <DownloadJobItem
+                      key={item.id}
+                      item={item}
+                      theme={theme}
+                      t={t}
+                      onShowInExplorer={handleShowInExplorer}
+                      onRemoveJob={removeDownloadJob}
+                      onStopJob={stopDownload}
+                    />
+                  ))}
                 </AnimatePresence>
 
                 {jobs.length > 0 && downloadQueue.length > 0 && (
@@ -1292,6 +1374,35 @@ const MainWindow: React.FC<MainWindowProps> = ({
             </div>
           </div>
         )}
+
+        {/* ── ACTIVE QUEUE DRAG OVERLAY ── */}
+        <AnimatePresence>
+          {isDragging && (jobs.length > 0 || downloadQueue.length > 0) && (
+            <motion.div
+              className="queue-drop-overlay"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.15 }}
+              style={{
+                borderColor: theme.colors.primary,
+              }}
+            >
+              <div
+                className="queue-drop-overlay-icon"
+                style={{
+                  color: theme.colors.primary,
+                  backgroundColor: `${theme.colors.primary}20`,
+                }}
+              >
+                <Folder size={36} strokeWidth={1.8} />
+              </div>
+              <p className="queue-drop-overlay-title" style={{ color: theme.colors.text }}>
+                {t('main.dropFilesHere')}
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div className="controls">
           <motion.button
@@ -1349,7 +1460,9 @@ const MainWindow: React.FC<MainWindowProps> = ({
               transition={{ duration: 0.25, ease: 'easeOut' }}
               style={{ color: theme.colors.text }}
             >
-              <StatisticsPanel onClose={closeStats} />
+              <Suspense fallback={null}>
+                <StatisticsPanel onClose={closeStats} />
+              </Suspense>
             </motion.div>
           </motion.div>
         )}

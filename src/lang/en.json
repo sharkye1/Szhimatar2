@@ -3,6 +3,10 @@
     "title": "Szhimatar",
     "version": "Version"
   },
+  "header": {
+    "collapse": "Collapse header",
+    "expand": "Expand header"
+  },
   "main": {
     "selectFiles": "Select Files",
     "dropFilesHere": "or drag and drop files here",
@@ -20,7 +24,7 @@
     "or": "OR"
   },
   "video": {
-    "title": "Video Settings",
+    "title": "Video",
     "codec": "Codec",
     "bitrate": "Bitrate (Mbps)",
     "fps": "FPS",
@@ -131,7 +135,7 @@
     "selectAtLeastOne": "Please select at least one path"
   },
   "audio": {
-    "title": "Audio Settings",
+    "title": "Audio",
     "codec": "Codec",
     "bitrate": "Bitrate (kbps)",
     "channels": "Channels",
@@ -296,7 +300,7 @@
     "error": "Error"
   },
   "stats": {
-    "title": "Render Statistics",
+    "title": "Statistics",
     "loading": "Loading statistics...",
     "totalRenders": "Total Renders",
     "successful": "Successful",
@@ -348,7 +352,14 @@
     "trimReadonly": "Trim can be edited only while item is pending",
     "retry": "Retry (overwrite)",
     "retryNewFile": "Re-render as new version",
-    "stopJob": "Stop task"
+    "stopJob": "Stop task",
+    "copyToClipboard": "Copy file to clipboard",
+    "copiedToClipboard": "Copied to clipboard",
+    "dragHandleTooltip": "Hold and drag file to Telegram, Discord or folder",
+    "dragOverlayTitle": "Drop file into another program",
+    "dragForExample": "for example:",
+    "dragBadgeBrowser": "Browser",
+    "dragBadgeFolder": "Explorer"
   },
   "gpu": {
     "label": "GPU (NVENC)",
@@ -466,12 +477,14 @@
     "noWatermarkHint": "No watermark if source and format allow",
     "downloadFinished": "Download complete",
     "waitingToStart": "Waiting to start",
+    "downloadingMedia": "Downloading media...",
     "stopDownload": "Stop download",
     "status": {
       "downloading": "Downloading",
       "completed": "Completed",
       "error": "Error",
-      "pending": "Queued"
+      "pending": "Queued",
+      "stopped": "Stopped"
     }
   }
 }

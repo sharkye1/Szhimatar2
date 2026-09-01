@@ -680,11 +680,18 @@ fn show_in_explorer(file_path: String) -> Result<(), String> {
     {
         // Replace forward slashes with backslashes, as Explorer is very strict about paths for /select
         let windows_path = file_path.replace("/", "\\");
-        // Use explorer.exe /select to highlight the file
-        Command::new("explorer")
-            .args(["/select,", &windows_path])
-            .spawn()
-            .map_err(|e| format!("Failed to open explorer: {}", e))?;
+        if path.is_dir() {
+            Command::new("explorer")
+                .arg(&windows_path)
+                .spawn()
+                .map_err(|e| format!("Failed to open explorer: {}", e))?;
+        } else {
+            // Use explorer.exe /select to highlight the file
+            Command::new("explorer")
+                .args(["/select,", &windows_path])
+                .spawn()
+                .map_err(|e| format!("Failed to open explorer: {}", e))?;
+        }
     }
 
     #[cfg(target_os = "macos")]
@@ -3312,6 +3319,62 @@ fn check_network_proxy_vpn_status() -> Result<NetworkProxyVpnStatus, String> {
         })
     }
 }
+#[tauri::command]
+fn copy_file_to_clipboard(file_path: String) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use std::path::Path;
+        use clipboard_win::formats;
+
+        if !Path::new(&file_path).exists() {
+            return Err("Файл не найден".to_string());
+        }
+
+        let paths = vec![file_path];
+        let _clip = clipboard_win::Clipboard::new_attempts(10).map_err(|e| format!("Ошибка буфера обмена: {}", e))?;
+        clipboard_win::Setter::write_clipboard(&formats::FileList, paths.as_slice()).map_err(|e| format!("Ошибка буфера обмена: {}", e))
+    }
+    
+    #[cfg(not(windows))]
+    {
+        Err("Копирование файла в буфер обмена поддерживается только на Windows".to_string())
+    }
+}
+
+#[tauri::command]
+async fn start_drag_file(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+    file_path: String,
+) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use std::path::{Path, PathBuf};
+        let path = Path::new(&file_path);
+        if !path.exists() {
+            return Err("Файл не найден".to_string());
+        }
+
+        let path_buf = PathBuf::from(&file_path);
+        let item = drag::DragItem::Files(vec![path_buf]);
+        // Passing empty bytes allows Windows to use the standard native OS drag-and-drop cursor
+        let image = drag::Image::Raw(vec![]);
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        app.run_on_main_thread(move || {
+            let r = drag::start_drag(&window, item, image).map_err(|e| e.to_string());
+            let _ = tx.send(r);
+        })
+        .map_err(|e| e.to_string())?;
+
+        rx.recv().map_err(|e| e.to_string())?
+    }
+
+    #[cfg(not(windows))]
+    {
+        Err("Перетаскивание файлов поддерживается только на Windows".to_string())
+    }
+}
 
 fn main() {
     #[cfg(windows)]
@@ -3323,6 +3386,7 @@ fn main() {
     }
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_drag::init())
         .setup(|app| {
             let app_handle = app.handle().clone();
             yt_dlp_manager::bootstrap_yt_dlp(app_handle);
@@ -3336,6 +3400,8 @@ fn main() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            copy_file_to_clipboard,
+            start_drag_file,
             load_settings,
             save_settings,
             check_gpu_compatibility,
@@ -3392,6 +3458,7 @@ fn main() {
             check_network_proxy_vpn_status,
             // yt-dlp commands
             yt_dlp_manager::get_video_formats,
+            yt_dlp_manager::get_system_download_dir,
             yt_dlp_manager::download_media_link,
             yt_dlp_manager::stop_media_download,
         ])

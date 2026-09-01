@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import DownloadService, { DownloadQueueItem } from '../services/DownloadService';
 
 export interface UseDownloadQueueReturn {
@@ -8,7 +8,8 @@ export interface UseDownloadQueueReturn {
     quality: string,
     format: string,
     label: string,
-    savePath: string
+    savePath: string,
+    initialTitle?: string
   ) => Promise<string>;
   stopDownload: (jobId: string) => Promise<boolean>;
   removeDownloadJob: (jobId: string) => void;
@@ -32,9 +33,10 @@ export function useDownloadQueue(): UseDownloadQueueReturn {
       quality: string,
       format: string,
       label: string,
-      savePath: string
+      savePath: string,
+      initialTitle?: string
     ): Promise<string> => {
-      return DownloadService.startDownload(url, quality, format, label, savePath);
+      return DownloadService.startDownload(url, quality, format, label, savePath, initialTitle);
     },
     []
   );

@@ -3,6 +3,10 @@
     "title": "Szhimatar",
     "version": "版本"
   },
+  "header": {
+    "collapse": "折叠头部",
+    "expand": "展开头部"
+  },
   "main": {
     "selectFiles": "选择文件",
     "dropFilesHere": "或将文件拖放到此处",
@@ -348,7 +352,14 @@
     "trimReadonly": "仅在队列等待状态下可编辑裁剪",
     "retry": "重试（覆盖）",
     "retryNewFile": "重新渲染为新版本",
-    "stopJob": "停止任务"
+    "stopJob": "停止任务",
+    "copyToClipboard": "Copy file to clipboard",
+    "copiedToClipboard": "Copied to clipboard",
+    "dragHandleTooltip": "Hold and drag file to Telegram, Discord or folder",
+    "dragOverlayTitle": "Drop file into another program",
+    "dragForExample": "例如:",
+    "dragBadgeBrowser": "Browser",
+    "dragBadgeFolder": "Explorer"
   },
   "gpu": {
     "label": "GPU (NVENC)",
@@ -466,12 +477,14 @@
     "noWatermarkHint": "如果源和格式支持，则无水印",
     "downloadFinished": "下载完成",
     "waitingToStart": "等待开始",
+    "downloadingMedia": "正在下载媒体...",
     "stopDownload": "停止下载",
     "status": {
       "downloading": "下载中",
       "completed": "完成",
       "error": "错误",
-      "pending": "排队中"
+      "pending": "排队中",
+      "stopped": "已停止"
     }
   }
 }

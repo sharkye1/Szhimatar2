@@ -1,7 +1,11 @@
 {
   "app": {
     "title": "Szhimatar",
-    "version": "Verzija"
+    "version": "ဗားရှင်း"
+  },
+  "header": {
+    "collapse": "ခေါင်းစည်းကို ခေါက်ပါ",
+    "expand": "ခေါင်းစည်းကို ဖြန့်ပါ"
   },
   "main": {
     "selectFiles": "Izbrati fajly",
@@ -348,7 +352,14 @@
     "trimReadonly": "Obrezku možno mjenjati tolko poka element čeka",
     "retry": "Ponoviti (prepisati)",
     "retryNewFile": "Ponovi kao novu verziju",
-    "stopJob": "Ostanoviti zadacu"
+    "stopJob": "Ostanoviti zadacu",
+    "copyToClipboard": "Copy file to clipboard",
+    "copiedToClipboard": "Copied to clipboard",
+    "dragHandleTooltip": "Hold and drag file to Telegram, Discord or folder",
+    "dragOverlayTitle": "Drop file into another program",
+    "dragForExample": "naprimjer:",
+    "dragBadgeBrowser": "Browser",
+    "dragBadgeFolder": "Explorer"
   },
   "gpu": {
     "label": "GPU (NVENC)",
@@ -466,12 +477,14 @@
     "noWatermarkHint": "Bez vodnogo znaka, ako izvor i format dozvoljajųt",
     "downloadFinished": "Zagrųženje gotov",
     "waitingToStart": "Čeka se na start",
+    "downloadingMedia": "Stęganje medija...",
     "stopDownload": "Ostanoviti zagrųženje",
     "status": {
       "downloading": "Stęganje",
       "completed": "Gotovo",
       "error": "Giba",
-      "pending": "V črědě"
+      "pending": "V črědě",
+      "stopped": "Ostanovljeno"
     }
   }
 }

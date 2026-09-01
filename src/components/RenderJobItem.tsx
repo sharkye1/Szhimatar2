@@ -1,7 +1,9 @@
-﻿import React from 'react';
-import { Trash2, Folder, Square } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Trash2, Folder, Square, Copy, Check, GripVertical } from 'lucide-react';
+import { invoke } from '@tauri-apps/api/tauri';
 import { RenderJob } from '../services/RenderService';
 import { useJobProgress } from '../hooks/useRenderQueue';
+import { useFileDragOut } from '../hooks/useFileDragOut';
 
 export interface TrimFramePreviewState {
   jobId: string;
@@ -50,6 +52,33 @@ export const RenderJobItem: React.FC<RenderJobItemProps> = React.memo(({
 }) => {
   const liveProgress = useJobProgress(job.id);
   const statusDisplay = getStatusDisplay(job);
+  const { startFileDrag } = useFileDragOut();
+
+  const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) {
+        clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopyFile = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (copied || !job.outputPath) return;
+    try {
+      await invoke('copy_file_to_clipboard', { filePath: job.outputPath });
+      setCopied(true);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = window.setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to copy file:', err);
+    }
+  };
 
   const progress = liveProgress ? liveProgress.progress : job.progress;
   const fps = liveProgress ? liveProgress.fps : job.fps;
@@ -82,6 +111,17 @@ export const RenderJobItem: React.FC<RenderJobItemProps> = React.memo(({
             overflow: 'hidden',
           }}
         >
+          {/* Drag handle for completed jobs */}
+          {job.status === 'completed' && job.outputPath && (
+            <div
+              className="drag-handle-btn"
+              onMouseDown={(e) => startFileDrag(job.outputPath, job.fileName, e)}
+              title={t('queue.dragHandleTooltip') || 'Зажмите и перетащите файл в Telegram, Discord или папку'}
+            >
+              <GripVertical size={15} strokeWidth={2.4} />
+            </div>
+          )}
+
           {/* Status badge with icon */}
           <span
             style={{
@@ -291,6 +331,7 @@ export const RenderJobItem: React.FC<RenderJobItemProps> = React.memo(({
 
           {/* Show in Explorer button for completed tasks */}
           {job.status === 'completed' && job.outputPath && (
+            <>
             <button
               onClick={() => onShowInExplorer(job.outputPath)}
               style={{
@@ -320,6 +361,39 @@ export const RenderJobItem: React.FC<RenderJobItemProps> = React.memo(({
             >
               <Folder size={14} strokeWidth={1.5} /> {t('queue.show') || 'Show'}
             </button>
+            <button
+              onClick={handleCopyFile}
+              disabled={copied}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '4px 8px',
+                height: '28px',
+                background: copied ? `${theme.colors.success}30` : `${theme.colors.success}15`,
+                border: copied ? `1px solid ${theme.colors.success}` : `1px solid ${theme.colors.success}40`,
+                borderRadius: '6px',
+                color: theme.colors.success,
+                cursor: copied ? 'default' : 'pointer',
+                fontSize: '0.75rem',
+                fontWeight: '500',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                if (copied) return;
+                e.currentTarget.style.background = `${theme.colors.success}30`;
+                e.currentTarget.style.borderColor = theme.colors.success;
+              }}
+              onMouseLeave={(e) => {
+                if (copied) return;
+                e.currentTarget.style.background = `${theme.colors.success}15`;
+                e.currentTarget.style.borderColor = `${theme.colors.success}40`;
+              }}
+              title={copied ? (t('queue.copiedToClipboard') || 'Copied to clipboard') : (t('queue.copyToClipboard') || 'Copy file to clipboard')}
+            >
+              {copied ? <Check size={14} strokeWidth={2} /> : <Copy size={14} strokeWidth={1.5} />}
+            </button>
+            </>
           )}
 
           {/* Delete button */}

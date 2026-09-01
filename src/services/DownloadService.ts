@@ -1,11 +1,14 @@
-﻿import { invoke } from '@tauri-apps/api/tauri';
+import { invoke } from '@tauri-apps/api/tauri';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 
-export type DownloadStatus = 'pending' | 'downloading' | 'completed' | 'error';
+export type DownloadStatus = 'pending' | 'downloading' | 'completed' | 'error' | 'stopped';
 
 export interface DownloadQueueItem {
   id: string;
   url: string;
+  title?: string;
+  fileName?: string;
+  filePath?: string;
   label: string;
   quality: string;
   format: string;
@@ -14,21 +17,42 @@ export interface DownloadQueueItem {
   progress: number;
   eta?: string | null;
   speed?: string | null;
+  totalSize?: string | null;
+  fileSize?: string | null;
+  fileSizeBytes?: number | null;
+  durationSeconds?: number | null;
+  durationFormatted?: string | null;
+  error?: string | null;
   message?: string;
+}
+
+export interface DownloadStartedEvent {
+  job_id: string;
+  url: string;
+  title?: string | null;
+  save_path: string;
 }
 
 export interface DownloadProgressEvent {
   job_id: string;
   url: string;
+  title?: string | null;
   progress_percent: number;
   eta?: string | null;
   speed?: string | null;
+  total_size?: string | null;
   line?: string;
 }
 
 export interface DownloadCompleteEvent {
   job_id: string;
   url: string;
+  title: string;
+  file_path: string;
+  file_size: string;
+  file_size_bytes: number;
+  duration_seconds?: number | null;
+  duration_formatted?: string | null;
   save_path: string;
 }
 
@@ -38,14 +62,21 @@ export interface DownloadErrorEvent {
   error: string;
 }
 
+export interface DownloadStoppedEvent {
+  job_id: string;
+  stopped_by: string;
+}
+
 export type DownloadQueueListener = (queue: DownloadQueueItem[]) => void;
 
 class DownloadServiceImpl {
   private queue: Map<string, DownloadQueueItem> = new Map();
   private listeners: Set<DownloadQueueListener> = new Set();
+  private unlistenStarted: UnlistenFn | null = null;
   private unlistenProgress: UnlistenFn | null = null;
   private unlistenComplete: UnlistenFn | null = null;
   private unlistenError: UnlistenFn | null = null;
+  private unlistenStopped: UnlistenFn | null = null;
 
   constructor() {
     this.setupEventListeners();
@@ -53,6 +84,21 @@ class DownloadServiceImpl {
 
   private async setupEventListeners(): Promise<void> {
     try {
+      this.unlistenStarted = await listen<DownloadStartedEvent>('download-started', (event) => {
+        const payload = event.payload;
+        const item = this.queue.get(payload.job_id);
+        if (item) {
+          item.status = 'downloading';
+          if (payload.title && !item.title) {
+            item.title = payload.title;
+          }
+          if (payload.save_path) {
+            item.savePath = payload.save_path;
+          }
+          this.notifyListeners();
+        }
+      });
+
       this.unlistenProgress = await listen<DownloadProgressEvent>('download-progress', (event) => {
         const payload = event.payload;
         const item = this.queue.get(payload.job_id);
@@ -61,6 +107,10 @@ class DownloadServiceImpl {
           item.progress = payload.progress_percent;
           item.eta = payload.eta ?? item.eta;
           item.speed = payload.speed ?? item.speed;
+          item.totalSize = payload.total_size ?? item.totalSize;
+          if (payload.title && !item.title) {
+            item.title = payload.title;
+          }
           this.notifyListeners();
         }
       });
@@ -73,7 +123,19 @@ class DownloadServiceImpl {
           item.progress = 100;
           item.eta = null;
           item.speed = null;
-          item.message = payload.save_path;
+          item.title = payload.title || item.title;
+          item.filePath = payload.file_path;
+          item.fileSize = payload.file_size;
+          item.fileSizeBytes = payload.file_size_bytes;
+          item.durationSeconds = payload.duration_seconds;
+          item.durationFormatted = payload.duration_formatted;
+          item.savePath = payload.save_path || item.savePath;
+
+          if (payload.file_path) {
+            const parts = payload.file_path.replace(/\\/g, '/').split('/');
+            item.fileName = parts[parts.length - 1];
+          }
+
           this.notifyListeners();
         }
       });
@@ -83,7 +145,18 @@ class DownloadServiceImpl {
         const item = this.queue.get(payload.job_id);
         if (item) {
           item.status = 'error';
+          item.error = payload.error;
           item.message = payload.error;
+          this.notifyListeners();
+        }
+      });
+
+      this.unlistenStopped = await listen<DownloadStoppedEvent>('download-stopped', (event) => {
+        const payload = event.payload;
+        const item = this.queue.get(payload.job_id);
+        if (item) {
+          item.status = 'stopped';
+          item.message = 'Stopped by user';
           this.notifyListeners();
         }
       });
@@ -124,16 +197,18 @@ class DownloadServiceImpl {
     quality: string,
     format: string,
     label: string,
-    savePath: string
+    savePath: string,
+    initialTitle?: string
   ): Promise<string> {
     const jobId = this.createDownloadJobId();
     const item: DownloadQueueItem = {
       id: jobId,
       url,
+      title: initialTitle,
       label,
       quality,
       format,
-      savePath: savePath || 'Downloads',
+      savePath: savePath || '',
       status: 'pending',
       progress: 0,
       eta: null,
@@ -153,10 +228,12 @@ class DownloadServiceImpl {
         format,
         savePath: item.savePath,
         jobId,
+        initialTitle: initialTitle || null,
       });
     } catch (error) {
       console.error('[DownloadService] Download failed:', error);
       item.status = 'error';
+      item.error = String(error);
       item.message = String(error);
       this.notifyListeners();
     }
@@ -169,8 +246,8 @@ class DownloadServiceImpl {
       await invoke('stop_media_download', { jobId });
       const item = this.queue.get(jobId);
       if (item && item.status === 'downloading') {
-        item.status = 'error';
-        item.message = 'Cancelled';
+        item.status = 'stopped';
+        item.message = 'Stopped by user';
         this.notifyListeners();
       }
       return true;
@@ -188,7 +265,7 @@ class DownloadServiceImpl {
   public clearCompleted(): void {
     const toRemove: string[] = [];
     this.queue.forEach((item, id) => {
-      if (item.status === 'completed') {
+      if (item.status === 'completed' || item.status === 'stopped' || item.status === 'error') {
         toRemove.push(id);
       }
     });
@@ -199,3 +276,4 @@ class DownloadServiceImpl {
 
 export const DownloadService = new DownloadServiceImpl();
 export default DownloadService;
+

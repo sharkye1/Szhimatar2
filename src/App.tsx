@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/tauri';
+import { appWindow } from '@tauri-apps/api/window';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
@@ -8,6 +9,7 @@ import MainWindow from './pages/MainWindow';
 import RenderService from './services/RenderService';
 import MotionScreen from './components/MotionScreen';
 import CursorGlow from './components/CursorGlow';
+import DragDropOverlay from './components/DragDropOverlay';
 
 const VideoSettings = lazy(() => import('./pages/VideoSettings'));
 const AudioSettings = lazy(() => import('./pages/AudioSettings'));
@@ -51,6 +53,13 @@ function AppContent() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentScreen]);
+
+  // Show window as soon as the basic layout is rendered
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      appWindow.show();
+    });
+  }, []);
 
   // Load GPU availability and render mode on startup
   useEffect(() => {
@@ -181,6 +190,7 @@ function AppContent() {
     <>
       <div className="app-background" />
       <CursorGlow />
+      <DragDropOverlay />
           
           {/* Main app container */}
           <div 

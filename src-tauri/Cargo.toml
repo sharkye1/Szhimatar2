@@ -1,6 +1,6 @@
 [package]
 name = "szhimatar"
-version = "1.4.0"
+version = "1.4.1"
 description = "Offline video compressor"
 authors = ["you"]
 license = ""
@@ -45,9 +45,12 @@ zip = "0.6"
 futures-util = "0.3"
 tokio = { version = "1", features = ["fs", "io-util", "process", "macros"] }
 tokio-util = "0.7"
+tauri-plugin-drag = "0.1.0"
+drag = "0.2.0"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
+clipboard-win = "5.3"
 
 [features]
 default = ["custom-protocol"]

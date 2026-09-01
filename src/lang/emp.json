@@ -3,6 +3,10 @@
     "title": "",
     "version": ""
   },
+  "header": {
+    "collapse": "",
+    "expand": ""
+  },
   "main": {
     "selectFiles": "",
     "dropFilesHere": "",
@@ -348,7 +352,14 @@
     "trimReadonly": "",
     "retry": "",
     "retryNewFile": "",
-    "stopJob": ""
+    "stopJob": "",
+    "copyToClipboard": "Copy file to clipboard",
+    "copiedToClipboard": "Copied to clipboard",
+    "dragHandleTooltip": "Hold and drag file to Telegram, Discord or folder",
+    "dragOverlayTitle": "Drop file into another program",
+    "dragForExample": "for example:",
+    "dragBadgeBrowser": "Browser",
+    "dragBadgeFolder": "Explorer"
   },
   "gpu": {
     "label": "",
@@ -466,12 +477,14 @@
     "noWatermarkHint": "",
     "downloadFinished": "",
     "waitingToStart": "",
+    "downloadingMedia": "",
     "stopDownload": "",
     "status": {
       "downloading": "",
       "completed": "",
       "error": "",
-      "pending": ""
+      "pending": "",
+      "stopped": ""
     }
   }
 }
