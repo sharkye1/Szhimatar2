@@ -79,6 +79,8 @@ interface PreviewSettings {
   bitrate?: string;        // e.g. "2.6" for 2.6M
   preset?: string;         // e.g. "slow", "medium", "p7"
   prefer_gpu?: boolean;    // Use NVENC if available
+  rateControlMode?: string;
+  tune?: string;
 }
 
 interface VideoPreviewInfo {
@@ -102,6 +104,8 @@ interface PreviewPanelProps {
     filters: { name: string; enabled: boolean }[];
     resamplingEnabled?: boolean;
     resamplingIntensity?: number;
+    rateControlMode?: string;
+    tune?: string;
   };
   preferGpu?: boolean;      // Use GPU encoding for preview
   isVisible: boolean;
@@ -141,6 +145,8 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
     bitrate: videoSettings?.bitrate || undefined,
     preset: videoSettings?.preset || 'medium',
     prefer_gpu: preferGpu,
+    rateControlMode: videoSettings?.rateControlMode || 'crf',
+    tune: videoSettings?.tune || undefined,
   };
   
   // Check for low bitrate warning (90fps + 1080p + < 6M bitrate)

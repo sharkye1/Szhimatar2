@@ -372,11 +372,20 @@
 .setting-group input[type="number"],
 .setting-group select {
     padding: 8px 10px;
-    border-radius: 4px;
-    border: 1px solid currentColor;
+    border-radius: 6px;
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.15));
+    background: rgba(var(--theme-bg-rgb), 0.25);
+    color: var(--color-text, inherit);
     font-size: 13px;
     font-family: inherit;
     transition: all 0.2s ease;
+}
+
+.setting-group select option,
+.audio-settings-extended select option {
+    background-color: var(--color-surface, #1e1e24);
+    color: var(--color-text, #ffffff);
+    padding: 6px 10px;
 }
 
 .setting-group input[type="range"] {

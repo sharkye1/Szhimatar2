@@ -641,8 +641,19 @@ export const RenderJobItem: React.FC<RenderJobItemProps> = React.memo(({
               const resultDuration = sourceDuration > 0 ? Math.max(0, trimEnd - trimStart) : 0;
               const sourceSize = job.inputSize || '—';
               const resultSize = job.outputSizeBytes > 0 ? outputSize : '—';
+              const sourceExt = (job.sourceExtension || job.fileName.split('.').pop() || 'mp4').toLowerCase();
+              const targetExt = (job.targetExtension || job.outputPath.split('.').pop() || 'mp4').toLowerCase();
+              const isGif = targetExt === 'gif' || job.targetFormat === 'gif';
 
-              return `(${sourceSize} → ${resultSize} | ${formatDurationCompact(sourceDuration)} → ${formatDurationCompact(resultDuration)})`;
+              return (
+                <span>
+                  {`(${sourceSize} → ${resultSize} | ${formatDurationCompact(sourceDuration)} → ${formatDurationCompact(resultDuration)} | `}
+                  <span style={isGif ? { color: theme.colors.warning || '#f59e0b', fontWeight: 600 } : undefined}>
+                    {`${sourceExt} → ${targetExt}`}
+                  </span>
+                  {')'}
+                </span>
+              );
             })()}
           </span>
         </div>

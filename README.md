@@ -2,7 +2,7 @@
 
 <div align="center">
 
-**Версия: 1.4.1** • Современный высокопроизводительный оффлайн-видеокомпрессор и медиакомбайн на базе **Tauri + React + TypeScript + Rust**.
+**Версия: 1.4.2** • Современный высокопроизводительный оффлайн-видеокомпрессор и медиакомбайн на базе **Tauri + React + TypeScript + Rust**.
 
 [![Platform: Windows | macOS | Linux](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)](#)
 [![Tauri: 1.5](https://img.shields.io/badge/Tauri-1.5-orange)](#)

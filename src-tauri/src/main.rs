@@ -1352,6 +1352,27 @@ pub fn parse_ffmpeg_progress_line(line: &str) -> Option<(u64, f64, String, Strin
     Some((frame, fps, size, bitrate, time_seconds, speed))
 }
 
+/// Separates input-level arguments (-ss, -t, -to, -hwaccel, -hwaccel_device) from output arguments.
+/// Placing -hwaccel and seeking options before -i enables hardware-accelerated decoding
+/// and fast container-level seeking.
+pub fn split_ffmpeg_args(args: &[String]) -> (Vec<String>, Vec<String>) {
+    let mut input_args = Vec::new();
+    let mut output_args = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        let arg = &args[i];
+        if (arg == "-ss" || arg == "-t" || arg == "-to" || arg == "-hwaccel" || arg == "-hwaccel_device") && i + 1 < args.len() {
+            input_args.push(arg.clone());
+            input_args.push(args[i + 1].clone());
+            i += 2;
+        } else {
+            output_args.push(arg.clone());
+            i += 1;
+        }
+    }
+    (input_args, output_args)
+}
+
 /// Run FFmpeg render job with progress reporting
 #[tauri::command]
 async fn run_ffmpeg_render(window: tauri::Window, job: RenderJob) -> Result<RenderResult, String> {
@@ -1373,8 +1394,21 @@ async fn run_ffmpeg_render(window: tauri::Window, job: RenderJob) -> Result<Rend
     );
     let _ = write_log(log_message);
 
-    let quoted_args = job
-        .ffmpeg_args
+    let (input_args, output_args) = split_ffmpeg_args(&job.ffmpeg_args);
+
+    let quoted_input_args = input_args
+        .iter()
+        .map(|a| {
+            if a.contains(' ') || a.contains('"') {
+                format!("\"{}\"", a.replace('"', "\\\""))
+            } else {
+                a.clone()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let quoted_output_args = output_args
         .iter()
         .map(|a| {
             if a.contains(' ') || a.contains('"') {
@@ -1387,21 +1421,27 @@ async fn run_ffmpeg_render(window: tauri::Window, job: RenderJob) -> Result<Rend
         .join(" ");
 
     let full_command = format!(
-        "\"{}\" -i \"{}\" {} \"{}\"",
-        config.ffmpeg_path, job.input_path, quoted_args, job.output_path
+        "\"{}\" -y {}{} -i \"{}\" {} \"{}\"",
+        config.ffmpeg_path,
+        if quoted_input_args.is_empty() { "" } else { &quoted_input_args },
+        if quoted_input_args.is_empty() { "" } else { " " },
+        job.input_path,
+        quoted_output_args,
+        job.output_path
     );
 
     let _ = write_render_log(
         job.job_id.clone(),
         format!(
-            "[RUN START]\njob_id={}\nffmpeg_path={}\ninput_path={}\noutput_path={}\nduration_seconds={}\nffmpeg_args_count={}\nffmpeg_args={}\nfull_command={}",
+            "[RUN START]\njob_id={}\nffmpeg_path={}\ninput_path={}\noutput_path={}\nduration_seconds={}\nffmpeg_args_count={}\ninput_args={}\noutput_args={}\nfull_command={}",
             job.job_id,
             config.ffmpeg_path,
             job.input_path,
             job.output_path,
             job.duration_seconds,
             job.ffmpeg_args.len(),
-            quoted_args,
+            quoted_input_args,
+            quoted_output_args,
             full_command
         ),
     );
@@ -1414,10 +1454,13 @@ async fn run_ffmpeg_render(window: tauri::Window, job: RenderJob) -> Result<Rend
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
-    cmd.arg("-y")
-        .arg("-i")
+    cmd.arg("-y");
+    if !input_args.is_empty() {
+        cmd.args(&input_args);
+    }
+    cmd.arg("-i")
         .arg(&job.input_path)
-        .args(&job.ffmpeg_args)
+        .args(&output_args)
         .arg("-progress")
         .arg("pipe:1")
         .arg("-stats_period")
@@ -2527,6 +2570,9 @@ struct PreviewSettings {
     bitrate: Option<String>,  // e.g. "2.6" for 2.6M
     preset: Option<String>,   // e.g. "slow", "medium", "p7"
     prefer_gpu: Option<bool>, // Use NVENC if available
+    #[serde(rename = "rateControlMode")]
+    rate_control_mode: Option<String>,
+    tune: Option<String>,
 }
 
 /// Extract a single frame from video at given time with current settings applied
@@ -2719,73 +2765,60 @@ async fn get_preview_video(
     ];
 
     // ========== IDENTICAL RATE CONTROL AS FINAL RENDER ==========
-    let has_bitrate = settings
+    let rate_control = settings.rate_control_mode.as_deref().unwrap_or("crf");
+    let crf_val: i32 = settings.crf.parse().unwrap_or(23).max(0).min(51);
+    let bitrate_val: f64 = settings
         .bitrate
         .as_ref()
-        .map(|b| !b.is_empty() && b != "auto")
-        .unwrap_or(false);
-    let has_crf = !settings.crf.is_empty() && settings.crf != "auto";
+        .and_then(|b| b.parse::<f64>().ok())
+        .unwrap_or(5.0)
+        .max(0.1)
+        .min(100.0);
 
     if use_nvenc {
         // NVENC rate control - MUST match RenderService.ts logic exactly
-        if has_bitrate {
-            let bitrate_val: f64 = settings
-                .bitrate
-                .as_ref()
-                .and_then(|b| b.parse::<f64>().ok())
-                .unwrap_or(5.0)
-                .max(0.1)
-                .min(100.0);
-
-            // VBR mode with target bitrate
-            // Use SMALL bufsize (500k) to make bitrate limit strict - shows honest artifacts
+        if rate_control == "crf" {
+            // CQ (Constant Quality) mode
+            cmd_args.extend([
+                "-rc".to_string(),
+                "constqp".to_string(),
+                "-cq".to_string(),
+                crf_val.to_string(),
+                "-qp".to_string(),
+                crf_val.to_string(),
+            ]);
+        } else if rate_control == "constrained_crf" {
+            cmd_args.extend([
+                "-rc".to_string(),
+                "vbr".to_string(),
+                "-cq".to_string(),
+                crf_val.to_string(),
+                "-qmin".to_string(),
+                crf_val.to_string(),
+                "-qmax".to_string(),
+                (crf_val + 6).min(51).to_string(),
+                "-b:v".to_string(),
+                "0".to_string(),
+                "-maxrate".to_string(),
+                format!("{}M", bitrate_val),
+                "-bufsize".to_string(),
+                format!("{}M", (bitrate_val * 2.0).max(1.0)),
+            ]);
+        } else {
+            // VBR / CBR mode with target bitrate
             cmd_args.extend([
                 "-rc".to_string(),
                 "vbr".to_string(),
                 "-b:v".to_string(),
                 format!("{}M", bitrate_val),
                 "-maxrate".to_string(),
-                format!("{}M", bitrate_val),
+                format!("{}M", (bitrate_val * 1.5).max(1.0)),
                 "-bufsize".to_string(),
-                "500k".to_string(),
-            ]);
-
-            // If CRF is also set, use CQ as quality floor
-            if has_crf {
-                let cq: i32 = settings.crf.parse().unwrap_or(23).max(0).min(51);
-                cmd_args.extend([
-                    "-cq".to_string(),
-                    cq.to_string(),
-                    "-qmin".to_string(),
-                    cq.to_string(),
-                    "-qmax".to_string(),
-                    cq.to_string(),
-                ]);
-            }
-        } else if has_crf {
-            // CQ (Constant Quality) mode - NVENC equivalent of CRF
-            let cq: i32 = settings.crf.parse().unwrap_or(23).max(0).min(51);
-            cmd_args.extend([
-                "-rc".to_string(),
-                "constqp".to_string(),
-                "-cq".to_string(),
-                cq.to_string(),
-                "-qp".to_string(),
-                cq.to_string(),
-            ]);
-        } else {
-            // Default: CQ 23
-            cmd_args.extend([
-                "-rc".to_string(),
-                "constqp".to_string(),
-                "-cq".to_string(),
-                "23".to_string(),
-                "-qp".to_string(),
-                "23".to_string(),
+                format!("{}M", (bitrate_val * 3.0).max(2.0)),
             ]);
         }
 
-        // NVENC-specific optimizations (same as final render)
+        // NVENC-specific optimizations
         cmd_args.extend([
             "-spatial-aq".to_string(),
             "1".to_string(),
@@ -2818,45 +2851,33 @@ async fn get_preview_video(
         ]);
     } else {
         // CPU encoders (libx264/libx265)
-        if has_bitrate && has_crf {
-            // CRF with bitrate cap - use SMALL bufsize for strict limit
-            let crf: i32 = settings.crf.parse().unwrap_or(23).max(0).min(51);
-            let bitrate_val: f64 = settings
-                .bitrate
-                .as_ref()
-                .and_then(|b| b.parse::<f64>().ok())
-                .unwrap_or(5.0);
+        if rate_control == "crf" {
             cmd_args.extend([
                 "-crf".to_string(),
-                crf.to_string(),
+                crf_val.to_string(),
+            ]);
+        } else if rate_control == "constrained_crf" {
+            cmd_args.extend([
+                "-crf".to_string(),
+                crf_val.to_string(),
                 "-maxrate".to_string(),
                 format!("{}M", bitrate_val),
                 "-bufsize".to_string(),
-                "500k".to_string(),
+                format!("{}M", (bitrate_val * 2.0).max(1.0)),
             ]);
-        } else if has_bitrate {
-            // Bitrate only - strict limit with small buffer
-            let bitrate_val: f64 = settings
-                .bitrate
-                .as_ref()
-                .and_then(|b| b.parse::<f64>().ok())
-                .unwrap_or(5.0);
+        } else {
+            // VBR
             cmd_args.extend([
                 "-b:v".to_string(),
                 format!("{}M", bitrate_val),
                 "-maxrate".to_string(),
-                format!("{}M", bitrate_val),
+                format!("{}M", (bitrate_val * 1.5).max(1.0)),
                 "-bufsize".to_string(),
-                "500k".to_string(),
+                format!("{}M", (bitrate_val * 3.0).max(2.0)),
             ]);
-        } else if has_crf {
-            let crf: i32 = settings.crf.parse().unwrap_or(23).max(0).min(51);
-            cmd_args.extend(["-crf".to_string(), crf.to_string()]);
-        } else {
-            cmd_args.extend(["-crf".to_string(), "23".to_string()]);
         }
 
-        // CPU preset - use same as final (not ultrafast!)
+        // Preset and Tune for CPU
         let preset = settings
             .preset
             .as_ref()
@@ -2879,6 +2900,12 @@ async fn get_preview_video(
             "medium"
         };
         cmd_args.extend(["-preset".to_string(), cpu_preset.to_string()]);
+
+        if let Some(tune) = &settings.tune {
+            if !tune.is_empty() && tune != "none" {
+                cmd_args.extend(["-tune".to_string(), tune.clone()]);
+            }
+        }
     }
 
     // NOTE: FPS is now set via fps filter in -vf chain (more reliable than -r)
@@ -3532,5 +3559,46 @@ mod tests {
         assert_eq!(bitrate, "1258.9kbits/s");
         assert!((time - 3.33).abs() < 1e-4);
         assert!((speed - 1.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn test_split_ffmpeg_args() {
+        // HW decoding (-hwaccel) and trimming args (-ss, -t) should be placed in input_args
+        let args = vec![
+            "-hwaccel".to_string(),
+            "auto".to_string(),
+            "-ss".to_string(),
+            "137.000".to_string(),
+            "-t".to_string(),
+            "50.500".to_string(),
+            "-filter_complex".to_string(),
+            "[0:v] fps=30...".to_string(),
+            "-loop".to_string(),
+            "0".to_string(),
+            "-an".to_string(),
+        ];
+        let (input, output) = split_ffmpeg_args(&args);
+        assert_eq!(input, vec!["-hwaccel", "auto", "-ss", "137.000", "-t", "50.500"]);
+        assert_eq!(
+            output,
+            vec![
+                "-filter_complex",
+                "[0:v] fps=30...",
+                "-loop",
+                "0",
+                "-an"
+            ]
+        );
+
+        // No trim args -> all in output
+        let args_no_trim = vec![
+            "-c:v".to_string(),
+            "h264_nvenc".to_string(),
+            "-b:v".to_string(),
+            "2M".to_string(),
+        ];
+        let (input2, output2) = split_ffmpeg_args(&args_no_trim);
+        assert!(input2.is_empty());
+        assert_eq!(output2, args_no_trim);
     }
 }

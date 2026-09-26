@@ -185,7 +185,7 @@ const text = t('main.selectFiles');  // → "Выбрать файлы" (ru) и�
 Версия определяется **в одном месте** — `package.json`:
 ```json
 {
-  "version": "1.4.1"
+  "version": "1.4.2"
 }
 ```
 
@@ -269,8 +269,8 @@ import { APP_VERSION } from './version';
 
 ---
 
-**Текущая версия**: 1.4.1
-**Дата обновления**: Июнь, 2026  
+**Текущая версия**: 1.4.2
+**Дата обновления**: Сентябрь, 2026  
 **Статус**: EOL  
 **Архитектура**: Single-window SPA с React state-based навигацией  
 **Платформа**: Tauri 1.5 (Windows/Linux/macOS compatible)

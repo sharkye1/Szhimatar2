@@ -116,6 +116,11 @@
     color: inherit;
 }
 
+.preset-controls select option {
+    background-color: var(--color-surface, #1e1e24);
+    color: var(--color-text, #ffffff);
+}
+
 .preset-controls select:hover:not(:disabled) {
     border-color: rgba(255, 255, 255, 0.2);
 }

@@ -94,10 +94,12 @@ class StatisticsServiceImpl {
   private saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
-    this.setupEventListeners();
-    // AUTO-INITIALIZE: Load statistics from file immediately on service creation
-    // This ensures data is available before any render starts
-    this.init();
+    if (typeof window !== 'undefined') {
+      this.setupEventListeners();
+      // AUTO-INITIALIZE: Load statistics from file immediately on service creation
+      // This ensures data is available before any render starts
+      this.init();
+    }
   }
 
   /**

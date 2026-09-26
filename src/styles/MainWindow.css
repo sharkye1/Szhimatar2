@@ -545,7 +545,13 @@
   -moz-appearance: none;
   font-size: 13px;
   background: transparent;
+  color: var(--color-text);
   cursor: pointer;
+}
+
+.download-format-select option {
+  background-color: var(--color-surface, #1e1e24);
+  color: var(--color-text, #ffffff);
 }
 
 .download-format-caret {

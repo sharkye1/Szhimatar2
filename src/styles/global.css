@@ -196,7 +196,24 @@ textarea {
   background: rgba(var(--theme-bg-rgb), 0.2);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+  color: var(--color-text, inherit);
+}
+
+select {
+  cursor: pointer;
+  background: rgba(var(--theme-bg-rgb), 0.25);
+}
+
+select option {
+  background-color: var(--color-surface, #1e1e24);
+  color: var(--color-text, #ffffff);
+  padding: 8px 12px;
+}
+
+select optgroup {
+  background-color: var(--color-surface, #1e1e24);
+  color: var(--color-textSecondary, #a0aec0);
 }
 
 input:focus,

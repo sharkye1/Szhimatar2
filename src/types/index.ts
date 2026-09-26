@@ -11,6 +11,7 @@ export interface Settings {
 
 export interface VideoSettings {
   codec: string;
+  rateControlMode?: 'crf' | 'vbr' | 'cbr' | 'constrained_crf';
   bitrate: string;
   fps: string;
   fpsAuto: boolean;           // Auto-detect FPS from metadata
@@ -25,7 +26,37 @@ export interface VideoSettings {
   filters: VideoFilter[];     // Array of enabled filters
   resamplingEnabled?: boolean;    // Frame interpolation toggle
   resamplingIntensity?: number;   // 1-10
+  targetFormat?: 'video' | 'gif'; // Output format: regular video or animated GIF
+  gifSettings?: GifSettings;      // Settings for GIF export
+  
+  // Advanced compression & quality controls
+  contentType?: 'standard' | 'gaming' | 'presentation' | 'cinema' | 'custom';
+  tune?: 'none' | 'film' | 'animation' | 'grain' | 'stillimage' | 'fastdecode' | 'zerolatency';
+  gopSize?: string;           // 'auto' | '1s' | '2s' | '5s' | '10s' | custom
+  maxrate?: string;           // in Mbps
+  bufsize?: string;           // in MB
+  pixelFormat?: 'yuv420p' | 'yuv420p10le' | 'yuv444p';
+  spatialAq?: boolean;        // NVENC Spatial AQ
+  temporalAq?: boolean;       // NVENC Temporal AQ
+  aqModeCpu?: 'disabled' | 'variance' | 'autovariance' | 'darkscenes';
+  bFrames?: number;           // 0-8
+  nvencMultipass?: 'disabled' | 'qres' | 'fullres';
+  hwaccel?: 'auto' | 'cuda' | 'd3d11va' | 'dxva2' | 'qsv' | 'disabled';
 }
+
+export interface GifSettings {
+  fps: string;                    // '10' | '15' | '20' | '24' | '30'
+  width: string;                  // '320' | '480' | '640' | '720' | 'original'
+  dither: 'bayer' | 'floyd_steinberg' | 'none';
+  loop: number;                   // 0 = infinite loop
+}
+
+export const DEFAULT_GIF_SETTINGS: GifSettings = {
+  fps: '15',
+  width: '480',
+  dither: 'bayer',
+  loop: 0,
+};
 
 export interface VideoFilter {
   name: string;
@@ -35,6 +66,7 @@ export interface VideoFilter {
 
 export const DEFAULT_VIDEO_SETTINGS: VideoSettings = {
   codec: 'h264',
+  rateControlMode: 'crf',
   bitrate: '5',
   fps: '30',
   fpsAuto: false,
@@ -53,6 +85,18 @@ export const DEFAULT_VIDEO_SETTINGS: VideoSettings = {
   ],
   resamplingEnabled: false,
   resamplingIntensity: 5,
+  targetFormat: 'video',
+  gifSettings: DEFAULT_GIF_SETTINGS,
+  contentType: 'standard',
+  tune: 'none',
+  gopSize: 'auto',
+  pixelFormat: 'yuv420p',
+  spatialAq: true,
+  temporalAq: true,
+  aqModeCpu: 'autovariance',
+  bFrames: 3,
+  nvencMultipass: 'fullres',
+  hwaccel: 'auto',
 };
 
 export interface AudioEffect {

@@ -21,6 +21,7 @@ import {
   getValidChannels,
   clampBitrate
 } from '../utils/audioValidation';
+import { validateVideoSettings } from '../utils/videoValidation';
 import type {
   VideoSettings,
   AudioSettings,
@@ -63,6 +64,9 @@ export interface RenderJob {
   assignedSlot?: 'cpu' | 'gpu'; // Which slot was used for this render
   trimStartSec: number; // Start point for trim (seconds)
   trimEndSec: number; // End point for trim (seconds)
+  targetFormat?: 'video' | 'gif';
+  sourceExtension?: string;
+  targetExtension?: string;
 }
 
 export interface RenderProgress {
@@ -141,6 +145,11 @@ export class FFmpegCommandBuilder {
    * Build FFmpeg arguments array from settings
    */
   buildArgs(): string[] {
+    const isGif = this.videoSettings.targetFormat === 'gif' || (this.outputPath && this.outputPath.toLowerCase().endsWith('.gif'));
+    if (isGif) {
+      return this.buildGifArgs();
+    }
+
     const args: string[] = [];
     const videoFilters: string[] = [];
     const audioFilters: string[] = [];
@@ -151,6 +160,12 @@ export class FFmpegCommandBuilder {
     if (this.videoSettings.codec === 'copy') {
       args.push('-c:v', 'copy');
     } else {
+      // Hardware-accelerated decoding (HW decoding on input)
+      const hwaccel = this.videoSettings.hwaccel || 'auto';
+      if (hwaccel !== 'disabled') {
+        args.push('-hwaccel', hwaccel);
+      }
+
       // Determine encoder based on mode (CPU vs GPU)
       const encoder = this.getVideoEncoder();
       const isNvenc = encoder.includes('nvenc');
@@ -163,10 +178,30 @@ export class FFmpegCommandBuilder {
       // Add encoder-specific preset
       this.addEncoderPreset(args, encoder, isNvenc);
 
-      // FPS (clamp to valid range 1-240)
+      // FPS (support any custom FPS value up to 1000)
       if (!this.videoSettings.fpsAuto && this.videoSettings.fps) {
-        const fpsValue = Math.max(1, Math.min(240, parseFloat(this.videoSettings.fps)));
-        args.push('-r', fpsValue.toString());
+        const parsed = parseFloat(this.videoSettings.fps);
+        if (!isNaN(parsed) && parsed > 0) {
+          const fpsValue = Math.max(0.1, Math.min(1000, parsed));
+          args.push('-r', fpsValue.toString());
+        }
+      }
+
+      // Keyframe interval (GOP) optimization
+      if (this.videoSettings.gopSize && this.videoSettings.gopSize !== 'auto') {
+        const fpsNum = (!this.videoSettings.fpsAuto && this.videoSettings.fps)
+          ? parseFloat(this.videoSettings.fps)
+          : 30;
+        let gopFrames = 60;
+        if (this.videoSettings.gopSize === '1s') gopFrames = Math.max(1, Math.round(fpsNum * 1));
+        else if (this.videoSettings.gopSize === '2s') gopFrames = Math.max(1, Math.round(fpsNum * 2));
+        else if (this.videoSettings.gopSize === '5s') gopFrames = Math.max(1, Math.round(fpsNum * 5));
+        else if (this.videoSettings.gopSize === '10s') gopFrames = Math.max(1, Math.round(fpsNum * 10));
+        else {
+          const parsed = parseInt(this.videoSettings.gopSize, 10);
+          if (!isNaN(parsed) && parsed > 0) gopFrames = parsed;
+        }
+        args.push('-g', gopFrames.toString());
       }
 
       // Resolution - NVENC requires dimensions divisible by 2
@@ -242,12 +277,11 @@ export class FFmpegCommandBuilder {
         }
       }
       
-      // Ensure pixel format compatibility for all H.264/H.265 encoders
-      // Both NVENC and libx264/libx265 require yuv420p for maximum compatibility
-      // This fixes "Option not found" errors when source has non-standard pixel format
+      // Ensure pixel format compatibility
       const codec = this.videoSettings.codec.toLowerCase();
-      if (codec === 'h264' || codec === 'h265' || codec === 'hevc') {
-        videoFilters.push('format=yuv420p');
+      if (codec === 'h264' || codec === 'h265' || codec === 'hevc' || codec === 'av1' || codec === 'vp9') {
+        const pixFmt = this.videoSettings.pixelFormat || 'yuv420p';
+        videoFilters.push(`format=${pixFmt}`);
       }
     }
 
@@ -424,6 +458,75 @@ export class FFmpegCommandBuilder {
   }
 
   /**
+   * Build high-quality palette-based FFmpeg arguments for animated GIF
+   */
+  private buildGifArgs(): string[] {
+    const args: string[] = [];
+    const gifSettings = this.videoSettings.gifSettings || { fps: '15', width: '480', dither: 'bayer', loop: 0 };
+    const fps = gifSettings.fps || '15';
+    const width = gifSettings.width || '480';
+    const dither = gifSettings.dither || 'bayer';
+    const loop = (gifSettings.loop ?? 0).toString();
+
+    const preFilters: string[] = [];
+    if (fps) {
+      preFilters.push(`fps=${fps}`);
+    }
+
+    if (width !== 'original' && width !== 'source') {
+      const w = parseInt(width, 10);
+      if (!isNaN(w) && w > 0) {
+        const evenWidth = Math.floor(w / 2) * 2;
+        preFilters.push(`scale=${evenWidth}:-2:flags=lanczos`);
+      }
+    }
+
+    // Rotation
+    if (this.videoSettings.rotation && this.videoSettings.rotation !== 'none') {
+      const rotationMap: Record<string, string> = {
+        '90': 'transpose=1',
+        '180': 'transpose=1,transpose=1',
+        '270': 'transpose=2',
+      };
+      if (rotationMap[this.videoSettings.rotation]) {
+        preFilters.push(rotationMap[this.videoSettings.rotation]);
+      }
+    }
+
+    // Flip
+    if (this.videoSettings.flip === 'horizontal') {
+      preFilters.push('hflip');
+    } else if (this.videoSettings.flip === 'vertical') {
+      preFilters.push('vflip');
+    }
+
+    // Speed
+    if (this.videoSettings.speed && this.videoSettings.speed !== 1.0) {
+      const pts = 1 / this.videoSettings.speed;
+      preFilters.push(`setpts=${pts.toFixed(4)}*PTS`);
+    }
+
+    const preFilterStr = preFilters.length > 0 ? `${preFilters.join(',')},` : '';
+
+    let paletteUseOpts = 'diff_mode=rectangle';
+    if (dither === 'bayer') {
+      paletteUseOpts += ':dither=bayer:bayer_scale=3';
+    } else if (dither === 'floyd_steinberg') {
+      paletteUseOpts += ':dither=floyd_steinberg';
+    } else if (dither === 'none') {
+      paletteUseOpts += ':dither=none';
+    }
+
+    const filterComplex = `[0:v] ${preFilterStr}split [a][b];[a] palettegen=stats_mode=diff [p];[b][p] paletteuse=${paletteUseOpts}`;
+
+    args.push('-filter_complex', filterComplex);
+    args.push('-loop', loop);
+    args.push('-an');
+
+    return args;
+  }
+
+  /**
    * Get the video encoder name based on codec and GPU preference
    */
   private getVideoEncoder(): string {
@@ -460,96 +563,111 @@ export class FFmpegCommandBuilder {
 
   /**
    * Add encoder-specific quality/bitrate parameters
-   * CPU (libx264/libx265): uses -crf for quality
-   * GPU (NVENC): uses -cq (constant quality) or -b:v (bitrate mode)
+   * CPU (libx264/libx265): uses -crf for quality or -b:v
+   * GPU (NVENC): uses -cq / -rc constqp (constant quality) or -rc vbr (bitrate mode)
    */
   private addEncoderQualityParams(args: string[], encoder: string, isNvenc: boolean): void {
-    const hasBitrate = this.videoSettings.bitrate && this.videoSettings.bitrate !== 'auto';
-    const hasCrf = this.videoSettings.crf && this.videoSettings.crf !== 'auto';
+    const rateControl = this.videoSettings.rateControlMode || 'crf';
+    const crfValue = Math.max(0, Math.min(51, parseInt(this.videoSettings.crf || '23', 10)));
+    const bitrateValue = Math.max(0.1, Math.min(200, parseFloat(this.videoSettings.bitrate || '5')));
+    const maxrateValue = this.videoSettings.maxrate ? parseFloat(this.videoSettings.maxrate) : (bitrateValue * 1.5);
+    const bufsizeValue = this.videoSettings.bufsize ? parseFloat(this.videoSettings.bufsize) : (bitrateValue * 3);
 
     if (isNvenc) {
-      // NVENC rate control
-      if (hasBitrate) {
-        // VBR mode with target bitrate
-        const bitrateValue = Math.max(0.1, Math.min(100, parseFloat(this.videoSettings.bitrate!)));
-        
+      if (rateControl === 'crf') {
+        // NVENC Constant Quality mode without forcing any target bitrate
+        args.push('-rc', 'constqp');
+        args.push('-cq', crfValue.toString());
+        args.push('-qp', crfValue.toString());
+      } else if (rateControl === 'constrained_crf') {
+        // NVENC CQ with bitrate cap
         args.push('-rc', 'vbr');
+        args.push('-cq', crfValue.toString());
+        args.push('-qmin', crfValue.toString());
+        args.push('-qmax', Math.min(51, crfValue + 6).toString());
+        args.push('-b:v', '0');
+        args.push('-maxrate', `${maxrateValue.toFixed(1)}M`);
+        args.push('-bufsize', `${bufsizeValue.toFixed(0)}M`);
+      } else if (rateControl === 'cbr') {
+        args.push('-rc', 'cbr');
         args.push('-b:v', `${bitrateValue}M`);
-        // Set maxrate to 1.5x target for VBR headroom
-        args.push('-maxrate', `${(bitrateValue * 1.5).toFixed(1)}M`);
-        // Buffer size = 2 seconds of video at max rate
-        args.push('-bufsize', `${(bitrateValue * 3).toFixed(0)}M`);
-      } else if (hasCrf) {
-        // CQ (Constant Quality) mode - NVENC equivalent of CRF
-        // NVENC CQ range is 0-51, same as CRF conceptually
-        const cqValue = Math.max(0, Math.min(51, parseInt(this.videoSettings.crf!, 10)));
-        
-        args.push('-rc', 'constqp');
-        args.push('-cq', cqValue.toString());
-        // Also set qp values for consistency
-        args.push('-qp', cqValue.toString());
-      } else {
-        // Default: use CQ mode with reasonable quality (CQ 23 is good default)
-        args.push('-rc', 'constqp');
-        args.push('-cq', '23');
-        args.push('-qp', '23');
-      }
-      
-      // NVENC-specific optimizations
-      args.push('-spatial-aq', '1');  // Spatial adaptive quantization
-      args.push('-temporal-aq', '1'); // Temporal adaptive quantization
-      
-      // B-frames for better compression (except for lowest latency)
-      if (encoder === 'hevc_nvenc') {
-        args.push('-b_ref_mode', 'middle');
-      }
-      
-    } else {
-      // CPU encoders (libx264, libx265, etc.)
-      if (hasBitrate && hasCrf) {
-        // If both are set, use two-pass-like behavior: CRF with max bitrate cap
-        const crfValue = Math.max(0, Math.min(51, parseInt(this.videoSettings.crf!, 10)));
-        const bitrateValue = Math.max(0.1, Math.min(100, parseFloat(this.videoSettings.bitrate!)));
-        
-        args.push('-crf', crfValue.toString());
+        args.push('-minrate', `${bitrateValue}M`);
         args.push('-maxrate', `${bitrateValue}M`);
         args.push('-bufsize', `${(bitrateValue * 2).toFixed(0)}M`);
-      } else if (hasBitrate) {
-        // Bitrate-only mode
-        const bitrateValue = Math.max(0.1, Math.min(100, parseFloat(this.videoSettings.bitrate!)));
-        args.push('-b:v', `${bitrateValue}M`);
-      } else if (hasCrf) {
-        // CRF-only mode (recommended for quality)
-        const crfValue = Math.max(0, Math.min(51, parseInt(this.videoSettings.crf!, 10)));
-        args.push('-crf', crfValue.toString());
       } else {
-        // Default: use CRF 23 (good quality/size balance)
-        args.push('-crf', '23');
+        // VBR mode
+        args.push('-rc', 'vbr');
+        args.push('-b:v', `${bitrateValue}M`);
+        args.push('-maxrate', `${maxrateValue.toFixed(1)}M`);
+        args.push('-bufsize', `${bufsizeValue.toFixed(0)}M`);
+      }
+
+      // NVENC-specific AQ optimizations
+      if (this.videoSettings.spatialAq !== false) {
+        args.push('-spatial-aq', '1');
+      }
+      if (this.videoSettings.temporalAq !== false) {
+        args.push('-temporal-aq', '1');
+      }
+      if (this.videoSettings.nvencMultipass === 'fullres') {
+        args.push('-multipass', 'fullres');
+      }
+      if (this.videoSettings.bFrames !== undefined && this.videoSettings.bFrames > 0) {
+        args.push('-bf', this.videoSettings.bFrames.toString());
+      }
+      args.push('-b_ref_mode', 'middle');
+
+    } else {
+      // CPU encoders (libx264, libx265, libvpx-vp9, libaom-av1)
+      const isVp9OrAv1 = encoder.includes('vpx') || encoder.includes('aom') || encoder.includes('svtav1');
+
+      if (rateControl === 'crf') {
+        args.push('-crf', crfValue.toString());
+        if (isVp9OrAv1) {
+          args.push('-b:v', '0');
+        }
+      } else if (rateControl === 'constrained_crf') {
+        args.push('-crf', crfValue.toString());
+        args.push('-maxrate', `${maxrateValue.toFixed(1)}M`);
+        args.push('-bufsize', `${bufsizeValue.toFixed(0)}M`);
+      } else if (rateControl === 'cbr') {
+        args.push('-b:v', `${bitrateValue}M`);
+        args.push('-minrate', `${bitrateValue}M`);
+        args.push('-maxrate', `${bitrateValue}M`);
+        args.push('-bufsize', `${(bitrateValue * 2).toFixed(0)}M`);
+      } else {
+        // VBR
+        args.push('-b:v', `${bitrateValue}M`);
+        if (this.videoSettings.maxrate) {
+          args.push('-maxrate', `${maxrateValue.toFixed(1)}M`);
+          args.push('-bufsize', `${bufsizeValue.toFixed(0)}M`);
+        }
+      }
+
+      // CPU AQ mode & B-frames
+      if (encoder === 'libx264' || encoder === 'libx265') {
+        if (this.videoSettings.aqModeCpu === 'autovariance') {
+          args.push('-aq-mode', '2');
+        } else if (this.videoSettings.aqModeCpu === 'darkscenes') {
+          args.push('-aq-mode', '3');
+        } else if (this.videoSettings.aqModeCpu === 'variance') {
+          args.push('-aq-mode', '1');
+        }
+        if (this.videoSettings.bFrames !== undefined && this.videoSettings.bFrames > 0) {
+          args.push('-bf', this.videoSettings.bFrames.toString());
+        }
       }
     }
   }
 
   /**
-   * Add encoder-specific preset
-   * CPU: ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow
-   * NVENC: p1-p7 (fastest to slowest) or named presets
+   * Add encoder-specific preset and tuning
    */
   private addEncoderPreset(args: string[], encoder: string, isNvenc: boolean): void {
     const preset = this.videoSettings.preset;
-    
-    if (!preset) {
-      // Default presets
-      if (isNvenc) {
-        args.push('-preset', 'p4'); // Balanced quality/speed for NVENC
-      } else if (encoder === 'libx264' || encoder === 'libx265') {
-        args.push('-preset', 'medium');
-      }
-      return;
-    }
 
     if (isNvenc) {
-      // Map CPU presets to NVENC presets
-      // NVENC presets: p1 (fastest) to p7 (slowest/best quality)
+      // Map CPU presets to NVENC presets: p1 (fastest) to p7 (slowest/best quality)
       const nvencPresetMap: Record<string, string> = {
         'ultrafast': 'p1',
         'superfast': 'p2',
@@ -561,22 +679,34 @@ export class FFmpegCommandBuilder {
         'slower': 'p7',
         'veryslow': 'p7',
         'placebo': 'p7',
-        // Also accept direct NVENC presets
         'p1': 'p1', 'p2': 'p2', 'p3': 'p3', 'p4': 'p4',
         'p5': 'p5', 'p6': 'p6', 'p7': 'p7',
       };
       
-      const nvencPreset = nvencPresetMap[preset.toLowerCase()] || 'p4';
+      const nvencPreset = (preset && nvencPresetMap[preset.toLowerCase()]) || 'p4';
       args.push('-preset', nvencPreset);
       
-      // Set tuning for NVENC (hq = high quality)
-      args.push('-tune', 'hq');
+      // Set tuning for NVENC (hq = high quality, ll = low latency)
+      const tune = this.videoSettings.tune;
+      if (tune === 'zerolatency' || tune === 'fastdecode') {
+        args.push('-tune', 'll');
+      } else {
+        args.push('-tune', 'hq');
+      }
       
     } else if (encoder === 'libx264' || encoder === 'libx265') {
       // CPU presets
       const validPresets = ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow', 'placebo'];
-      const cpuPreset = validPresets.includes(preset.toLowerCase()) ? preset.toLowerCase() : 'medium';
+      const cpuPreset = (preset && validPresets.includes(preset.toLowerCase())) ? preset.toLowerCase() : 'medium';
       args.push('-preset', cpuPreset);
+
+      // CPU Tuning
+      if (this.videoSettings.tune && this.videoSettings.tune !== 'none') {
+        const validCpuTunes = ['film', 'animation', 'grain', 'stillimage', 'fastdecode', 'zerolatency'];
+        if (validCpuTunes.includes(this.videoSettings.tune)) {
+          args.push('-tune', this.videoSettings.tune);
+        }
+      }
     }
   }
 
@@ -584,8 +714,13 @@ export class FFmpegCommandBuilder {
    * Validate settings compatibility and parameter ranges
    */
   validate(): { valid: boolean; errors: string[]; warnings: string[] } {
-    const errors: string[] = [];
-    const warnings: string[] = [];
+    if (this.videoSettings.targetFormat === 'gif' || (this.outputPath && this.outputPath.toLowerCase().endsWith('.gif'))) {
+      return { valid: true, errors: [], warnings: [] };
+    }
+
+    const videoVal = validateVideoSettings(this.videoSettings, this.preferGpu);
+    const errors: string[] = [...videoVal.errors];
+    const warnings: string[] = [...videoVal.warnings];
 
     // Copy codec doesn't support filters
     if (this.videoSettings.codec === 'copy') {
@@ -612,28 +747,6 @@ export class FFmpegCommandBuilder {
       }
       if (this.audioSettings.effects?.some(e => e.enabled)) {
         errors.push('Audio effects not supported with codec "copy"');
-      }
-    }
-
-    // Validate video parameters
-    if (this.videoSettings.crf && this.videoSettings.crf !== 'auto') {
-      const crf = parseInt(this.videoSettings.crf, 10);
-      if (isNaN(crf) || crf < 0 || crf > 51) {
-        warnings.push(`CRF value ${this.videoSettings.crf} is outside valid range (0-51), will be clamped`);
-      }
-    }
-
-    if (this.videoSettings.bitrate && this.videoSettings.bitrate !== 'auto') {
-      const bitrate = parseFloat(this.videoSettings.bitrate);
-      if (isNaN(bitrate) || bitrate <= 0 || bitrate > 100) {
-        warnings.push(`Video bitrate ${this.videoSettings.bitrate}M is outside recommended range (0.1-100), will be clamped`);
-      }
-    }
-
-    if (!this.videoSettings.fpsAuto && this.videoSettings.fps) {
-      const fps = parseFloat(this.videoSettings.fps);
-      if (isNaN(fps) || fps < 1 || fps > 240) {
-        warnings.push(`FPS value ${this.videoSettings.fps} is outside valid range (1-240), will be clamped`);
       }
     }
 
@@ -666,6 +779,11 @@ export class FFmpegCommandBuilder {
    * Get human-readable description of settings
    */
   getSettingsDescription(): string {
+    if (this.videoSettings.targetFormat === 'gif' || (this.outputPath && this.outputPath.toLowerCase().endsWith('.gif'))) {
+      const gs = this.videoSettings.gifSettings || { fps: '15', width: '480', dither: 'bayer' };
+      return `GIF (${gs.fps || '15'} fps, ${gs.width || '480'}px, dither: ${gs.dither || 'bayer'})`;
+    }
+
     const parts: string[] = [];
     
     // Show actual encoder being used
@@ -684,6 +802,9 @@ export class FFmpegCommandBuilder {
       }
       if (this.videoSettings.preset) {
         parts.push(`preset: ${this.videoSettings.preset}`);
+      }
+      if (this.videoSettings.hwaccel && this.videoSettings.hwaccel !== 'disabled') {
+        parts.push(`HW Dec: ${this.videoSettings.hwaccel}`);
       }
     }
     
@@ -737,6 +858,9 @@ class RenderServiceImpl {
    * Setup Tauri event listeners
    */
   private async setupEventListeners(): Promise<void> {
+    if (typeof window === 'undefined') {
+      return;
+    }
     try {
       // Listen for progress updates
       this.unlistenProgress = await listen<RenderProgress>('render-progress', (event) => {
@@ -794,12 +918,31 @@ class RenderServiceImpl {
     outputSuffix?: string,
     presetName?: string
   ): void {
+    const prevFormat = this.videoSettings?.targetFormat;
     this.videoSettings = videoSettings;
     this.audioSettings = audioSettings;
     this.watermarkSettings = watermarkSettings;
     this.mainScreenSettings = mainScreenSettings || this.mainScreenSettings;
     this.outputSuffix = outputSuffix || this.outputSuffix;
     this.selectedPresetName = presetName || null;
+
+    // If targetFormat changed, update pending jobs
+    if (videoSettings.targetFormat && videoSettings.targetFormat !== prevFormat) {
+      for (const [id, job] of this.jobs) {
+        if (job.status === 'pending') {
+          const nextOutputPath = this.generateOutputPath(job.inputPath);
+          const lastDot = job.fileName.lastIndexOf('.');
+          const sourceExtension = lastDot > 0 ? job.fileName.substring(lastDot + 1).toLowerCase() : 'mp4';
+          const isGif = videoSettings.targetFormat === 'gif' || nextOutputPath.toLowerCase().endsWith('.gif');
+          const targetExtension = isGif ? 'gif' : (nextOutputPath.split('.').pop()?.toLowerCase() || 'mp4');
+          job.outputPath = nextOutputPath;
+          job.targetFormat = isGif ? 'gif' : 'video';
+          job.sourceExtension = sourceExtension;
+          job.targetExtension = targetExtension;
+        }
+      }
+      this.notifyListeners();
+    }
     
     console.log('[RenderService] Settings updated', presetName ? `(preset: ${presetName})` : '', `| fpsAuto: ${videoSettings.fpsAuto}, fps: ${videoSettings.fps}`);
   }
@@ -981,7 +1124,10 @@ class RenderServiceImpl {
     // Get file extension
     const lastDot = fileName.lastIndexOf('.');
     const baseName = lastDot > 0 ? fileName.substring(0, lastDot) : fileName;
-    const extension = lastDot > 0 ? fileName.substring(lastDot) : '.mp4';
+    let extension = lastDot > 0 ? fileName.substring(lastDot) : '.mp4';
+    if (this.videoSettings?.targetFormat === 'gif') {
+      extension = '.gif';
+    }
 
     // Determine output directory
     let outputDir = dirPath;
@@ -1024,6 +1170,11 @@ class RenderServiceImpl {
         ? this.parseFileSize(`${inputSizeBytes}b`).formatted
         : '—';
 
+      const isGif = this.videoSettings?.targetFormat === 'gif' || outputPath.toLowerCase().endsWith('.gif');
+      const lastDot = fileName.lastIndexOf('.');
+      const sourceExtension = lastDot > 0 ? fileName.substring(lastDot + 1).toLowerCase() : 'mp4';
+      const targetExtension = isGif ? 'gif' : (outputPath.split('.').pop()?.toLowerCase() || 'mp4');
+
       const job: RenderJob = {
         id: jobId,
         inputPath,
@@ -1045,6 +1196,9 @@ class RenderServiceImpl {
         outputSizeBytes: 0,
         trimStartSec: 0,
         trimEndSec: durationSeconds > 0 ? durationSeconds : 0,
+        targetFormat: isGif ? 'gif' : 'video',
+        sourceExtension,
+        targetExtension,
       };
 
       this.jobs.set(jobId, job);
@@ -1108,6 +1262,9 @@ class RenderServiceImpl {
       outputSizeBytes: 0,
       trimStartSec: 0,
       trimEndSec: durationSeconds > 0 ? durationSeconds : 0,
+      targetFormat: (this.videoSettings?.targetFormat === 'gif' || outputPath.toLowerCase().endsWith('.gif')) ? 'gif' : 'video',
+      sourceExtension: fileName.lastIndexOf('.') > 0 ? fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase() : 'mp4',
+      targetExtension: (this.videoSettings?.targetFormat === 'gif' || outputPath.toLowerCase().endsWith('.gif')) ? 'gif' : (outputPath.split('.').pop()?.toLowerCase() || 'mp4'),
     };
 
     if (durationSeconds > 0 && typeof trimStartSec === 'number' && typeof trimEndSec === 'number') {
@@ -1342,13 +1499,38 @@ class RenderServiceImpl {
         });
       }
 
+/**
+ * Helper to split input arguments from output arguments matching backend Rust split_ffmpeg_args
+ */
+function splitFfmpegArgs(args: string[]): { inputArgs: string[]; outputArgs: string[] } {
+  const inputArgs: string[] = [];
+  const outputArgs: string[] = [];
+  let i = 0;
+  while (i < args.length) {
+    const arg = args[i];
+    if (['-ss', '-t', '-to', '-hwaccel', '-hwaccel_device'].includes(arg) && i + 1 < args.length) {
+      inputArgs.push(arg);
+      inputArgs.push(args[i + 1]);
+      i += 2;
+    } else {
+      outputArgs.push(arg);
+      i += 1;
+    }
+  }
+  return { inputArgs, outputArgs };
+}
+
       const ffmpegArgs = builder.buildArgs();
       const ffmpegArgsWithTrim = shouldTrim
         ? ['-ss', trim.start.toFixed(3), '-t', effectiveDurationSeconds.toFixed(3), ...ffmpegArgs]
         : ffmpegArgs;
       
+      const { inputArgs, outputArgs } = splitFfmpegArgs(ffmpegArgsWithTrim);
+      const inputArgsStr = inputArgs.length > 0 ? `${inputArgs.join(' ')} ` : '';
+      const inferredCommand = `ffmpeg -y ${inputArgsStr}-i "${job.inputPath}" ${outputArgs.join(' ')} "${job.outputPath}"`;
+
       // CRITICAL: Log FINAL command for comparison with preview
-      console.log('[FINAL CMD] FFmpeg args:', ffmpegArgsWithTrim.join(' '));
+      console.log('[FINAL CMD] FFmpeg command:', inferredCommand);
       console.log('[FINAL CMD] Settings summary:', builder.getSettingsDescription());
       console.log('[FINAL CMD] Rate control params:', {
         codec: effectiveVideoSettings.codec,
@@ -1356,6 +1538,7 @@ class RenderServiceImpl {
         bitrate: effectiveVideoSettings.bitrate,
         preset: effectiveVideoSettings.preset,
         preferGpu: preferGpu,
+        hwaccel: effectiveVideoSettings.hwaccel,
       });
 
       // Log to file
@@ -1381,7 +1564,7 @@ class RenderServiceImpl {
         ffmpeg: {
           args: ffmpegArgsWithTrim,
           argsText: ffmpegArgsWithTrim.join(' '),
-          inferredCommand: `ffmpeg -i \"${job.inputPath}\" ${ffmpegArgsWithTrim.join(' ')} \"${job.outputPath}\"`,
+          inferredCommand,
         },
         settings: {
           videoEffective: effectiveVideoSettings,

@@ -150,6 +150,8 @@ function AppContent() {
             setSettings={setVideoSettings}
             watermarkSettings={watermarkSettings}
             setWatermarkSettings={setWatermarkSettings}
+            renderMode={RenderService.getRenderMode()}
+            gpuAvailable={RenderService.getGpuAvailable()}
           />
         );
       case 'audio':
