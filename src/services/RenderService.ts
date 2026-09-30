@@ -612,10 +612,14 @@ export class FFmpegCommandBuilder {
       if (this.videoSettings.nvencMultipass === 'fullres') {
         args.push('-multipass', 'fullres');
       }
-      if (this.videoSettings.bFrames !== undefined && this.videoSettings.bFrames > 0) {
-        args.push('-bf', this.videoSettings.bFrames.toString());
+      if (this.videoSettings.bFrames !== undefined) {
+        // NVENC hardware encoder limit is strictly max 4 B-frames
+        const nvencBf = Math.max(0, Math.min(4, this.videoSettings.bFrames));
+        args.push('-bf', nvencBf.toString());
+        if (nvencBf >= 2) {
+          args.push('-b_ref_mode', 'middle');
+        }
       }
-      args.push('-b_ref_mode', 'middle');
 
     } else {
       // CPU encoders (libx264, libx265, libvpx-vp9, libaom-av1)

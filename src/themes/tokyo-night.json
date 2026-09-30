@@ -1,0 +1,16 @@
+{
+  "name": "tokyo-night",
+  "colors": {
+    "background": "#1a1b26",
+    "surface": "#24283b",
+    "primary": "#7aa2f7",
+    "secondary": "#bb9af7",
+    "text": "#c0caf5",
+    "textSecondary": "#9aa5ce",
+    "border": "#343b58",
+    "success": "#73daca",
+    "warning": "#e0af68",
+    "error": "#f7768e",
+    "hover": "#2f354f"
+  }
+}

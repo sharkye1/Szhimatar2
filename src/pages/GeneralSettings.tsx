@@ -197,6 +197,10 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
               <option value="nord-soft">{t('settings.themeNames.nordSoft') || 'Nord Soft'}</option>
               <option value="graphite-light">{t('settings.themeNames.graphiteLight') || 'Graphite Light'}</option>
               <option value="amoled-night">{t('settings.themeNames.amoledNight') || 'AMOLED Night'}</option>
+              <option value="catppuccin-mocha">{t('settings.themeNames.catppuccinMocha') || 'Cozy Mocha'}</option>
+              <option value="everforest">{t('settings.themeNames.everforest') || 'Forest Moss'}</option>
+              <option value="tokyo-night">{t('settings.themeNames.tokyoNight') || 'Tokyo Midnight'}</option>
+              <option value="warm-amber">{t('settings.themeNames.warmAmber') || 'Warm Amber'}</option>
             </select>
             <label
               className="checkbox-label"

@@ -1,0 +1,16 @@
+{
+  "name": "everforest",
+  "colors": {
+    "background": "#232a2e",
+    "surface": "#2d353b",
+    "primary": "#a7c080",
+    "secondary": "#7fbbb3",
+    "text": "#d3c6aa",
+    "textSecondary": "#9da9a0",
+    "border": "#3d484d",
+    "success": "#83c092",
+    "warning": "#dbbc7f",
+    "error": "#e67e80",
+    "hover": "#343f44"
+  }
+}

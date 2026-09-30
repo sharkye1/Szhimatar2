@@ -1,6 +1,6 @@
 [package]
 name = "szhimatar"
-version = "1.4.2"
+version = "1.4.3"
 description = "Offline video compressor"
 authors = ["you"]
 license = ""

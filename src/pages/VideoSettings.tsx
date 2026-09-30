@@ -192,10 +192,13 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
           return {
             ...prev,
             contentType: 'gaming',
+            codec: 'h264',
             rateControlMode: 'crf',
             crf: '22',
             tune: 'film',
             gopSize: '2s',
+            bFrames: 3,
+            hwaccel: 'auto',
             spatialAq: true,
             temporalAq: true,
             aqModeCpu: 'autovariance',
@@ -206,20 +209,33 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
           return {
             ...prev,
             contentType: 'presentation',
+            codec: 'h265',
             rateControlMode: 'crf',
-            crf: '24',
+            crf: '28',
+            fps: '15',
+            fpsAuto: false,
             tune: 'stillimage',
-            gopSize: '5s',
-            preset: 'slower',
+            gopSize: '10s',
+            bFrames: 4,
+            hwaccel: 'auto',
+            spatialAq: false,
+            temporalAq: false,
+            aqModeCpu: 'disabled',
+            preset: 'slow',
           };
         case 'cinema':
           return {
             ...prev,
             contentType: 'cinema',
+            codec: 'h265',
             rateControlMode: 'crf',
-            crf: '19',
+            crf: '20',
             tune: 'film',
             gopSize: '5s',
+            bFrames: 4,
+            hwaccel: 'auto',
+            spatialAq: true,
+            temporalAq: true,
             preset: 'slow',
           };
         case 'standard':
@@ -227,10 +243,13 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
           return {
             ...prev,
             contentType: 'standard',
+            codec: 'h264',
             rateControlMode: 'crf',
             crf: '23',
             tune: 'none',
             gopSize: 'auto',
+            bFrames: 3,
+            hwaccel: 'auto',
             preset: 'medium',
           };
       }
@@ -986,8 +1005,8 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                             <option value="0">0 (Без B-кадров, минимальная задержка)</option>
                             <option value="2">2 кадра</option>
                             <option value="3">3 кадра (Рекомендуется)</option>
-                            <option value="4">4 кадра (Высокое сжатие)</option>
-                            <option value="8">8 кадров (Максимальное сжатие)</option>
+                            <option value="4">4 кадра (Высокое сжатие / Макс. GPU)</option>
+                            <option value="8">8 кадров (Макс. сжатие CPU x264/x265)</option>
                           </select>
                         </div>
                       </div>

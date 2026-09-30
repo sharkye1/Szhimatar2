@@ -1,0 +1,16 @@
+{
+  "name": "warm-amber",
+  "colors": {
+    "background": "#24201e",
+    "surface": "#2f2b27",
+    "primary": "#e5a45b",
+    "secondary": "#c29267",
+    "text": "#f2e8dc",
+    "textSecondary": "#bfae9e",
+    "border": "#433c35",
+    "success": "#8eb370",
+    "warning": "#e5a45b",
+    "error": "#d96a6a",
+    "hover": "#3a3530"
+  }
+}

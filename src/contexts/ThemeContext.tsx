@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, ReactNode } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/tauri';
 import { useSettings } from './SettingsContext';
 import lightTheme from '../themes/light.json';
@@ -16,6 +16,10 @@ import paperSepiaTheme from '../themes/paper-sepia.json';
 import nordSoftTheme from '../themes/nord-soft.json';
 import graphiteLightTheme from '../themes/graphite-light.json';
 import amoledNightTheme from '../themes/amoled-night.json';
+import catppuccinMochaTheme from '../themes/catppuccin-mocha.json';
+import everforestTheme from '../themes/everforest.json';
+import tokyoNightTheme from '../themes/tokyo-night.json';
+import warmAmberTheme from '../themes/warm-amber.json';
 
 export interface Theme {
   name: string;
@@ -68,6 +72,10 @@ const themes: Record<string, Theme> = {
   'nord-soft': nordSoftTheme,
   'graphite-light': graphiteLightTheme,
   'amoled-night': amoledNightTheme,
+  'catppuccin-mocha': catppuccinMochaTheme,
+  'everforest': everforestTheme,
+  'tokyo-night': tokyoNightTheme,
+  'warm-amber': warmAmberTheme,
 };
 
 // Convert hex color to RGB values
@@ -96,6 +104,10 @@ const themeBackgrounds: Record<string, string> = {
   'nord-soft': 'linear-gradient(-45deg, #2b313c, #323a47, #2f3644, #3a4354, #252b35)',
   'graphite-light': 'linear-gradient(-45deg, #f1f3f6, #e9edf2, #f5f6f8, #e3e7ed, #eef1f5)',
   'amoled-night': 'linear-gradient(-45deg, #050505, #0b0b0b, #121212, #090909, #020202)',
+  'catppuccin-mocha': 'linear-gradient(-45deg, #181825, #1e1e2e, #28243d, #1f1d2e, #14141f)',
+  'everforest': 'linear-gradient(-45deg, #1a2124, #232a2e, #2d383b, #222e2b, #192022)',
+  'tokyo-night': 'linear-gradient(-45deg, #13141f, #1a1b26, #22273e, #1c1d30, #11121c)',
+  'warm-amber': 'linear-gradient(-45deg, #1a1715, #24201e, #2e2824, #28211d, #171412)',
 };
 
 // Check if theme is light

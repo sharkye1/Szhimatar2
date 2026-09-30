@@ -288,7 +288,11 @@
       "paperSepia": "Бумажная сепия",
       "nordSoft": "Мягкий норд",
       "graphiteLight": "Светлый графит",
-      "amoledNight": "Горячий кофе"
+      "amoledNight": "Горячий кофе",
+      "catppuccinMocha": "Уютный мокко",
+      "everforest": "Хвойный мох",
+      "tokyoNight": "Токийская ночь",
+      "warmAmber": "Медовый вечер"
     },
     "language": "Язык",
     "backgroundSource": "Источник фона",

@@ -288,7 +288,11 @@
       "paperSepia": "Paper Sepia",
       "nordSoft": "Nord Soft",
       "graphiteLight": "Graphite Light",
-      "amoledNight": "AMOLED Night"
+      "amoledNight": "AMOLED Night",
+      "catppuccinMocha": "Cozy Mocha",
+      "everforest": "Forest Moss",
+      "tokyoNight": "Tokyo Midnight",
+      "warmAmber": "Warm Amber"
     },
     "language": "Language",
     "backgroundSource": "Background Source",

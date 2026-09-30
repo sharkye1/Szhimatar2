@@ -1,13 +1,13 @@
 {
     "name": "szhimatar",
-    "version": "1.4.2",
+    "version": "1.4.3",
     "description": "Offline video compressor with modern UI",
     "type": "module",
     "scripts": {
         "dev": "vite",
         "build": "tsc && vite build",
         "preview": "vite preview",
-        "tauri": "tauri",
+        "tauri": "node scripts/run-tauri.cjs",
         "test": "vitest run",
         "test:watch": "vitest",
         "sync-version": "node sync-version.js"

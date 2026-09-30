@@ -102,7 +102,13 @@ export function validateVideoSettings(
     }
   }
 
-  // 6. HW Decoding normalization
+  // 6. B-Frames limit validation (NVENC hardware limit is max 4)
+  if (isNvenc && normalized.bFrames !== undefined && normalized.bFrames > 4) {
+    normalized.bFrames = 4;
+    warnings.push('NVENC hardware encoder supports a maximum of 4 B-frames. Automatically adjusted to 4.');
+  }
+
+  // 7. HW Decoding normalization
   if (!normalized.hwaccel) {
     normalized.hwaccel = 'auto';
   }
