@@ -93,8 +93,9 @@ const formatDownloadHeight = (height?: number | null) => {
 
 const normalizeDownloadFormats = (formats: DownloadFormatOption[]) => {
   const merged = [...formats];
+  const isAudioOnlySource = merged.length > 0 && merged.every((item) => item.is_audio_only);
 
-  if (!merged.some((item) => item.format === 'mp4')) {
+  if (!isAudioOnlySource && !merged.some((item) => item.format === 'mp4')) {
     merged.unshift(DEFAULT_DOWNLOAD_FORMATS[0]);
   }
 
@@ -499,7 +500,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
       if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
         try {
           const text = await navigator.clipboard.readText();
-          if (/tiktok\.com|youtube\.com|youtu\.be|instagram\.com\/reel/i.test(text.trim())) {
+          if (/soundcloud\.com|tiktok\.com|youtube\.com|youtu\.be|instagram\.com\/reel|twitter\.com|x\.com|vk\.com/i.test(text.trim())) {
             setDownloadUrl(text.trim());
             setShowUrlInput(true);
           }
@@ -572,18 +573,28 @@ const MainWindow: React.FC<MainWindowProps> = ({
           }
 
           if (event.payload.type === 'hover') {
-            setIsDragging(true);
+            const paths = (event.payload as { paths?: string[] }).paths;
+            const hasValidPaths =
+              Array.isArray(paths) &&
+              paths.some((p) => typeof p === 'string' && p.trim().length > 0);
+            if (hasValidPaths) {
+              setIsDragging(true);
+            } else {
+              setIsDragging(false);
+            }
           } else if (event.payload.type === 'drop') {
             setIsDragging(false);
             const droppedPaths = event.payload.paths;
-            const validFiles = droppedPaths.filter((filePath) =>
-              VIDEO_EXT_REGEX.test(filePath)
-            );
-            if (validFiles.length > 0) {
-              await addFiles(validFiles);
-              triggerDropSuccess();
-            } else if (droppedPaths.length > 0) {
-              triggerDropError();
+            if (Array.isArray(droppedPaths)) {
+              const validFiles = droppedPaths.filter((filePath) =>
+                typeof filePath === 'string' && VIDEO_EXT_REGEX.test(filePath.trim())
+              );
+              if (validFiles.length > 0) {
+                await addFiles(validFiles);
+                triggerDropSuccess();
+              } else if (droppedPaths.length > 0) {
+                triggerDropError();
+              }
             }
           } else if (event.payload.type === 'cancel') {
             setIsDragging(false);
@@ -610,21 +621,80 @@ const MainWindow: React.FC<MainWindowProps> = ({
     };
   }, [addFiles, triggerDropError, triggerDropSuccess]);
 
-  // Prevent default browser drag/drop behavior on window (prevents navigating away) and track cursor
+  // Prevent accidental HTML5 drag/drop behavior on window, track cursor, and provide safety reset listeners for stuck drag state
   useEffect(() => {
-    const preventDragDropDefaults = (e: DragEvent) => {
+    const handleDragStart = (e: DragEvent) => {
+      // Prevent accidental HTML5 drag-and-drop of highlighted text/images in webview
+      e.preventDefault();
+    };
+
+    const handleDragOverWindow = (e: DragEvent) => {
       e.preventDefault();
       if (e.clientX || e.clientY) {
         lastPointerPosRef.current = { clientX: e.clientX, clientY: e.clientY };
       }
     };
 
-    window.addEventListener('dragover', preventDragDropDefaults);
-    window.addEventListener('drop', preventDragDropDefaults);
+    const handleDragLeaveWindow = (e: DragEvent) => {
+      // If pointer leaves the window or target is null, reset drag state
+      if (
+        !e.relatedTarget ||
+        e.clientX <= 0 ||
+        e.clientY <= 0 ||
+        e.clientX >= window.innerWidth ||
+        e.clientY >= window.innerHeight
+      ) {
+        setIsDragging(false);
+      }
+    };
+
+    const handleDropWindow = (e: DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+    };
+
+    const handleDragEndWindow = () => {
+      setIsDragging(false);
+    };
+
+    const handlePointerDownWindow = () => {
+      setIsDragging(false);
+    };
+
+    const handlePointerCancelWindow = () => {
+      setIsDragging(false);
+    };
+
+    const handleKeyDownWindow = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsDragging(false);
+      }
+    };
+
+    const handleBlurWindow = () => {
+      setIsDragging(false);
+    };
+
+    window.addEventListener('dragstart', handleDragStart);
+    window.addEventListener('dragover', handleDragOverWindow);
+    window.addEventListener('dragleave', handleDragLeaveWindow);
+    window.addEventListener('drop', handleDropWindow);
+    window.addEventListener('dragend', handleDragEndWindow);
+    window.addEventListener('pointerdown', handlePointerDownWindow);
+    window.addEventListener('pointercancel', handlePointerCancelWindow);
+    window.addEventListener('keydown', handleKeyDownWindow);
+    window.addEventListener('blur', handleBlurWindow);
 
     return () => {
-      window.removeEventListener('dragover', preventDragDropDefaults);
-      window.removeEventListener('drop', preventDragDropDefaults);
+      window.removeEventListener('dragstart', handleDragStart);
+      window.removeEventListener('dragover', handleDragOverWindow);
+      window.removeEventListener('dragleave', handleDragLeaveWindow);
+      window.removeEventListener('drop', handleDropWindow);
+      window.removeEventListener('dragend', handleDragEndWindow);
+      window.removeEventListener('pointerdown', handlePointerDownWindow);
+      window.removeEventListener('pointercancel', handlePointerCancelWindow);
+      window.removeEventListener('keydown', handleKeyDownWindow);
+      window.removeEventListener('blur', handleBlurWindow);
     };
   }, []);
 
@@ -716,7 +786,11 @@ const MainWindow: React.FC<MainWindowProps> = ({
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(true);
+    if (e.dataTransfer?.types && Array.from(e.dataTransfer.types).includes('Files')) {
+      setIsDragging(true);
+    } else {
+      setIsDragging(false);
+    }
   }, []);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
@@ -1384,6 +1458,15 @@ const MainWindow: React.FC<MainWindowProps> = ({
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.98 }}
               transition={{ duration: 0.15 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsDragging(false);
+              }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDragging(false);
+              }}
               style={{
                 borderColor: theme.colors.primary,
               }}
