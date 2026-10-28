@@ -15,12 +15,18 @@ lazy_static! {
         Regex::new(r"ETA\s+(?P<eta>[0-9:]+)").expect("valid yt-dlp ETA regex");
     static ref SPEED_RE: Regex =
         Regex::new(r"at\s+(?P<speed>[^\s]+)").expect("valid yt-dlp speed regex");
+    static ref SIZE_RE: Regex =
+        Regex::new(r"of\s+(?:~\s*)?(?P<size>[^\s]+)").expect("valid yt-dlp size regex");
     static ref MERGER_RE: Regex =
         Regex::new(r#"\[Merger\]\s+Merging formats into "([^"]+)""#).expect("valid merger regex");
     static ref DEST_RE: Regex =
         Regex::new(r#"\[download\]\s+Destination:\s+(.+)$"#).expect("valid dest regex");
+    static ref ALREADY_DOWNLOADED_RE: Regex =
+        Regex::new(r#"\[download\]\s+(.+?)\s+has already been downloaded"#).expect("valid already downloaded regex");
     static ref EXTRACT_AUDIO_RE: Regex =
         Regex::new(r#"\[ExtractAudio\]\s+Destination:\s+(.+)$"#).expect("valid extract audio regex");
+    static ref FORMATS_RE: Regex =
+        Regex::new(r#"Downloading \d+ format\(s\):\s*([^\s]+)"#).expect("valid formats regex");
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -186,6 +192,19 @@ fn resolve_ffmpeg_location() -> Option<PathBuf> {
         ] {
             if dir.join("ffmpeg.exe").exists() {
                 return Some(dir.clone());
+            }
+        }
+    }
+
+    if let Some(path_var) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path_var) {
+            #[cfg(windows)]
+            let ffmpeg_binary = dir.join("ffmpeg.exe");
+            #[cfg(not(windows))]
+            let ffmpeg_binary = dir.join("ffmpeg");
+
+            if ffmpeg_binary.is_file() {
+                return Some(dir);
             }
         }
     }
@@ -359,6 +378,7 @@ fn format_label(height: u32, ext: &str) -> String {
 
 fn choose_best_video_formats(info: &YtDlpInfo) -> Vec<FormatOption> {
     let mut by_height: BTreeMap<u32, &YtDlpFormat> = BTreeMap::new();
+    let mut has_video = false;
 
     for format in &info.formats {
         let is_video = format
@@ -370,6 +390,8 @@ fn choose_best_video_formats(info: &YtDlpInfo) -> Vec<FormatOption> {
         if !is_video {
             continue;
         }
+
+        has_video = true;
 
         if let Some(height) = format.height {
             if height == 0 {
@@ -394,46 +416,68 @@ fn choose_best_video_formats(info: &YtDlpInfo) -> Vec<FormatOption> {
 
     let mut options = Vec::new();
 
-    options.push(FormatOption {
-        label: "Best Quality (Auto)".to_string(),
-        quality: "bestvideo+bestaudio/best".to_string(),
-        format: "mp4".to_string(),
-        ext: "mp4".to_string(),
-        height: None,
-        filesize: None,
-        is_audio_only: false,
-    });
+    if !has_video && !info.formats.is_empty() {
+        options.push(FormatOption {
+            label: "Audio (MP3)".to_string(),
+            quality: "bestaudio/best".to_string(),
+            format: "mp3".to_string(),
+            ext: "mp3".to_string(),
+            height: None,
+            filesize: None,
+            is_audio_only: true,
+        });
 
-    options.push(FormatOption {
-        label: "Audio Only (MP3)".to_string(),
-        quality: "bestaudio/best".to_string(),
-        format: "mp3".to_string(),
-        ext: "mp3".to_string(),
-        height: None,
-        filesize: None,
-        is_audio_only: true,
-    });
+        options.push(FormatOption {
+            label: "Audio (Original)".to_string(),
+            quality: "bestaudio/best".to_string(),
+            format: "best".to_string(),
+            ext: "m4a".to_string(),
+            height: None,
+            filesize: None,
+            is_audio_only: true,
+        });
+    } else {
+        options.push(FormatOption {
+            label: "Best Quality (Auto)".to_string(),
+            quality: "bestvideo+bestaudio/best".to_string(),
+            format: "mp4".to_string(),
+            ext: "mp4".to_string(),
+            height: None,
+            filesize: None,
+            is_audio_only: false,
+        });
 
-    for (height, format) in by_height.iter().rev() {
-        let ext = format
-            .ext
-            .clone()
-            .unwrap_or_else(|| "mp4".to_string())
-            .to_lowercase();
-        let selector = format!("bestvideo[height<={}]+bestaudio/best[height<={}]/best", height, height);
+        options.push(FormatOption {
+            label: "Audio Only (MP3)".to_string(),
+            quality: "bestaudio/best".to_string(),
+            format: "mp3".to_string(),
+            ext: "mp3".to_string(),
+            height: None,
+            filesize: None,
+            is_audio_only: true,
+        });
 
-        options.insert(
-            options.len().saturating_sub(1),
-            FormatOption {
-                label: format_label(*height, &ext),
-                quality: selector,
-                format: ext.clone(),
-                ext,
-                height: Some(*height),
-                filesize: format.effective_filesize(),
-                is_audio_only: false,
-            },
-        );
+        for (height, format) in by_height.iter().rev() {
+            let ext = format
+                .ext
+                .clone()
+                .unwrap_or_else(|| "mp4".to_string())
+                .to_lowercase();
+            let selector = format!("bestvideo[height<={}]+bestaudio/best[height<={}]/best", height, height);
+
+            options.insert(
+                options.len().saturating_sub(1),
+                FormatOption {
+                    label: format_label(*height, &ext),
+                    quality: selector,
+                    format: ext.clone(),
+                    ext,
+                    height: Some(*height),
+                    filesize: format.effective_filesize(),
+                    is_audio_only: false,
+                },
+            );
+        }
     }
 
     options
@@ -512,16 +556,30 @@ pub async fn get_video_formats(app_handle: AppHandle, url: String) -> Result<Vid
     })
 }
 
+fn sanitize_meta_field(s: &str) -> Option<String> {
+    let trimmed = s.trim();
+    if trimmed.is_empty()
+        || trimmed.eq_ignore_ascii_case("na")
+        || trimmed.eq_ignore_ascii_case("n/a")
+        || trimmed.eq_ignore_ascii_case("unknown")
+        || trimmed.eq_ignore_ascii_case("none")
+    {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
 fn parse_progress_line(line: &str) -> Option<(f64, Option<String>, Option<String>, Option<String>)> {
     if let Some(pos) = line.find("SZ_PROGRESS:") {
         let payload = &line[pos + "SZ_PROGRESS:".len()..];
         let parts: Vec<&str> = payload.split('|').collect();
         if !parts.is_empty() {
-            let percent_str = parts[0].trim().trim_end_matches('%');
+            let percent_str = parts[0].trim().trim_end_matches('%').trim();
             let percent = percent_str.parse::<f64>().ok()?;
-            let eta = parts.get(1).map(|s| s.trim()).filter(|s| !s.is_empty() && *s != "NA").map(|s| s.to_string());
-            let speed = parts.get(2).map(|s| s.trim()).filter(|s| !s.is_empty() && *s != "NA").map(|s| s.to_string());
-            let total_size = parts.get(3).map(|s| s.trim()).filter(|s| !s.is_empty() && *s != "NA").map(|s| s.to_string());
+            let eta = parts.get(1).and_then(|s| sanitize_meta_field(s));
+            let speed = parts.get(2).and_then(|s| sanitize_meta_field(s));
+            let total_size = parts.get(3).and_then(|s| sanitize_meta_field(s));
             return Some((percent, eta, speed, total_size));
         }
     }
@@ -534,14 +592,33 @@ fn parse_progress_line(line: &str) -> Option<(f64, Option<String>, Option<String
     let eta = ETA_RE
         .captures(line)
         .and_then(|caps| caps.name("eta"))
-        .map(|value| value.as_str().to_string());
+        .and_then(|m| sanitize_meta_field(m.as_str()));
 
     let speed = SPEED_RE
         .captures(line)
         .and_then(|caps| caps.name("speed"))
-        .map(|value| value.as_str().to_string());
+        .and_then(|m| sanitize_meta_field(m.as_str()));
 
-    Some((percent, eta, speed, None))
+    let total_size = SIZE_RE
+        .captures(line)
+        .and_then(|caps| caps.name("size"))
+        .and_then(|m| sanitize_meta_field(m.as_str()));
+
+    Some((percent, eta, speed, total_size))
+}
+
+fn parse_progress_meta(line: &str) -> (Option<String>, Option<f64>) {
+    if let Some(pos) = line.find("SZ_PROGRESS:") {
+        let payload = &line[pos + "SZ_PROGRESS:".len()..];
+        let parts: Vec<&str> = payload.split('|').collect();
+        let title = parts.get(4).and_then(|s| sanitize_meta_field(s));
+        let duration = parts
+            .get(5)
+            .and_then(|s| sanitize_meta_field(s))
+            .and_then(|s| s.parse::<f64>().ok());
+        return (title, duration);
+    }
+    (None, None)
 }
 
 #[tauri::command]
@@ -621,14 +698,11 @@ pub async fn download_media_link(
             .arg(&normalized_save_path_str)
             .arg("-o")
             .arg("%(title).150s.%(ext)s")
-            .arg("--print")
-            .arg("SZ_TITLE:%(title)s")
-            .arg("--print")
-            .arg("SZ_DURATION:%(duration)s")
-            .arg("--print")
-            .arg("after_move:SZ_FILEPATH:%(filepath)s")
+            .arg("--progress")
             .arg("--progress-template")
-            .arg("download:SZ_PROGRESS:%(progress._percent_str)s|%(progress._eta_str)s|%(progress._speed_str)s|%(progress._total_bytes_estimate_str,progress._downloaded_bytes_str)s")
+            .arg("download:SZ_PROGRESS:%(progress._percent_str)s|%(progress._eta_str)s|%(progress._speed_str)s|%(progress._total_bytes_str,progress._total_bytes_estimate_str,progress._downloaded_bytes_str)s|%(info.title)s|%(info.duration)s")
+            .arg("--progress-template")
+            .arg("postprocess:SZ_POST:%(progress.status)s|%(info.filepath)s|%(info.title)s|%(info.duration)s")
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
 
@@ -694,6 +768,9 @@ pub async fn download_media_link(
         let stdout_handle = tokio::spawn(async move {
             let mut last_line = String::new();
             let mut last_emit = Instant::now() - Duration::from_millis(200);
+            let mut has_multiple_streams = false;
+            let mut current_stream = 0usize;
+            let mut highest_reported_percent = 0.0f64;
 
             if let Some(stdout) = stdout {
                 use tokio::io::AsyncBufReadExt;
@@ -703,7 +780,77 @@ pub async fn download_media_link(
                 while let Ok(Some(line)) = lines.next_line().await {
                     let trimmed = line.trim();
 
-                    // Parse custom markers
+                    // Detect multi-stream format (e.g. 136+140)
+                    if let Some(caps) = FORMATS_RE.captures(trimmed) {
+                        if let Some(m) = caps.get(1) {
+                            if m.as_str().contains('+') {
+                                has_multiple_streams = true;
+                            }
+                        }
+                    }
+
+                    // Parse postprocess template marker
+                    if let Some(pos) = trimmed.find("SZ_POST:") {
+                        let payload = &trimmed[pos + "SZ_POST:".len()..];
+                        let parts: Vec<&str> = payload.split('|').collect();
+                        let status = parts.first().map(|s| s.trim()).unwrap_or("");
+
+                        if let Some(path) = parts.get(1).and_then(|s| sanitize_meta_field(s)) {
+                            let clean_path = path.trim_matches('"').to_string();
+                            let is_intermediate = clean_path.ends_with(".part")
+                                || clean_path.ends_with(".ytdl")
+                                || clean_path.contains(".temp.")
+                                || clean_path.contains(".f1")
+                                || clean_path.contains(".f2")
+                                || clean_path.contains(".f3");
+
+                            if let Ok(mut lock) = filepath_for_stdout.lock() {
+                                let lock_is_final = lock.as_ref().map(|curr| {
+                                    curr.ends_with(".mp3") || curr.ends_with(".mp4")
+                                }).unwrap_or(false);
+
+                                let new_is_target = clean_path.ends_with(".mp3") || clean_path.ends_with(".mp4");
+
+                                if (status == "finished" || lock.is_none()) && (!lock_is_final || new_is_target) && !is_intermediate {
+                                    *lock = Some(clean_path);
+                                }
+                            }
+                        }
+                        if let Some(title) = parts.get(2).and_then(|s| sanitize_meta_field(s)) {
+                            if let Ok(mut lock) = title_for_stdout.lock() {
+                                if lock.is_none() {
+                                    *lock = Some(title);
+                                }
+                            }
+                        }
+                        if let Some(dur) = parts.get(3).and_then(|s| sanitize_meta_field(s)).and_then(|s| s.parse::<f64>().ok()) {
+                            if let Ok(mut lock) = duration_for_stdout.lock() {
+                                if lock.is_none() {
+                                    *lock = Some(dur);
+                                }
+                            }
+                        }
+
+                        if status == "started" {
+                            highest_reported_percent = highest_reported_percent.max(99.0);
+                            let cur_title = title_for_stdout.lock().ok().and_then(|t| t.clone());
+                            let _ = app_handle_progress.emit_all(
+                                "download-progress",
+                                DownloadProgressPayload {
+                                    job_id: job_id_progress.clone(),
+                                    url: url_progress.clone(),
+                                    title: cur_title,
+                                    progress_percent: highest_reported_percent,
+                                    eta: None,
+                                    speed: None,
+                                    total_size: None,
+                                    line: line.clone(),
+                                },
+                            );
+                        }
+                    }
+
+                    // Legacy markers
                     if let Some(pos) = trimmed.find("SZ_TITLE:") {
                         let title = trimmed[pos + "SZ_TITLE:".len()..].trim().to_string();
                         if !title.is_empty() {
@@ -716,7 +863,7 @@ pub async fn download_media_link(
                                     job_id: job_id_progress.clone(),
                                     url: url_progress.clone(),
                                     title: Some(title),
-                                    progress_percent: 0.0,
+                                    progress_percent: highest_reported_percent,
                                     eta: None,
                                     speed: None,
                                     total_size: None,
@@ -732,7 +879,7 @@ pub async fn download_media_link(
                             }
                         }
                     } else if let Some(pos) = trimmed.find("SZ_FILEPATH:") {
-                        let path = trimmed[pos + "SZ_FILEPATH:".len()..].trim().to_string();
+                        let path = trimmed[pos + "SZ_FILEPATH:".len()..].trim().trim_matches('"').to_string();
                         if !path.is_empty() {
                             if let Ok(mut lock) = filepath_for_stdout.lock() {
                                 *lock = Some(path);
@@ -740,35 +887,70 @@ pub async fn download_media_link(
                         }
                     }
 
-                    // Fallback path detector from yt-dlp logs
+                    // Path detectors from yt-dlp logs
                     if let Some(caps) = MERGER_RE.captures(trimmed) {
                         if let Some(m) = caps.get(1) {
+                            let clean = m.as_str().trim().trim_matches('"').to_string();
                             if let Ok(mut lock) = filepath_for_stdout.lock() {
-                                if lock.is_none() {
-                                    *lock = Some(m.as_str().to_string());
-                                }
-                            }
-                        }
-                    } else if let Some(caps) = DEST_RE.captures(trimmed) {
-                        if let Some(m) = caps.get(1) {
-                            if let Ok(mut lock) = filepath_for_stdout.lock() {
-                                if lock.is_none() {
-                                    *lock = Some(m.as_str().to_string());
-                                }
+                                *lock = Some(clean);
                             }
                         }
                     } else if let Some(caps) = EXTRACT_AUDIO_RE.captures(trimmed) {
                         if let Some(m) = caps.get(1) {
+                            let clean = m.as_str().trim().trim_matches('"').to_string();
+                            if let Ok(mut lock) = filepath_for_stdout.lock() {
+                                *lock = Some(clean);
+                            }
+                        }
+                    } else if let Some(caps) = ALREADY_DOWNLOADED_RE.captures(trimmed) {
+                        if let Some(m) = caps.get(1) {
+                            let clean = m.as_str().trim().trim_matches('"').to_string();
+                            if let Ok(mut lock) = filepath_for_stdout.lock() {
+                                *lock = Some(clean);
+                            }
+                        }
+                    } else if let Some(caps) = DEST_RE.captures(trimmed) {
+                        current_stream += 1;
+                        if let Some(m) = caps.get(1) {
+                            let clean = m.as_str().trim().trim_matches('"').to_string();
                             if let Ok(mut lock) = filepath_for_stdout.lock() {
                                 if lock.is_none() {
-                                    *lock = Some(m.as_str().to_string());
+                                    *lock = Some(clean);
                                 }
                             }
                         }
                     }
 
+                    let (meta_title, meta_dur) = parse_progress_meta(&line);
+                    if let Some(t) = meta_title {
+                        if let Ok(mut lock) = title_for_stdout.lock() {
+                            if lock.is_none() {
+                                *lock = Some(t);
+                            }
+                        }
+                    }
+                    if let Some(d) = meta_dur {
+                        if let Ok(mut lock) = duration_for_stdout.lock() {
+                            if lock.is_none() {
+                                *lock = Some(d);
+                            }
+                        }
+                    }
+
                     if let Some((progress_percent, eta, speed, total_size)) = parse_progress_line(&line) {
-                        if last_emit.elapsed() >= Duration::from_millis(80) || progress_percent >= 100.0 {
+                        let mapped_percent = if has_multiple_streams {
+                            if current_stream <= 1 {
+                                (progress_percent * 0.88).min(88.0)
+                            } else {
+                                (88.0 + progress_percent * 0.10).min(98.0)
+                            }
+                        } else {
+                            progress_percent.min(98.0)
+                        };
+
+                        highest_reported_percent = highest_reported_percent.max(mapped_percent);
+
+                        if last_emit.elapsed() >= Duration::from_millis(80) || highest_reported_percent >= 98.0 {
                             last_emit = Instant::now();
                             let cur_title = title_for_stdout.lock().ok().and_then(|t| t.clone());
                             let _ = app_handle_progress.emit_all(
@@ -777,7 +959,7 @@ pub async fn download_media_link(
                                     job_id: job_id_progress.clone(),
                                     url: url_progress.clone(),
                                     title: cur_title,
-                                    progress_percent,
+                                    progress_percent: highest_reported_percent,
                                     eta,
                                     speed,
                                     total_size,
@@ -860,17 +1042,39 @@ pub async fn download_media_link(
                         });
 
                     let explicit_filepath = discovered_filepath.lock().ok().and_then(|f| f.clone());
-                    let final_filepath = match explicit_filepath {
-                        Some(p) => {
+                    let final_filepath = {
+                        let mut resolved: Option<PathBuf> = None;
+                        if let Some(p) = explicit_filepath {
                             let path = PathBuf::from(&p);
-                            if path.is_absolute() {
+                            let abs_path = if path.is_absolute() {
                                 path
                             } else {
                                 resolved_save_path.join(path)
+                            };
+
+                            if abs_path.is_file() {
+                                resolved = Some(abs_path);
+                            } else {
+                                let expected_ext = if format.eq_ignore_ascii_case("mp3") { "mp3" } else { "mp4" };
+                                let target_ext_path = abs_path.with_extension(expected_ext);
+                                if target_ext_path.is_file() {
+                                    resolved = Some(target_ext_path);
+                                } else if let Some(stem) = abs_path.file_stem() {
+                                    if let Ok(entries) = fs::read_dir(&resolved_save_path) {
+                                        for entry in entries.flatten() {
+                                            let ep = entry.path();
+                                            if ep.is_file() && ep.file_stem() == Some(stem) {
+                                                resolved = Some(ep);
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
-                        None => {
-                            // Find newest matching file in resolved_save_path
+
+                        // Fallback: newest matching file in resolved_save_path
+                        resolved.unwrap_or_else(|| {
                             let mut newest_file: Option<(PathBuf, std::time::SystemTime)> = None;
                             if let Ok(entries) = fs::read_dir(&resolved_save_path) {
                                 for entry in entries.flatten() {
@@ -887,7 +1091,7 @@ pub async fn download_media_link(
                                 }
                             }
                             newest_file.map(|(p, _)| p).unwrap_or_else(|| resolved_save_path.clone())
-                        }
+                        })
                     };
 
                     let file_size_bytes = if final_filepath.is_file() {
@@ -989,10 +1193,34 @@ mod tests {
         let line = "[download]  23.5% of 10.00MiB at 2.50MiB/s ETA 00:03";
         let parsed = parse_progress_line(line);
         assert!(parsed.is_some());
-        let (percent, eta, speed, _) = parsed.unwrap();
+        let (percent, eta, speed, total_size) = parsed.unwrap();
         assert!((percent - 23.5).abs() < 1e-6);
         assert_eq!(eta, Some("00:03".to_string()));
         assert_eq!(speed, Some("2.50MiB/s".to_string()));
+        assert_eq!(total_size, Some("10.00MiB".to_string()));
+    }
+
+    #[test]
+    fn test_choose_best_video_formats_audio_only() {
+        let info = YtDlpInfo {
+            title: Some("SoundCloud Track".to_string()),
+            duration: Some(180.0),
+            formats: vec![
+                YtDlpFormat {
+                    ext: Some("m4a".to_string()),
+                    height: None,
+                    filesize: Some(3_000_000),
+                    filesize_approx: None,
+                    acodec: Some("mp4a.40.2".to_string()),
+                    vcodec: Some("none".to_string()),
+                },
+            ],
+        };
+
+        let options = choose_best_video_formats(&info);
+        assert_eq!(options.first().unwrap().label, "Audio (MP3)");
+        assert_eq!(options.first().unwrap().format, "mp3");
+        assert!(options.first().unwrap().is_audio_only);
     }
 
     #[test]
@@ -1039,6 +1267,68 @@ mod tests {
         assert!(options.iter().any(|o| o.label == "MP4 720p"));
         let opt_1080 = options.iter().find(|o| o.label == "MP4 1080p").unwrap();
         assert_eq!(opt_1080.filesize, Some(50_000_000));
+    }
+
+    #[test]
+    fn test_sanitize_meta_field() {
+        assert_eq!(sanitize_meta_field(""), None);
+        assert_eq!(sanitize_meta_field("   "), None);
+        assert_eq!(sanitize_meta_field("NA"), None);
+        assert_eq!(sanitize_meta_field("N/A"), None);
+        assert_eq!(sanitize_meta_field("Unknown"), None);
+        assert_eq!(sanitize_meta_field("none"), None);
+        assert_eq!(sanitize_meta_field(" 00:15 "), Some("00:15".to_string()));
+        assert_eq!(sanitize_meta_field(" 1.50MiB/s "), Some("1.50MiB/s".to_string()));
+    }
+
+    #[test]
+    fn test_parse_progress_meta() {
+        let line = "SZ_PROGRESS: 25.0%|Unknown|     0.00B/s|   2.97KiB|Wah pedal test|30.087";
+        let (title, duration) = parse_progress_meta(line);
+        assert_eq!(title, Some("Wah pedal test".to_string()));
+        assert_eq!(duration, Some(30.087));
+    }
+
+    #[test]
+    fn test_parse_progress_hls_spacing_and_na() {
+        let line = "SZ_PROGRESS:  0.4%|Unknown|   9.19KiB/s| 396.61KiB|Wah pedal test|30.087";
+        let parsed = parse_progress_line(line);
+        assert!(parsed.is_some());
+        let (percent, eta, speed, total_size) = parsed.unwrap();
+        assert!((percent - 0.4).abs() < 1e-6);
+        assert_eq!(eta, None); // "Unknown" sanitized to None
+        assert_eq!(speed, Some("9.19KiB/s".to_string()));
+        assert_eq!(total_size, Some("396.61KiB".to_string()));
+
+        let line_na = "SZ_PROGRESS:100.0%|NA|3.14MiB/s|NA|Big Buck Bunny Trailer|33";
+        let parsed_na = parse_progress_line(line_na);
+        assert!(parsed_na.is_some());
+        let (p_na, eta_na, speed_na, size_na) = parsed_na.unwrap();
+        assert!((p_na - 100.0).abs() < 1e-6);
+        assert_eq!(eta_na, None);
+        assert_eq!(speed_na, Some("3.14MiB/s".to_string()));
+        assert_eq!(size_na, None);
+    }
+
+    #[test]
+    fn test_multi_stream_formats_regex() {
+        let line1 = "[info] 5xAgp6i9lUQ: Downloading 1 format(s): 136+140";
+        let caps1 = FORMATS_RE.captures(line1);
+        assert!(caps1.is_some());
+        assert!(caps1.unwrap().get(1).unwrap().as_str().contains('+'));
+
+        let line2 = "[info] 2296666004: Downloading 1 format(s): hls_aac_160k";
+        let caps2 = FORMATS_RE.captures(line2);
+        assert!(caps2.is_some());
+        assert!(!caps2.unwrap().get(1).unwrap().as_str().contains('+'));
+    }
+
+    #[test]
+    fn test_already_downloaded_regex() {
+        let line = r#"[download] c:\Users\Test\Downloads\Wah pedal test.mp3 has already been downloaded"#;
+        let caps = ALREADY_DOWNLOADED_RE.captures(line);
+        assert!(caps.is_some());
+        assert_eq!(caps.unwrap().get(1).unwrap().as_str(), r#"c:\Users\Test\Downloads\Wah pedal test.mp3"#);
     }
 }
 

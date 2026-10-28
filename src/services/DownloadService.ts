@@ -104,11 +104,20 @@ class DownloadServiceImpl {
         const item = this.queue.get(payload.job_id);
         if (item) {
           item.status = 'downloading';
-          item.progress = payload.progress_percent;
-          item.eta = payload.eta ?? item.eta;
-          item.speed = payload.speed ?? item.speed;
+          item.progress = Math.max(item.progress, payload.progress_percent);
+          if (payload.progress_percent >= 99 && !payload.eta) {
+            item.eta = null;
+            item.speed = null;
+          } else {
+            if (payload.eta) {
+              item.eta = payload.eta;
+            }
+            if (payload.speed) {
+              item.speed = payload.speed;
+            }
+          }
           item.totalSize = payload.total_size ?? item.totalSize;
-          if (payload.title && !item.title) {
+          if (payload.title && (!item.title || item.title === item.url)) {
             item.title = payload.title;
           }
           this.notifyListeners();
@@ -134,6 +143,10 @@ class DownloadServiceImpl {
           if (payload.file_path) {
             const parts = payload.file_path.replace(/\\/g, '/').split('/');
             item.fileName = parts[parts.length - 1];
+            const extMatch = item.fileName.match(/\.([a-zA-Z0-9]+)$/);
+            if (extMatch) {
+              item.format = extMatch[1].toLowerCase();
+            }
           }
 
           this.notifyListeners();
