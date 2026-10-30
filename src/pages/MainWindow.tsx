@@ -35,6 +35,9 @@ import type {
   MainScreenSettings,
   WatermarkSettings,
 } from '../types';
+import { TechnicalDetails } from '../types/technicalDetails';
+import { parseTechnicalDetails } from '../utils/technicalDetails';
+import TechnicalDetailsViewer from '../components/TechnicalDetailsViewer';
 import '../styles/MainWindow.css';
 console.log("Imports completed");
 
@@ -263,6 +266,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
   const [isLoadingDownloadFormats, setIsLoadingDownloadFormats] = useState(false);
   const [urlCheckStage, setUrlCheckStage] = useState<UrlCheckStage>('idle');
   const [urlCheckError, setUrlCheckError] = useState<string | null>(null);
+  const [urlCheckDetails, setUrlCheckDetails] = useState<TechnicalDetails | null>(null);
   const [checkAttempt, setCheckAttempt] = useState(0);
   const [isStartingDownload, setIsStartingDownload] = useState(false);
   const [showUrlInput, setShowUrlInput] = useState(false);
@@ -350,6 +354,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
       setIsLoadingDownloadFormats(false);
       setUrlCheckStage('idle');
       setUrlCheckError(null);
+      setUrlCheckDetails(null);
       return;
     }
 
@@ -360,6 +365,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
       setIsLoadingDownloadFormats(false);
       setUrlCheckStage('idle');
       setUrlCheckError(null);
+      setUrlCheckDetails(null);
       return;
     }
 
@@ -367,6 +373,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
     setIsLoadingDownloadFormats(true);
     setUrlCheckStage('checking');
     setUrlCheckError(null);
+    setUrlCheckDetails(null);
 
     const timer = setTimeout(async () => {
       try {
@@ -389,6 +396,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
         ));
         setUrlCheckStage('success');
         setUrlCheckError(null);
+        setUrlCheckDetails(null);
       } catch (error) {
         if (requestId !== downloadFormatsRequestRef.current) {
           return;
@@ -398,7 +406,9 @@ const MainWindow: React.FC<MainWindowProps> = ({
         setDownloadFormats(DEFAULT_DOWNLOAD_FORMATS);
         setSelectedDownloadFormat(DEFAULT_DOWNLOAD_FORMATS[0].label);
         setUrlCheckStage('error');
-        setUrlCheckError(String(error));
+        const details = parseTechnicalDetails(error, trimmed);
+        setUrlCheckError(details.status || String(error));
+        setUrlCheckDetails(details);
       } finally {
         if (requestId === downloadFormatsRequestRef.current) {
           setIsLoadingDownloadFormats(false);
@@ -745,7 +755,9 @@ const MainWindow: React.FC<MainWindowProps> = ({
     } catch (error) {
       console.error('[MainWindow] Download failed:', error);
       setUrlCheckStage('error');
-      setUrlCheckError(String(error));
+      const details = parseTechnicalDetails(error, trimmedUrl);
+      setUrlCheckError(details.status || String(error));
+      setUrlCheckDetails(details);
     } finally {
       setIsStartingDownload(false);
     }
@@ -923,13 +935,12 @@ const MainWindow: React.FC<MainWindowProps> = ({
             <p style={{ margin: 0, fontSize: isCompact ? '0.74rem' : '0.78rem', color: theme.colors.textSecondary, lineHeight: 1.35 }}>
               {t('download.fetchFailedHint') || 'Проверьте интернет-соединение или включите VPN/прокси (возможно, ресурс заблокирован в вашем регионе). Доступны стандартные форматы (MP4 / MP3).'}
             </p>
-            {urlCheckError && (
-              <details style={{ fontSize: '0.72rem', color: theme.colors.textSecondary, cursor: 'pointer' }}>
-                <summary style={{ opacity: 0.8 }}>{t('download.technicalDetails') || 'Технические подробности'}</summary>
-                <div style={{ marginTop: '4px', padding: '4px 6px', background: 'rgba(0,0,0,0.2)', borderRadius: '4px', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '100px', overflowY: 'auto' }}>
-                  {urlCheckError}
-                </div>
-              </details>
+            {(urlCheckDetails || urlCheckError) && (
+              <TechnicalDetailsViewer
+                details={urlCheckDetails || parseTechnicalDetails(urlCheckError, normalizeInputUrl(downloadUrl))}
+                theme={theme}
+                t={t}
+              />
             )}
           </motion.div>
         )}

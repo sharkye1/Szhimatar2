@@ -4,6 +4,8 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { DownloadQueueItem } from '../services/DownloadService';
 import { useFileDragOut } from '../hooks/useFileDragOut';
 import { isNetworkErrorText } from '../utils/downloadHelpers';
+import { TechnicalDetailsViewer } from './TechnicalDetailsViewer';
+import { parseTechnicalDetails } from '../utils/technicalDetails';
 
 export interface DownloadJobItemProps {
   item: DownloadQueueItem;
@@ -394,9 +396,10 @@ export const DownloadJobItem: React.FC<DownloadJobItemProps> = React.memo(({
       </div>
 
       {/* Error message */}
-      {(item.error || (item.status === 'error' && item.message)) && (() => {
+      {(item.error || (item.status === 'error' && item.message) || item.technicalDetails) && (() => {
         const errStr = item.error || item.message || '';
-        const isNetworkErr = isNetworkErrorText(errStr);
+        const isNetworkErr = item.technicalDetails?.is_network_error ?? isNetworkErrorText(errStr);
+        const details = item.technicalDetails || parseTechnicalDetails(errStr, item.url);
         return (
           <div
             className="item-error"
@@ -412,7 +415,7 @@ export const DownloadJobItem: React.FC<DownloadJobItemProps> = React.memo(({
               boxSizing: 'border-box',
               display: 'flex',
               flexDirection: 'column',
-              gap: '4px',
+              gap: '6px',
             }}
           >
             {isNetworkErr && (
@@ -421,9 +424,14 @@ export const DownloadJobItem: React.FC<DownloadJobItemProps> = React.memo(({
                 <span>{t('download.networkErrorExplanation') || 'Сбой сети или таймаут подключения. Проверьте интернет или включите VPN/прокси.'}</span>
               </div>
             )}
-            <div style={{ fontSize: '0.76rem', opacity: 0.9, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'monospace' }}>
-              {errStr}
+            <div style={{ fontSize: '0.76rem', opacity: 0.95, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'monospace' }}>
+              {errStr.split('\n')[0] || details.status}
             </div>
+            <TechnicalDetailsViewer
+              details={details}
+              theme={theme}
+              t={t}
+            />
           </div>
         );
       })()}
