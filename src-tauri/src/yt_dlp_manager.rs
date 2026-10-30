@@ -105,11 +105,40 @@ pub struct DownloadCompletePayload {
     pub save_path: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TechnicalDetails {
+    pub timestamp: String,
+    pub url: String,
+    pub command: String,
+    pub executable: String,
+    pub arguments: Vec<String>,
+    pub exit_code: Option<i32>,
+    pub status: String,
+    pub error_classification: Option<String>,
+    pub stdout: Option<String>,
+    pub stderr: Option<String>,
+    pub os: String,
+    pub arch: String,
+    pub is_network_error: bool,
+    pub hint: Option<String>,
+    pub environment: Option<Vec<String>>,
+}
+
+impl std::fmt::Display for TechnicalDetails {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} (exit code: {:?})", self.status, self.exit_code)
+    }
+}
+
+impl std::error::Error for TechnicalDetails {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DownloadErrorPayload {
     pub job_id: String,
     pub url: String,
     pub error: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<TechnicalDetails>,
 }
 
 fn yt_dlp_executable_name() -> &'static str {
@@ -282,6 +311,298 @@ pub fn is_network_error(err: &str) -> bool {
         || lower.contains("таймаут")
 }
 
+pub fn classify_error_message(err: &str) -> (bool, Option<String>) {
+    let lower = err.to_ascii_lowercase();
+
+    // 1. Connection Reset / ECONNRESET
+    if lower.contains("errno 54")
+        || lower.contains("10054")
+        || lower.contains("connection reset")
+        || lower.contains("remotedisconnected")
+        || lower.contains("remote end closed")
+    {
+        return (
+            true,
+            Some("Сброс соединения (ECONNRESET / Errno 54 / WinError 10054). Сетевой поток разорван сервером или промежуточным оборудованием (DPI / блокировка провайдером / РКН).".to_string()),
+        );
+    }
+
+    // 2. Timeout
+    if lower.contains("timed out")
+        || lower.contains("timeout")
+        || lower.contains("timedout")
+        || lower.contains("errno 60")
+        || lower.contains("winerror 10060")
+        || lower.contains("таймаут")
+    {
+        return (
+            true,
+            Some("Таймаут подключения (ETIMEDOUT / Errno 60 / WinError 10060). Превышено время ожидания ответа от сервера; возможна потеря пакетов или замедление/блокировка фаерволом/DPI.".to_string()),
+        );
+    }
+
+    // 3. DNS Lookup Failure
+    if lower.contains("getaddrinfo")
+        || lower.contains("nodename nor servname")
+        || lower.contains("name or service not known")
+        || lower.contains("temporary failure in name resolution")
+        || lower.contains("errno 8")
+        || lower.contains("errno 11001")
+    {
+        return (
+            true,
+            Some("Сбой DNS (getaddrinfo / Errno 8 / WinError 11001). Не удалось разрешить доменное имя в IP-адрес. Проверьте интернет или настройки DNS.".to_string()),
+        );
+    }
+
+    // 4. Connection Refused
+    if lower.contains("connection refused")
+        || lower.contains("winerror 10061")
+        || lower.contains("errno 61")
+    {
+        return (
+            true,
+            Some("Соединение отклонено (ECONNREFUSED / Errno 61 / WinError 10061). Удаленный сервер или локальный прокси отклонил попытку подключения.".to_string()),
+        );
+    }
+
+    // 5. Network / Host Unreachable
+    if lower.contains("network is unreachable")
+        || lower.contains("network is down")
+        || lower.contains("no route to host")
+        || lower.contains("winerror 10051")
+        || lower.contains("errno 65")
+    {
+        return (
+            true,
+            Some("Сеть недоступна (ENETUNREACH / EHOSTUNREACH). Отсутствует сетевой маршрут к хосту либо отключен интернет.".to_string()),
+        );
+    }
+
+    // 6. TLS / SSL Failure
+    if lower.contains("certificate verify failed")
+        || lower.contains("ssl error")
+        || lower.contains("tls error")
+        || lower.contains("sslv3")
+        || lower.contains("handshake_failure")
+    {
+        return (
+            true,
+            Some("Сбой TLS/SSL рукопожатия. Ошибка проверки сертификата или перехват зашифрованного HTTPS-трафика.".to_string()),
+        );
+    }
+
+    // 7. HTTP 403 Forbidden
+    if lower.contains("http error 403") || lower.contains("403 forbidden") {
+        return (
+            false,
+            Some("HTTP 403 Forbidden. Доступ к медиа запрещен сервером (гео-блокировка по стране/IP, приватный доступ или устаревший токен).".to_string()),
+        );
+    }
+
+    // 8. HTTP 429 Too Many Requests
+    if lower.contains("http error 429") || lower.contains("too many requests") {
+        return (
+            false,
+            Some("HTTP 429 Too Many Requests. Превышен лимит запросов к серверу платформы (Rate Limiting).".to_string()),
+        );
+    }
+
+    // 9. Bot detection / Captcha
+    if lower.contains("sign in to confirm")
+        || lower.contains("confirm you")
+        || lower.contains("bot")
+        || lower.contains("captcha")
+    {
+        return (
+            false,
+            Some("Защита от ботов / Требуется вход. Сервис заблокировал автоматический запрос и требует авторизацию через браузер.".to_string()),
+        );
+    }
+
+    // 10. Private / Unavailable video
+    if lower.contains("video unavailable")
+        || lower.contains("private video")
+        || lower.contains("this video has been removed")
+    {
+        return (
+            false,
+            Some("Медиафайл недоступен. Видео удалено автором, скрыто приватностью или ограничено для вашего региона.".to_string()),
+        );
+    }
+
+    // 11. Unsupported URL
+    if lower.contains("unsupported url") {
+        return (
+            false,
+            Some("Неподдерживаемый URL. yt-dlp не имеет модуля для скачивания с данного адреса.".to_string()),
+        );
+    }
+
+    // 12. HTTP 404 Not Found
+    if lower.contains("http error 404") || lower.contains("404: not found") || lower.contains("404 not found") {
+        return (
+            false,
+            Some("HTTP 404 Not Found. Запрашиваемая страница или медиафайл не найдены на сервере платформы.".to_string()),
+        );
+    }
+
+    // 13. HTTP 5xx Server Errors
+    if lower.contains("http error 500")
+        || lower.contains("http error 502")
+        || lower.contains("http error 503")
+        || lower.contains("http error 504")
+        || lower.contains("502 bad gateway")
+        || lower.contains("503 service unavailable")
+        || lower.contains("504 gateway time-out")
+        || lower.contains("gateway timeout")
+    {
+        return (
+            true,
+            Some("Сбой сервера платформы (HTTP 5xx / Bad Gateway / Service Unavailable). Сервер источника перегружен или временно недоступен.".to_string()),
+        );
+    }
+
+    // 14. FFmpeg / Postprocessor Error
+    if lower.contains("ffprobe and ffmpeg not found")
+        || lower.contains("ffmpeg not found")
+        || lower.contains("ffprobe not found")
+        || lower.contains("postprocessing: error opening output")
+        || lower.contains("please install or provide the path to a working ffmpeg")
+    {
+        return (
+            false,
+            Some("Ошибка постобработки / Отсутствует FFmpeg. yt-dlp не смог объединить видео и аудио или сконвертировать файл.".to_string()),
+        );
+    }
+
+    // 15. Members-only / Premium / DRM
+    if lower.contains("join this channel to get access")
+        || lower.contains("members-only")
+        || lower.contains("music premium members")
+        || lower.contains("drm protected")
+        || lower.contains("this video is drm protected")
+    {
+        return (
+            false,
+            Some("Платный или защищенный DRM контент. Видео доступно только спонсорам канала, подписчикам Premium или защищено DRM-шифрованием.".to_string()),
+        );
+    }
+
+    // 16. Extractor / JS Player Failure
+    if lower.contains("unable to extract yt initial data")
+        || lower.contains("unable to extract video data")
+        || lower.contains("unable to extract js player")
+        || lower.contains("extractor error")
+    {
+        return (
+            false,
+            Some("Сбой экстрактора yt-dlp. Изменились внутренние алгоритмы платформы видеохостинга.".to_string()),
+        );
+    }
+
+    let is_net = is_network_error(err);
+    (
+        is_net,
+        if is_net {
+            Some("Сетевая ошибка при обращении к ресурсу".to_string())
+        } else {
+            None
+        },
+    )
+}
+
+pub fn build_technical_details(
+    url: &str,
+    executable: &Path,
+    args: &[String],
+    exit_code: Option<i32>,
+    status: String,
+    stdout: Option<String>,
+    stderr: Option<String>,
+) -> TechnicalDetails {
+    let combined = format!(
+        "{}\n{}\n{}",
+        status,
+        stderr.as_deref().unwrap_or_default(),
+        stdout.as_deref().unwrap_or_default()
+    );
+    let (is_net, classification) = classify_error_message(&combined);
+
+    let command_str = format!(
+        "\"{}\" {}",
+        executable.to_string_lossy(),
+        args.iter()
+            .map(|a| {
+                if a.contains(' ') || a.contains('"') {
+                    format!("\"{}\"", a.replace('"', "\\\""))
+                } else {
+                    a.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+
+    let hint = if is_net {
+        Some("Проверьте интернет-соединение или включите VPN/прокси (возможно, ресурс заблокирован в вашем регионе).".to_string())
+    } else if let Some(ref cls) = classification {
+        if cls.contains("FFmpeg") {
+            Some("Убедитесь, что в системе установлен FFmpeg или укажите путь к нему в настройках приложения.".to_string())
+        } else if cls.contains("экстрактора") {
+            Some("Возможно, видеохостинг обновил плеер. Обновите yt-dlp в настройках или повторите попытку позже.".to_string())
+        } else if cls.contains("404") {
+            Some("Проверьте правильность ссылки, возможно видео или страница были удалены.".to_string())
+        } else if cls.contains("DRM") || cls.contains("Платный") {
+            Some("Этот контент требует платной авторизации или защищен DRM, поэтому его невозможно скачать напрямую.".to_string())
+        } else {
+            Some(cls.clone())
+        }
+    } else {
+        None
+    };
+
+    let mut environment = Vec::new();
+    let re_cred = Regex::new(r"://[^@]+@").ok();
+    let mut seen_vars = std::collections::HashSet::new();
+    for var in &["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy"] {
+        let upper = var.to_uppercase();
+        if seen_vars.contains(&upper) {
+            continue;
+        }
+        if let Ok(val) = std::env::var(var) {
+            seen_vars.insert(upper);
+            let sanitized = if let Some(ref re) = re_cred {
+                re.replace_all(&val, "://***:***@").to_string()
+            } else {
+                val
+            };
+            environment.push(format!("{}: {}", var, sanitized));
+        }
+    }
+    if environment.is_empty() {
+        environment.push("Proxy: Прямое подключение (прокси не обнаружен в окружении)".to_string());
+    }
+
+    TechnicalDetails {
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        url: url.to_string(),
+        command: command_str,
+        executable: executable.to_string_lossy().to_string(),
+        arguments: args.to_vec(),
+        exit_code,
+        status,
+        error_classification: classification,
+        stdout: stdout.filter(|s| !s.trim().is_empty()),
+        stderr: stderr.filter(|s| !s.trim().is_empty()),
+        os: std::env::consts::OS.to_string(),
+        arch: std::env::consts::ARCH.to_string(),
+        is_network_error: is_net,
+        hint,
+        environment: Some(environment),
+    }
+}
+
 pub async fn ensure_yt_dlp_installed(app_handle: &AppHandle) -> Result<PathBuf, String> {
     let yt_dlp_path = yt_dlp_path()?;
 
@@ -384,32 +705,6 @@ pub fn update_yt_dlp_in_background(app_handle: AppHandle) {
     });
 }
 
-async fn run_yt_dlp_output(
-    app_handle: &AppHandle,
-    args: &[String],
-) -> Result<std::process::Output, String> {
-    let yt_dlp_path = ensure_yt_dlp_installed(app_handle).await?;
-
-    let mut command = tokio::process::Command::new(&yt_dlp_path);
-    #[cfg(target_os = "windows")]
-    {
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        command.creation_flags(CREATE_NO_WINDOW);
-    }
-    command
-        .kill_on_drop(true)
-        .env("PYTHONIOENCODING", "utf-8")
-        .env("PYTHONUTF8", "1")
-        .args(args);
-
-    let output = match tokio::time::timeout(Duration::from_secs(14), command.output()).await {
-        Ok(res) => res.map_err(|e| e.to_string())?,
-        Err(_) => {
-            return Err("Превышено время ожидания проверки ссылки (таймаут сети). Проверьте интернет или включите VPN/прокси, если ресурс заблокирован.".to_string());
-        }
-    };
-    Ok(output)
-}
 
 fn format_label(height: u32, ext: &str) -> String {
     if ext.eq_ignore_ascii_case("mp4") {
@@ -535,18 +830,21 @@ pub fn get_system_download_dir() -> Result<String, String> {
 }
 
 #[tauri::command]
-pub async fn get_video_formats(app_handle: AppHandle, url: String) -> Result<VideoMetadataResponse, String> {
+pub async fn get_video_formats(
+    app_handle: AppHandle,
+    url: String,
+) -> Result<VideoMetadataResponse, TechnicalDetails> {
     let mut args = vec![
         "-J".to_string(),
         "--encoding".to_string(),
         "utf-8".to_string(),
         "--force-ipv4".to_string(),
         "--socket-timeout".to_string(),
-        "5".to_string(),
+        "10".to_string(),
         "--retries".to_string(),
-        "1".to_string(),
+        "2".to_string(),
         "--fragment-retries".to_string(),
-        "1".to_string(),
+        "2".to_string(),
         "--no-check-certificates".to_string(),
         "--no-colors".to_string(),
         "--user-agent".to_string(),
@@ -566,26 +864,96 @@ pub async fn get_video_formats(app_handle: AppHandle, url: String) -> Result<Vid
         args.push(normalized);
     }
 
-    args.push(url);
+    args.push(url.clone());
 
-    let output = run_yt_dlp_output(&app_handle, &args).await?;
+    let yt_dlp_path = match ensure_yt_dlp_installed(&app_handle).await {
+        Ok(path) => path,
+        Err(e) => {
+            let details = build_technical_details(
+                &url,
+                &PathBuf::from(yt_dlp_executable_name()),
+                &args,
+                None,
+                format!("yt-dlp executable installation failed: {}", e),
+                None,
+                Some(e),
+            );
+            return Err(details);
+        }
+    };
+
+    let mut command = tokio::process::Command::new(&yt_dlp_path);
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+        .kill_on_drop(true)
+        .env("PYTHONIOENCODING", "utf-8")
+        .env("PYTHONUTF8", "1")
+        .args(&args);
+
+    let output = match tokio::time::timeout(Duration::from_secs(14), command.output()).await {
+        Ok(Ok(out)) => out,
+        Ok(Err(e)) => {
+            let details = build_technical_details(
+                &url,
+                &yt_dlp_path,
+                &args,
+                None,
+                format!("Failed to execute yt-dlp: {}", e),
+                None,
+                Some(e.to_string()),
+            );
+            return Err(details);
+        }
+        Err(_) => {
+            let details = build_technical_details(
+                &url,
+                &yt_dlp_path,
+                &args,
+                None,
+                "Превышено время ожидания проверки ссылки (таймаут сети 14 сек)".to_string(),
+                None,
+                Some("Таймаут подключения (14 секунд). Сервер не ответил на запрос или соединение было сброшено/заблокировано сетевым оборудованием или провайдером (DPI / РКН / VPN).".to_string()),
+            );
+            return Err(details);
+        }
+    };
 
     if !output.status.success() {
-        let err_text = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        let formatted = if err_text.is_empty() {
-            format!("yt-dlp format discovery failed with status: {}", output.status)
-        } else if is_network_error(&err_text) {
-            format!(
-                "Сбой сети или таймаут при проверке ссылки. Проверьте интернет или включите VPN/прокси, если сервис заблокирован.\n{}",
-                err_text
-            )
-        } else {
-            err_text
-        };
-        return Err(formatted);
+        let stdout_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let stderr_str = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let details = build_technical_details(
+            &url,
+            &yt_dlp_path,
+            &args,
+            output.status.code(),
+            format!("yt-dlp format discovery failed with status: {}", output.status),
+            if !stdout_str.is_empty() { Some(stdout_str) } else { None },
+            if !stderr_str.is_empty() { Some(stderr_str) } else { None },
+        );
+        return Err(details);
     }
 
-    let info: YtDlpInfo = serde_json::from_slice(&output.stdout).map_err(|e| e.to_string())?;
+    let info: YtDlpInfo = match serde_json::from_slice(&output.stdout) {
+        Ok(parsed) => parsed,
+        Err(e) => {
+            let stdout_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let stderr_str = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let details = build_technical_details(
+                &url,
+                &yt_dlp_path,
+                &args,
+                output.status.code(),
+                format!("Failed to parse metadata JSON from yt-dlp: {}", e),
+                if !stdout_str.is_empty() { Some(stdout_str) } else { None },
+                if !stderr_str.is_empty() { Some(stderr_str) } else { None },
+            );
+            return Err(details);
+        }
+    };
     let _ = app_handle.emit_all(
         "download-manager-log",
         format!(
@@ -718,6 +1086,59 @@ pub async fn download_media_link(
     );
 
     tauri::async_runtime::spawn(async move {
+        let mut command_args: Vec<String> = vec![
+            "--encoding".to_string(),
+            "utf-8".to_string(),
+            "--newline".to_string(),
+            "--no-colors".to_string(),
+            "--force-ipv4".to_string(),
+            "--socket-timeout".to_string(),
+            "15".to_string(),
+            "--retries".to_string(),
+            "3".to_string(),
+            "--fragment-retries".to_string(),
+            "3".to_string(),
+            "--no-check-certificates".to_string(),
+            "--windows-filenames".to_string(),
+            "--user-agent".to_string(),
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36".to_string(),
+            "--no-warnings".to_string(),
+            "--no-playlist".to_string(),
+            "--compat-options".to_string(),
+            "no-youtube-unavailable-videos".to_string(),
+            "-P".to_string(),
+            normalized_save_path_str.clone(),
+            "-o".to_string(),
+            "%(title).150s.%(ext)s".to_string(),
+            "--progress".to_string(),
+            "--progress-template".to_string(),
+            "download:SZ_PROGRESS:%(progress._percent_str)s|%(progress._eta_str)s|%(progress._speed_str)s|%(progress._total_bytes_str,progress._total_bytes_estimate_str,progress._downloaded_bytes_str)s|%(info.title)s|%(info.duration)s".to_string(),
+            "--progress-template".to_string(),
+            "postprocess:SZ_POST:%(progress.status)s|%(info.filepath)s|%(info.title)s|%(info.duration)s".to_string(),
+        ];
+
+        if let Some(ffmpeg_loc) = resolve_ffmpeg_location() {
+            let normalized_ffmpeg = ffmpeg_loc.to_string_lossy().replace('\\', "/");
+            command_args.push("--ffmpeg-location".to_string());
+            command_args.push(normalized_ffmpeg);
+        }
+
+        if format.eq_ignore_ascii_case("mp3") {
+            command_args.push("-x".to_string());
+            command_args.push("--audio-format".to_string());
+            command_args.push("mp3".to_string());
+        } else {
+            if !quality.trim().is_empty() {
+                command_args.push("-f".to_string());
+                command_args.push(quality.clone());
+            }
+
+            command_args.push("--merge-output-format".to_string());
+            command_args.push("mp4".to_string());
+        }
+
+        command_args.push(url.clone());
+
         let mut command = tokio::process::Command::new(&yt_dlp_path);
         #[cfg(target_os = "windows")]
         {
@@ -728,63 +1149,29 @@ pub async fn download_media_link(
             .env("PYTHONIOENCODING", "utf-8")
             .env("PYTHONUTF8", "1")
             .env("PYTHONLEGACYWINDOWSSTDIO", "utf-8")
-            .arg("--encoding")
-            .arg("utf-8")
-            .arg("--newline")
-            .arg("--no-colors")
-            .arg("--force-ipv4")
-            .arg("--socket-timeout")
-            .arg("15")
-            .arg("--retries")
-            .arg("3")
-            .arg("--fragment-retries")
-            .arg("3")
-            .arg("--no-check-certificates")
-            .arg("--windows-filenames")
-            .arg("--user-agent")
-            .arg("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-            .arg("--no-warnings")
-            .arg("--no-playlist")
-            .arg("--compat-options")
-            .arg("no-youtube-unavailable-videos")
-            .arg("-P")
-            .arg(&normalized_save_path_str)
-            .arg("-o")
-            .arg("%(title).150s.%(ext)s")
-            .arg("--progress")
-            .arg("--progress-template")
-            .arg("download:SZ_PROGRESS:%(progress._percent_str)s|%(progress._eta_str)s|%(progress._speed_str)s|%(progress._total_bytes_str,progress._total_bytes_estimate_str,progress._downloaded_bytes_str)s|%(info.title)s|%(info.duration)s")
-            .arg("--progress-template")
-            .arg("postprocess:SZ_POST:%(progress.status)s|%(info.filepath)s|%(info.title)s|%(info.duration)s")
+            .args(&command_args)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
-
-        if let Some(ffmpeg_loc) = resolve_ffmpeg_location() {
-            let normalized_ffmpeg = ffmpeg_loc.to_string_lossy().replace('\\', "/");
-            command.arg("--ffmpeg-location").arg(normalized_ffmpeg);
-        }
-
-        if format.eq_ignore_ascii_case("mp3") {
-            command.arg("-x").arg("--audio-format").arg("mp3");
-        } else {
-            if !quality.trim().is_empty() {
-                command.arg("-f").arg(&quality);
-            }
-
-            command.arg("--merge-output-format").arg("mp4");
-        }
-
-        command.arg(&url);
 
         let mut child = match command.spawn() {
             Ok(c) => c,
             Err(e) => {
+                let details = build_technical_details(
+                    &url,
+                    &yt_dlp_path,
+                    &command_args,
+                    None,
+                    format!("Failed to spawn yt-dlp: {}", e),
+                    None,
+                    Some(e.to_string()),
+                );
                 let _ = app_handle.emit_all(
                     "download-error",
                     DownloadErrorPayload {
                         job_id: job_id_clone.clone(),
-                        url,
+                        url: url.clone(),
                         error: format!("Failed to spawn yt-dlp: {}", e),
+                        details: Some(details),
                     },
                 );
                 return;
@@ -819,7 +1206,7 @@ pub async fn download_media_link(
         let filepath_for_stdout = Arc::clone(&discovered_filepath);
 
         let stdout_handle = tokio::spawn(async move {
-            let mut last_line = String::new();
+            let mut captured_lines: Vec<String> = Vec::new();
             let mut last_emit = Instant::now() - Duration::from_millis(200);
             let mut has_multiple_streams = false;
             let mut current_stream = 0usize;
@@ -1021,12 +1408,17 @@ pub async fn download_media_link(
                             );
                         }
                     }
-                    if !line.trim().is_empty() {
-                        last_line = line;
+                    if !line.trim().is_empty()
+                        && !trimmed.starts_with("download:SZ_PROGRESS:")
+                        && !trimmed.starts_with("postprocess:SZ_POST:")
+                    {
+                        if captured_lines.len() < 100 {
+                            captured_lines.push(line);
+                        }
                     }
                 }
             }
-            last_line
+            captured_lines.join("\n")
         });
 
         let stderr_handle = tokio::spawn(async move {
@@ -1038,8 +1430,10 @@ pub async fn download_media_link(
 
                 while let Ok(Some(line)) = lines.next_line().await {
                     let trimmed = line.trim();
-                    if !trimmed.is_empty() && !trimmed.starts_with("WARNING:") {
-                        err_lines.push(line);
+                    if !trimmed.is_empty() {
+                        if err_lines.len() < 150 {
+                            err_lines.push(line);
+                        }
                     }
                 }
             }
@@ -1054,12 +1448,22 @@ pub async fn download_media_link(
                 let status = match res {
                     Ok(s) => s,
                     Err(e) => {
+                        let details = build_technical_details(
+                            &url,
+                            &yt_dlp_path,
+                            &command_args,
+                            None,
+                            format!("yt-dlp wait error: {}", e),
+                            None,
+                            Some(e.to_string()),
+                        );
                         let _ = app_handle.emit_all(
                             "download-error",
                             DownloadErrorPayload {
                                 job_id: job_id_clone.clone(),
-                                url,
+                                url: url.clone(),
                                 error: format!("yt-dlp wait error: {}", e),
+                                details: Some(details),
                             },
                         );
                         if let Ok(mut manager) = crate::process_manager::PROCESS_MANAGER.lock() {
@@ -1194,12 +1598,23 @@ pub async fn download_media_link(
                         raw_err
                     };
 
+                    let details = build_technical_details(
+                        &url,
+                        &yt_dlp_path,
+                        &command_args,
+                        status.code(),
+                        format!("yt-dlp exited with status: {}", status),
+                        if !last_stdout.trim().is_empty() { Some(last_stdout) } else { None },
+                        if !stderr_output.trim().is_empty() { Some(stderr_output) } else { None },
+                    );
+
                     let _ = app_handle.emit_all(
                         "download-error",
                         DownloadErrorPayload {
                             job_id: job_id_clone.clone(),
                             url,
                             error: error_msg,
+                            details: Some(details),
                         },
                     );
                 }
@@ -1391,6 +1806,70 @@ mod tests {
         let caps = ALREADY_DOWNLOADED_RE.captures(line);
         assert!(caps.is_some());
         assert_eq!(caps.unwrap().get(1).unwrap().as_str(), r#"c:\Users\Test\Downloads\Wah pedal test.mp3"#);
+    }
+
+    #[test]
+    fn test_classify_error_message_categories() {
+        let (is_net, class) = classify_error_message("ERROR: <urlopen error [Errno 54] Connection reset by peer>");
+        assert!(is_net);
+        assert!(class.unwrap().contains("ECONNRESET"));
+
+        let (is_net_timeout, class_timeout) = classify_error_message("WinError 10060: connection timed out");
+        assert!(is_net_timeout);
+        assert!(class_timeout.unwrap().contains("ETIMEDOUT"));
+
+        let (is_net_dns, class_dns) = classify_error_message("getaddrinfo failed: nodename nor servname provided");
+        assert!(is_net_dns);
+        assert!(class_dns.unwrap().contains("DNS"));
+
+        let (is_net_403, class_403) = classify_error_message("HTTP Error 403: Forbidden");
+        assert!(!is_net_403);
+        assert!(class_403.unwrap().contains("403 Forbidden"));
+
+        let (is_net_404, class_404) = classify_error_message("HTTP Error 404: Not Found");
+        assert!(!is_net_404);
+        assert!(class_404.unwrap().contains("404 Not Found"));
+
+        let (is_net_502, class_502) = classify_error_message("HTTP Error 502: Bad Gateway");
+        assert!(is_net_502);
+        assert!(class_502.unwrap().contains("HTTP 5xx"));
+
+        let (is_net_ff, class_ff) = classify_error_message("ERROR: Postprocessing: ffprobe and ffmpeg not found");
+        assert!(!is_net_ff);
+        assert!(class_ff.unwrap().contains("FFmpeg"));
+
+        let (is_net_mem, class_mem) = classify_error_message("Join this channel to get access to members-only content");
+        assert!(!is_net_mem);
+        assert!(class_mem.unwrap().contains("Платный"));
+
+        let (is_net_ext, class_ext) = classify_error_message("Unable to extract yt initial data");
+        assert!(!is_net_ext);
+        assert!(class_ext.unwrap().contains("экстрактора"));
+    }
+
+    #[test]
+    fn test_build_technical_details_fields() {
+        let args = vec!["-J".to_string(), "https://youtube.com/watch?v=123".to_string()];
+        let details = build_technical_details(
+            "https://youtube.com/watch?v=123",
+            Path::new("/usr/local/bin/yt-dlp"),
+            &args,
+            Some(1),
+            "Process exited with status 1".to_string(),
+            Some("stdout text".to_string()),
+            Some("ERROR: <urlopen error [Errno 54] Connection reset by peer>".to_string()),
+        );
+
+        assert_eq!(details.url, "https://youtube.com/watch?v=123");
+        assert_eq!(details.executable, "/usr/local/bin/yt-dlp");
+        assert_eq!(details.exit_code, Some(1));
+        assert!(details.is_network_error);
+        assert!(details.error_classification.unwrap().contains("ECONNRESET"));
+        assert!(details.command.contains("/usr/local/bin/yt-dlp"));
+        assert!(details.command.contains("-J"));
+        assert_eq!(details.stdout, Some("stdout text".to_string()));
+        assert!(details.stderr.unwrap().contains("Errno 54"));
+        assert!(details.hint.is_some());
     }
 }
 
