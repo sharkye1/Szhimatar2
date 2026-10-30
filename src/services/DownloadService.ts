@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { TechnicalDetails } from '../types/technicalDetails';
+import { parseTechnicalDetails } from '../utils/technicalDetails';
 
 export type DownloadStatus = 'pending' | 'downloading' | 'completed' | 'error' | 'stopped';
 
@@ -23,6 +25,7 @@ export interface DownloadQueueItem {
   durationSeconds?: number | null;
   durationFormatted?: string | null;
   error?: string | null;
+  technicalDetails?: TechnicalDetails | null;
   message?: string;
 }
 
@@ -60,6 +63,7 @@ export interface DownloadErrorEvent {
   job_id: string;
   url: string;
   error: string;
+  details?: TechnicalDetails;
 }
 
 export interface DownloadStoppedEvent {
@@ -159,6 +163,7 @@ class DownloadServiceImpl {
         if (item) {
           item.status = 'error';
           item.error = payload.error;
+          item.technicalDetails = payload.details || parseTechnicalDetails(payload.error, item.url);
           item.message = payload.error;
           this.notifyListeners();
         }
@@ -247,6 +252,7 @@ class DownloadServiceImpl {
       console.error('[DownloadService] Download failed:', error);
       item.status = 'error';
       item.error = String(error);
+      item.technicalDetails = parseTechnicalDetails(error, item.url);
       item.message = String(error);
       this.notifyListeners();
     }
