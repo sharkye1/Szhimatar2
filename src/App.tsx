@@ -54,11 +54,10 @@ function AppContent() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentScreen]);
 
-  // Show window as soon as the basic layout is rendered
+  // Show and focus window on mount
   useEffect(() => {
-    requestAnimationFrame(() => {
-      appWindow.show();
-    });
+    appWindow.show();
+    appWindow.setFocus();
   }, []);
 
   // Load GPU availability and render mode on startup

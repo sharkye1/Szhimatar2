@@ -251,6 +251,37 @@ fn install_permissions(_path: &PathBuf) -> Result<(), String> {
     Ok(())
 }
 
+pub fn is_network_error(err: &str) -> bool {
+    let lower = err.to_ascii_lowercase();
+    lower.contains("timed out")
+        || lower.contains("timeout")
+        || lower.contains("timedout")
+        || lower.contains("getaddrinfo")
+        || lower.contains("urlopen error")
+        || lower.contains("connection refused")
+        || lower.contains("connection reset")
+        || lower.contains("network is unreachable")
+        || lower.contains("network is down")
+        || lower.contains("no route to host")
+        || lower.contains("temporary failure in name resolution")
+        || lower.contains("nodename nor servname")
+        || lower.contains("name or service not known")
+        || lower.contains("remote end closed")
+        || lower.contains("remotedisconnected")
+        || lower.contains("certificate verify failed")
+        || lower.contains("ssl error")
+        || lower.contains("tls error")
+        || lower.contains("http error 403")
+        || lower.contains("http error 429")
+        || lower.contains("winerror 10060")
+        || lower.contains("winerror 10054")
+        || lower.contains("winerror 10051")
+        || lower.contains("errno 60")
+        || lower.contains("errno 8")
+        || lower.contains("сбой сети")
+        || lower.contains("таймаут")
+}
+
 pub async fn ensure_yt_dlp_installed(app_handle: &AppHandle) -> Result<PathBuf, String> {
     let yt_dlp_path = yt_dlp_path()?;
 
@@ -262,15 +293,21 @@ pub async fn ensure_yt_dlp_installed(app_handle: &AppHandle) -> Result<PathBuf, 
 
     let url = yt_dlp_download_url()?;
     let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(120))
         .build()
         .map_err(|e| e.to_string())?;
 
-    let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    let response = client.get(&url).send().await.map_err(|e| {
+        format!(
+            "Не удалось загрузить модуль yt-dlp с GitHub ({}). Проверьте подключение к интернету или включите VPN/прокси.\n{}",
+            url, e
+        )
+    })?;
 
     if !response.status().is_success() {
         return Err(format!(
-            "Failed to download yt-dlp from {}: status {}",
+            "Не удалось загрузить yt-dlp с {}: статус {}. Проверьте подключение к интернету или включите VPN/прокси.",
             url,
             response.status()
         ));
@@ -360,11 +397,17 @@ async fn run_yt_dlp_output(
         command.creation_flags(CREATE_NO_WINDOW);
     }
     command
+        .kill_on_drop(true)
         .env("PYTHONIOENCODING", "utf-8")
         .env("PYTHONUTF8", "1")
         .args(args);
 
-    let output = command.output().await.map_err(|e| e.to_string())?;
+    let output = match tokio::time::timeout(Duration::from_secs(14), command.output()).await {
+        Ok(res) => res.map_err(|e| e.to_string())?,
+        Err(_) => {
+            return Err("Превышено время ожидания проверки ссылки (таймаут сети). Проверьте интернет или включите VPN/прокси, если ресурс заблокирован.".to_string());
+        }
+    };
     Ok(output)
 }
 
@@ -498,10 +541,12 @@ pub async fn get_video_formats(app_handle: AppHandle, url: String) -> Result<Vid
         "--encoding".to_string(),
         "utf-8".to_string(),
         "--force-ipv4".to_string(),
+        "--socket-timeout".to_string(),
+        "5".to_string(),
         "--retries".to_string(),
-        "10".to_string(),
+        "1".to_string(),
         "--fragment-retries".to_string(),
-        "10".to_string(),
+        "1".to_string(),
         "--no-check-certificates".to_string(),
         "--no-colors".to_string(),
         "--user-agent".to_string(),
@@ -527,11 +572,17 @@ pub async fn get_video_formats(app_handle: AppHandle, url: String) -> Result<Vid
 
     if !output.status.success() {
         let err_text = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        return Err(if !err_text.is_empty() {
-            err_text
-        } else {
+        let formatted = if err_text.is_empty() {
             format!("yt-dlp format discovery failed with status: {}", output.status)
-        });
+        } else if is_network_error(&err_text) {
+            format!(
+                "Сбой сети или таймаут при проверке ссылки. Проверьте интернет или включите VPN/прокси, если сервис заблокирован.\n{}",
+                err_text
+            )
+        } else {
+            err_text
+        };
+        return Err(formatted);
     }
 
     let info: YtDlpInfo = serde_json::from_slice(&output.stdout).map_err(|e| e.to_string())?;
@@ -682,10 +733,12 @@ pub async fn download_media_link(
             .arg("--newline")
             .arg("--no-colors")
             .arg("--force-ipv4")
+            .arg("--socket-timeout")
+            .arg("15")
             .arg("--retries")
-            .arg("10")
+            .arg("3")
             .arg("--fragment-retries")
-            .arg("10")
+            .arg("3")
             .arg("--no-check-certificates")
             .arg("--windows-filenames")
             .arg("--user-agent")
@@ -1124,12 +1177,21 @@ pub async fn download_media_link(
                         },
                     );
                 } else {
-                    let error_msg = if !stderr_output.trim().is_empty() {
+                    let raw_err = if !stderr_output.trim().is_empty() {
                         stderr_output.trim().to_string()
                     } else if !last_stdout.trim().is_empty() {
                         last_stdout.trim().to_string()
                     } else {
                         format!("yt-dlp exited with status: {}", status)
+                    };
+
+                    let error_msg = if is_network_error(&raw_err) {
+                        format!(
+                            "Ошибка соединения (таймаут или блокировка сети). Проверьте интернет или включите VPN.\n{}",
+                            raw_err
+                        )
+                    } else {
+                        raw_err
                     };
 
                     let _ = app_handle.emit_all(
