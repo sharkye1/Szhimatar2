@@ -144,3 +144,4 @@ update_version.py
 sync-version.js
 
 test-compressor/
+.agents/
