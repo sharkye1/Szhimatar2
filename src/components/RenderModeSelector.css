@@ -172,6 +172,7 @@
     font-weight: 700;
     letter-spacing: 0.5px;
     text-transform: uppercase;
+    white-space: nowrap;
 }
 
 .mode-button .vendor-badge {
@@ -182,6 +183,7 @@
     background: rgba(255, 255, 255, 0.1);
     border-radius: 4px;
     margin-top: 2px;
+    white-space: nowrap;
 }
 
 /* ============================================================================

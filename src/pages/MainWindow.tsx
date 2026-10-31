@@ -18,6 +18,14 @@ const PreviewPanel = lazy(() => import('../components/PreviewPanel'));
 const StatisticsPanel = lazy(() => import('../components/StatisticsPanel'));
 import { UpdateService, UpdateState } from '../services/UpdateService';
 import { Film, Volume2, Settings, BarChart3, Folder, Play, Pause, Square, RefreshCw, Sparkles, HardDrive, Check, X, Clock, AlertTriangle, Trash2, Download, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  normalizeInputUrl,
+  isValidMediaUrl,
+  formatDownloadBytes,
+  formatDownloadHeight,
+  formatDownloadOptionLabel,
+  normalizeDownloadFormats as normalizeDownloadFormatsHelper,
+} from '../utils/downloadHelpers';
 import type { RenderJob } from '../services/RenderService';
 import type { DownloadQueueItem, DownloadStatus } from '../services/DownloadService';
 import type {
@@ -27,6 +35,9 @@ import type {
   MainScreenSettings,
   WatermarkSettings,
 } from '../types';
+import { TechnicalDetails } from '../types/technicalDetails';
+import { parseTechnicalDetails } from '../utils/technicalDetails';
+import TechnicalDetailsViewer from '../components/TechnicalDetailsViewer';
 import '../styles/MainWindow.css';
 console.log("Imports completed");
 
@@ -72,39 +83,8 @@ const DEFAULT_DOWNLOAD_FORMATS: DownloadFormatOption[] = [
 
 const createDownloadJobId = () => `download-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-const formatDownloadBytes = (bytes?: number | null) => {
-  if (!bytes || bytes <= 0) {
-    return '';
-  }
-
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-};
-
-const formatDownloadHeight = (height?: number | null) => {
-  if (!height) {
-    return 'Best';
-  }
-
-  return `${height}p`;
-};
-
-const normalizeDownloadFormats = (formats: DownloadFormatOption[]) => {
-  const merged = [...formats];
-  const isAudioOnlySource = merged.length > 0 && merged.every((item) => item.is_audio_only);
-
-  if (!isAudioOnlySource && !merged.some((item) => item.format === 'mp4')) {
-    merged.unshift(DEFAULT_DOWNLOAD_FORMATS[0]);
-  }
-
-  if (!merged.some((item) => item.format === 'mp3')) {
-    merged.push(DEFAULT_DOWNLOAD_FORMATS[1]);
-  }
-
-  return merged;
-};
+const normalizeDownloadFormats = (formats: DownloadFormatOption[]) =>
+  normalizeDownloadFormatsHelper(formats, DEFAULT_DOWNLOAD_FORMATS);
 
 const FolderSyncIcon: React.FC<{ color: string }> = ({ color }) => (
   <svg
@@ -295,11 +275,17 @@ const MainWindow: React.FC<MainWindowProps> = ({
   const trimPreviewCacheRef = useRef<Map<string, string>>(new Map());
   const downloadFormatsRequestRef = useRef(0);
 
+  type UrlCheckStage = 'idle' | 'checking' | 'success' | 'error';
   const [downloadUrl, setDownloadUrl] = useState('');
   const [downloadFormats, setDownloadFormats] = useState<DownloadFormatOption[]>(DEFAULT_DOWNLOAD_FORMATS);
   const [selectedDownloadFormat, setSelectedDownloadFormat] = useState(DEFAULT_DOWNLOAD_FORMATS[0].label);
   const [parsedVideoTitle, setParsedVideoTitle] = useState<string>('');
   const [isLoadingDownloadFormats, setIsLoadingDownloadFormats] = useState(false);
+  const [urlCheckStage, setUrlCheckStage] = useState<UrlCheckStage>('idle');
+  const [urlCheckError, setUrlCheckError] = useState<string | null>(null);
+  const [urlCheckDetails, setUrlCheckDetails] = useState<TechnicalDetails | null>(null);
+  const [checkAttempt, setCheckAttempt] = useState(0);
+  const [isStartingDownload, setIsStartingDownload] = useState(false);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isDropError, setIsDropError] = useState(false);
@@ -376,26 +362,35 @@ const MainWindow: React.FC<MainWindowProps> = ({
   }, []);
 
   useEffect(() => {
-    const trimmed = downloadUrl.trim();
+    const trimmed = normalizeInputUrl(downloadUrl);
 
     if (!trimmed) {
       setDownloadFormats(DEFAULT_DOWNLOAD_FORMATS);
       setSelectedDownloadFormat(DEFAULT_DOWNLOAD_FORMATS[0].label);
       setParsedVideoTitle('');
       setIsLoadingDownloadFormats(false);
+      setUrlCheckStage('idle');
+      setUrlCheckError(null);
+      setUrlCheckDetails(null);
       return;
     }
 
-    if (!/^https?:\/\//i.test(trimmed)) {
+    if (!isValidMediaUrl(trimmed)) {
       setDownloadFormats(DEFAULT_DOWNLOAD_FORMATS);
       setSelectedDownloadFormat(DEFAULT_DOWNLOAD_FORMATS[0].label);
       setParsedVideoTitle('');
       setIsLoadingDownloadFormats(false);
+      setUrlCheckStage('idle');
+      setUrlCheckError(null);
+      setUrlCheckDetails(null);
       return;
     }
 
     const requestId = ++downloadFormatsRequestRef.current;
     setIsLoadingDownloadFormats(true);
+    setUrlCheckStage('checking');
+    setUrlCheckError(null);
+    setUrlCheckDetails(null);
 
     const timer = setTimeout(async () => {
       try {
@@ -416,6 +411,9 @@ const MainWindow: React.FC<MainWindowProps> = ({
         setSelectedDownloadFormat((current) => (
           normalized.some((item) => item.label === current) ? current : normalized[0]?.label || DEFAULT_DOWNLOAD_FORMATS[0].label
         ));
+        setUrlCheckStage('success');
+        setUrlCheckError(null);
+        setUrlCheckDetails(null);
       } catch (error) {
         if (requestId !== downloadFormatsRequestRef.current) {
           return;
@@ -424,6 +422,10 @@ const MainWindow: React.FC<MainWindowProps> = ({
         console.warn('[MainWindow] Failed to load download formats:', error);
         setDownloadFormats(DEFAULT_DOWNLOAD_FORMATS);
         setSelectedDownloadFormat(DEFAULT_DOWNLOAD_FORMATS[0].label);
+        setUrlCheckStage('error');
+        const details = parseTechnicalDetails(error, trimmed);
+        setUrlCheckError(details.status || String(error));
+        setUrlCheckDetails(details);
       } finally {
         if (requestId === downloadFormatsRequestRef.current) {
           setIsLoadingDownloadFormats(false);
@@ -432,7 +434,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
     }, 350);
 
     return () => clearTimeout(timer);
-  }, [downloadUrl]);
+  }, [downloadUrl, checkAttempt]);
 
   // Check active VPN/proxy on startup and show safety warning
   useEffect(() => {
@@ -735,8 +737,14 @@ const MainWindow: React.FC<MainWindowProps> = ({
   };
 
   const handleDownloadMedia = async () => {
-    const trimmedUrl = downloadUrl.trim();
-    if (!trimmedUrl) {
+    const rawUrl = downloadUrl.trim();
+    if (!rawUrl) {
+      return;
+    }
+    const trimmedUrl = normalizeInputUrl(rawUrl);
+    if (!isValidMediaUrl(trimmedUrl)) {
+      setUrlCheckStage('error');
+      setUrlCheckError(t('download.invalidUrlError') || 'Некорректная ссылка. Введите URL, начинающийся с https:// или домена сайта.');
       return;
     }
 
@@ -747,6 +755,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
     const savePath = mainScreenSettings.customOutputPath.trim();
 
     try {
+      setIsStartingDownload(true);
       await startDownload(
         trimmedUrl,
         selectedFormat.quality,
@@ -757,9 +766,205 @@ const MainWindow: React.FC<MainWindowProps> = ({
       );
       setDownloadUrl('');
       setParsedVideoTitle('');
+      setUrlCheckStage('idle');
+      setUrlCheckError(null);
+      setShowUrlInput(false);
     } catch (error) {
       console.error('[MainWindow] Download failed:', error);
+      setUrlCheckStage('error');
+      const details = parseTechnicalDetails(error, trimmedUrl);
+      setUrlCheckError(details.status || String(error));
+      setUrlCheckDetails(details);
+    } finally {
+      setIsStartingDownload(false);
     }
+  };
+
+  const handleRetryDownload = useCallback((item: DownloadQueueItem) => {
+    removeDownloadJob(item.id);
+    startDownload(
+      item.url,
+      item.quality,
+      item.format,
+      item.label,
+      item.savePath,
+      item.title
+    );
+  }, [removeDownloadJob, startDownload]);
+
+  const renderUrlFeedbackHint = (isCompact = false) => {
+    if (urlCheckStage === 'idle' && !isStartingDownload) {
+      return null;
+    }
+
+    return (
+      <AnimatePresence mode="wait">
+        {isStartingDownload && (
+          <motion.div
+            key="url-feedback-starting"
+            initial={{ opacity: 0, height: 0, y: -4 }}
+            animate={{ opacity: 1, height: 'auto', y: 0 }}
+            exit={{ opacity: 0, height: 0, y: -4 }}
+            transition={{ duration: 0.18 }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: isCompact ? '0.78rem' : '0.82rem',
+              color: theme.colors.primary,
+              marginTop: '6px',
+              padding: '6px 12px',
+              borderRadius: '8px',
+              background: `${theme.colors.primary}12`,
+              border: `1px solid ${theme.colors.primary}28`,
+              width: '100%',
+              maxWidth: isCompact ? '100%' : '560px',
+              boxSizing: 'border-box',
+            }}
+          >
+            <Loader2 size={14} strokeWidth={2.4} className="download-spinner" style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1, lineHeight: 1.3 }}>
+              {t('download.startingDownloadHint') || 'Запускаем загрузку и добавляем в очередь...'}
+            </span>
+          </motion.div>
+        )}
+
+        {!isStartingDownload && urlCheckStage === 'checking' && (
+          <motion.div
+            key="url-feedback-checking"
+            initial={{ opacity: 0, height: 0, y: -4 }}
+            animate={{ opacity: 1, height: 'auto', y: 0 }}
+            exit={{ opacity: 0, height: 0, y: -4 }}
+            transition={{ duration: 0.18 }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: isCompact ? '0.78rem' : '0.82rem',
+              color: theme.colors.primary,
+              marginTop: '6px',
+              padding: '6px 12px',
+              borderRadius: '8px',
+              background: `${theme.colors.primary}12`,
+              border: `1px solid ${theme.colors.primary}28`,
+              width: '100%',
+              maxWidth: isCompact ? '100%' : '560px',
+              boxSizing: 'border-box',
+            }}
+          >
+            <Loader2 size={14} strokeWidth={2.4} className="download-spinner" style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1, lineHeight: 1.3 }}>
+              {t('download.checkingUrl') || 'Проверяем ссылку и получаем доступные форматы...'}
+            </span>
+          </motion.div>
+        )}
+
+        {!isStartingDownload && urlCheckStage === 'success' && (
+          <motion.div
+            key="url-feedback-success"
+            initial={{ opacity: 0, height: 0, y: -4 }}
+            animate={{ opacity: 1, height: 'auto', y: 0 }}
+            exit={{ opacity: 0, height: 0, y: -4 }}
+            transition={{ duration: 0.18 }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: isCompact ? '0.78rem' : '0.82rem',
+              color: theme.colors.success,
+              marginTop: '6px',
+              padding: '6px 12px',
+              borderRadius: '8px',
+              background: `${theme.colors.success}12`,
+              border: `1px solid ${theme.colors.success}28`,
+              width: '100%',
+              maxWidth: isCompact ? '100%' : '560px',
+              boxSizing: 'border-box',
+            }}
+          >
+            <Check size={14} strokeWidth={2.4} style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {parsedVideoTitle ? (
+                <>
+                  <strong style={{ fontWeight: 600 }}>{parsedVideoTitle}</strong>
+                  {' — '}
+                  <span>{t('download.readyToDownload') || 'готово к скачиванию. Выберите формат и нажмите «Скачать»'}</span>
+                </>
+              ) : (
+                <span>{t('download.formatsDiscovered') || 'Форматы получены. Выберите качество и нажмите «Скачать»'}</span>
+              )}
+            </span>
+          </motion.div>
+        )}
+
+        {!isStartingDownload && urlCheckStage === 'error' && (
+          <motion.div
+            key="url-feedback-error"
+            initial={{ opacity: 0, height: 0, y: -4 }}
+            animate={{ opacity: 1, height: 'auto', y: 0 }}
+            exit={{ opacity: 0, height: 0, y: -4 }}
+            transition={{ duration: 0.18 }}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+              fontSize: isCompact ? '0.78rem' : '0.82rem',
+              color: theme.colors.text,
+              marginTop: '6px',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              background: `${theme.colors.warning}14`,
+              border: `1px solid ${theme.colors.warning}40`,
+              width: '100%',
+              maxWidth: isCompact ? '100%' : '560px',
+              boxSizing: 'border-box',
+              maxHeight: isCompact ? '380px' : '440px',
+              overflowY: 'auto',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <AlertTriangle size={15} strokeWidth={2.2} color={theme.colors.warning} style={{ flexShrink: 0 }} />
+              <span style={{ flex: 1, fontWeight: 600, color: theme.colors.warning, lineHeight: 1.3 }}>
+                {t('download.fetchFailed') || 'Не удалось получить данные о видео'}
+              </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCheckAttempt((c) => c + 1);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '2px 8px',
+                  fontSize: '0.75rem',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: '5px',
+                  color: theme.colors.text,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <RefreshCw size={11} strokeWidth={2} />
+                <span>{t('download.retryCheck') || 'Повторить'}</span>
+              </button>
+            </div>
+            <p style={{ margin: 0, fontSize: isCompact ? '0.74rem' : '0.78rem', color: theme.colors.textSecondary, lineHeight: 1.35 }}>
+              {t('download.fetchFailedHint') || 'Проверьте интернет-соединение или включите VPN/прокси (возможно, ресурс заблокирован в вашем регионе). Доступны стандартные форматы (MP4 / MP3).'}
+            </p>
+            {(urlCheckDetails || urlCheckError) && (
+              <TechnicalDetailsViewer
+                details={urlCheckDetails || parseTechnicalDetails(urlCheckError, normalizeInputUrl(downloadUrl))}
+                theme={theme}
+                t={t}
+              />
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    );
   };
 
   const handleStart = async () => {
@@ -1243,45 +1448,56 @@ const MainWindow: React.FC<MainWindowProps> = ({
             </div>
 
             {/* URL download pill */}
-            <div className="empty-state-url-row" onClick={e => e.stopPropagation()}>
-              <input
-                className="action-bar-input"
-                type="text"
-                value={downloadUrl}
-                onChange={(e) => setDownloadUrl(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter' && downloadUrl.trim()) handleDownloadMedia(); }}
-                placeholder={t('download.urlPlaceholder')}
-                style={{ color: theme.colors.text }}
-              />
-              <span className="url-pill-sep" style={{ background: theme.colors.border }} />
-              <div className="action-bar-format-wrap" style={{ background: theme.colors.surface }}>
-                <select
-                  className="action-bar-format-select"
-                  value={selectedDownloadFormat}
-                  onChange={(e) => setSelectedDownloadFormat(e.target.value)}
+            <div
+              className="empty-state-url-container"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: '100%',
+                maxWidth: '560px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+              }}
+            >
+              <div className="empty-state-url-row">
+                <input
+                  className="action-bar-input"
+                  type="text"
+                  value={downloadUrl}
+                  onChange={(e) => setDownloadUrl(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && downloadUrl.trim()) handleDownloadMedia(); }}
+                  placeholder={t('download.urlPlaceholder')}
                   style={{ color: theme.colors.text }}
+                />
+                <span className="url-pill-sep" style={{ background: theme.colors.border }} />
+                <div className="action-bar-format-wrap" style={{ background: theme.colors.surface }}>
+                  <select
+                    className="action-bar-format-select"
+                    value={selectedDownloadFormat}
+                    onChange={(e) => setSelectedDownloadFormat(e.target.value)}
+                    style={{ color: theme.colors.text }}
+                  >
+                    {downloadFormats.map((item) => (
+                      <option key={item.label} value={item.label} style={{ backgroundColor: theme.colors.surface, color: theme.colors.text }}>
+                        {formatDownloadOptionLabel(item)}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={13} strokeWidth={2} className="action-bar-format-caret" style={{ color: theme.colors.textSecondary }} />
+                </div>
+                <button
+                  className="action-bar-btn action-bar-btn--success"
+                  onClick={handleDownloadMedia}
+                  disabled={!downloadUrl.trim() || isStartingDownload}
+                  style={{ background: theme.colors.success, color: '#fff', flexShrink: 0 }}
                 >
-                  {downloadFormats.map((item) => (
-                    <option key={item.label} value={item.label} style={{ backgroundColor: theme.colors.surface, color: theme.colors.text }}>
-                      {item.label}
-                      {item.height ? ` • ${formatDownloadHeight(item.height)}` : ''}
-                      {item.filesize ? ` • ${formatDownloadBytes(item.filesize)}` : ''}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={13} strokeWidth={2} className="action-bar-format-caret" style={{ color: theme.colors.textSecondary }} />
+                  {isLoadingDownloadFormats || isStartingDownload
+                    ? <Loader2 size={15} strokeWidth={2} className="download-spinner" />
+                    : <Download size={15} strokeWidth={2} />}
+                  <span>{isStartingDownload ? (t('download.startingDownload') || 'Запуск...') : t('download.downloadButton')}</span>
+                </button>
               </div>
-              <button
-                className="action-bar-btn action-bar-btn--success"
-                onClick={handleDownloadMedia}
-                disabled={!downloadUrl.trim()}
-                style={{ background: theme.colors.success, color: '#fff', flexShrink: 0 }}
-              >
-                {isLoadingDownloadFormats
-                  ? <Loader2 size={15} strokeWidth={2} className="download-spinner" />
-                  : <Download size={15} strokeWidth={2} />}
-                <span>{t('download.downloadButton')}</span>
-              </button>
+              {renderUrlFeedbackHint(false)}
             </div>
           </div>
         ) : (
@@ -1339,50 +1555,52 @@ const MainWindow: React.FC<MainWindowProps> = ({
             <AnimatePresence>
               {showUrlInput && (
                 <motion.div
-                  className="queue-url-row"
+                  className="queue-url-container"
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.18 }}
+                  style={{ overflow: 'hidden', marginBottom: '8px' }}
                 >
-                  <input
-                    className="action-bar-input"
-                    type="text"
-                    value={downloadUrl}
-                    onChange={(e) => setDownloadUrl(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && downloadUrl.trim()) { handleDownloadMedia(); setShowUrlInput(false); } }}
-                    placeholder={t('download.urlPlaceholder')}
-                    autoFocus
-                    style={{ color: theme.colors.text, background: theme.colors.surface, borderColor: theme.colors.border }}
-                  />
-                  <div className="action-bar-format-wrap" style={{ borderColor: theme.colors.border, background: theme.colors.surface }}>
-                    <select
-                      className="action-bar-format-select"
-                      value={selectedDownloadFormat}
-                      onChange={(e) => setSelectedDownloadFormat(e.target.value)}
-                      style={{ color: theme.colors.text }}
+                  <div className="queue-url-row">
+                    <input
+                      className="action-bar-input"
+                      type="text"
+                      value={downloadUrl}
+                      onChange={(e) => setDownloadUrl(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && downloadUrl.trim()) { handleDownloadMedia(); } }}
+                      placeholder={t('download.urlPlaceholder')}
+                      autoFocus
+                      style={{ color: theme.colors.text, background: theme.colors.surface, borderColor: theme.colors.border }}
+                    />
+                    <div className="action-bar-format-wrap" style={{ borderColor: theme.colors.border, background: theme.colors.surface }}>
+                      <select
+                        className="action-bar-format-select"
+                        value={selectedDownloadFormat}
+                        onChange={(e) => setSelectedDownloadFormat(e.target.value)}
+                        style={{ color: theme.colors.text }}
+                      >
+                        {downloadFormats.map((item) => (
+                          <option key={item.label} value={item.label} style={{ backgroundColor: theme.colors.surface, color: theme.colors.text }}>
+                            {formatDownloadOptionLabel(item)}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown size={13} strokeWidth={2} className="action-bar-format-caret" style={{ color: theme.colors.textSecondary }} />
+                    </div>
+                    <button
+                      className="action-bar-btn action-bar-btn--success"
+                      onClick={() => { handleDownloadMedia(); }}
+                      disabled={!downloadUrl.trim() || isStartingDownload}
+                      style={{ background: theme.colors.success, color: '#fff', flexShrink: 0 }}
                     >
-                      {downloadFormats.map((item) => (
-                        <option key={item.label} value={item.label} style={{ backgroundColor: theme.colors.surface, color: theme.colors.text }}>
-                          {item.label}
-                          {item.height ? ` • ${formatDownloadHeight(item.height)}` : ''}
-                          {item.filesize ? ` • ${formatDownloadBytes(item.filesize)}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown size={13} strokeWidth={2} className="action-bar-format-caret" style={{ color: theme.colors.textSecondary }} />
+                      {isLoadingDownloadFormats || isStartingDownload
+                        ? <Loader2 size={15} strokeWidth={2} className="download-spinner" />
+                        : <Download size={15} strokeWidth={2} />}
+                      <span>{isStartingDownload ? (t('download.startingDownload') || 'Запуск...') : t('download.downloadButton')}</span>
+                    </button>
                   </div>
-                  <button
-                    className="action-bar-btn action-bar-btn--success"
-                    onClick={() => { handleDownloadMedia(); setShowUrlInput(false); }}
-                    disabled={!downloadUrl.trim()}
-                    style={{ background: theme.colors.success, color: '#fff', flexShrink: 0 }}
-                  >
-                    {isLoadingDownloadFormats
-                      ? <Loader2 size={15} strokeWidth={2} className="download-spinner" />
-                      : <Download size={15} strokeWidth={2} />}
-                    <span>{t('download.downloadButton')}</span>
-                  </button>
+                  {renderUrlFeedbackHint(true)}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -1415,6 +1633,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
                       onShowInExplorer={handleShowInExplorer}
                       onRemoveJob={removeDownloadJob}
                       onStopJob={stopDownload}
+                      onRetryJob={handleRetryDownload}
                     />
                   ))}
                 </AnimatePresence>

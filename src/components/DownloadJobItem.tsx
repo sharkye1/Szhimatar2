@@ -3,6 +3,9 @@ import { Trash2, Folder, Square, RefreshCw, Check, X, Clock, Copy, GripVertical 
 import { invoke } from '@tauri-apps/api/tauri';
 import { DownloadQueueItem } from '../services/DownloadService';
 import { useFileDragOut } from '../hooks/useFileDragOut';
+import { isNetworkErrorText } from '../utils/downloadHelpers';
+import { TechnicalDetailsViewer } from './TechnicalDetailsViewer';
+import { parseTechnicalDetails } from '../utils/technicalDetails';
 
 export interface DownloadJobItemProps {
   item: DownloadQueueItem;
@@ -11,6 +14,7 @@ export interface DownloadJobItemProps {
   onShowInExplorer: (filePath: string) => void;
   onRemoveJob: (jobId: string) => void;
   onStopJob?: (jobId: string) => void;
+  onRetryJob?: (item: DownloadQueueItem) => void;
 }
 
 export const DownloadJobItem: React.FC<DownloadJobItemProps> = React.memo(({
@@ -20,6 +24,7 @@ export const DownloadJobItem: React.FC<DownloadJobItemProps> = React.memo(({
   onShowInExplorer,
   onRemoveJob,
   onStopJob,
+  onRetryJob,
 }) => {
   const getStatusDisplay = () => {
     switch (item.status) {
@@ -318,6 +323,40 @@ export const DownloadJobItem: React.FC<DownloadJobItemProps> = React.memo(({
             </>
           )}
 
+          {/* Retry button on error */}
+          {item.status === 'error' && onRetryJob && (
+            <button
+              onClick={() => onRetryJob(item)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '4px 8px',
+                height: '28px',
+                background: `${theme.colors.primary}15`,
+                border: `1px solid ${theme.colors.primary}40`,
+                borderRadius: '6px',
+                color: theme.colors.primary,
+                cursor: 'pointer',
+                fontSize: '0.75rem',
+                fontWeight: '500',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = `${theme.colors.primary}30`;
+                e.currentTarget.style.borderColor = theme.colors.primary;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = `${theme.colors.primary}15`;
+                e.currentTarget.style.borderColor = `${theme.colors.primary}40`;
+              }}
+              title={t('download.retryDownload') || 'Повторить загрузку'}
+            >
+              <RefreshCw size={13} strokeWidth={2} />
+              <span>{t('download.retry') || 'Повторить'}</span>
+            </button>
+          )}
+
           {/* Delete button */}
           {(item.status === 'pending' ||
             item.status === 'completed' ||
@@ -357,22 +396,45 @@ export const DownloadJobItem: React.FC<DownloadJobItemProps> = React.memo(({
       </div>
 
       {/* Error message */}
-      {(item.error || (item.status === 'error' && item.message)) && (
-        <div
-          className="item-error"
-          style={{
-            fontSize: '0.8rem',
-            color: theme.colors.error,
-            marginTop: '8px',
-            padding: '6px 10px',
-            background: `${theme.colors.error}10`,
-            borderRadius: '4px',
-            width: '100%',
-          }}
-        >
-          {item.error || item.message}
-        </div>
-      )}
+      {(item.error || (item.status === 'error' && item.message) || item.technicalDetails) && (() => {
+        const errStr = item.error || item.message || '';
+        const isNetworkErr = item.technicalDetails?.is_network_error ?? isNetworkErrorText(errStr);
+        const details = item.technicalDetails || parseTechnicalDetails(errStr, item.url);
+        return (
+          <div
+            className="item-error"
+            style={{
+              fontSize: '0.8rem',
+              color: theme.colors.error,
+              marginTop: '8px',
+              padding: '8px 10px',
+              background: `${theme.colors.error}12`,
+              border: `1px solid ${theme.colors.error}30`,
+              borderRadius: '6px',
+              width: '100%',
+              boxSizing: 'border-box',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+            }}
+          >
+            {isNetworkErr && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: theme.colors.warning }}>
+                <span>⚠️</span>
+                <span>{t('download.networkErrorExplanation') || 'Сбой сети или таймаут подключения. Проверьте интернет или включите VPN/прокси.'}</span>
+              </div>
+            )}
+            <div style={{ fontSize: '0.76rem', opacity: 0.95, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'monospace' }}>
+              {errStr.split('\n')[0] || details.status}
+            </div>
+            <TechnicalDetailsViewer
+              details={details}
+              theme={theme}
+              t={t}
+            />
+          </div>
+        );
+      })()}
 
       {/* Progress section while downloading */}
       {item.status === 'downloading' && (

@@ -380,6 +380,12 @@
     color: #a3e635;
 }
 
+.mode-info-badge.hardware {
+    background: rgba(0, 113, 227, 0.2);
+    border: 1px solid rgba(90, 200, 250, 0.4);
+    color: #38bdf8;
+}
+
 .mode-info-badge.cpu {
     background: rgba(0, 113, 197, 0.2);
     border: 1px solid rgba(0, 113, 197, 0.4);

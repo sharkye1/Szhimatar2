@@ -112,6 +112,10 @@ $RECYCLE.BIN/
 .mocha-timeout
 src/services/__tests__/
 *test*
+!tests/
+!tests/**
+!TEST_INFRA.md
+!TEST_READY.md
 !src/**/__tests__/**
 
 # --- Production artifacts ---
@@ -141,5 +145,4 @@ update_version.py
 sync-version.js
 
 test-compressor/
-
 .agents/

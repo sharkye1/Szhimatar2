@@ -41,7 +41,7 @@ export interface VideoSettings {
   aqModeCpu?: 'disabled' | 'variance' | 'autovariance' | 'darkscenes';
   bFrames?: number;           // 0-8
   nvencMultipass?: 'disabled' | 'qres' | 'fullres';
-  hwaccel?: 'auto' | 'cuda' | 'd3d11va' | 'dxva2' | 'qsv' | 'disabled';
+  hwaccel?: 'auto' | 'videotoolbox' | 'cuda' | 'd3d11va' | 'dxva2' | 'qsv' | 'disabled';
 }
 
 export interface GifSettings {

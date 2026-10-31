@@ -5,6 +5,7 @@
   flex-direction: column;
   animation: fadeInScale 0.3s ease-out;
   background: transparent;
+  overflow: hidden;
 }
 
 @keyframes fadeInScale {
@@ -232,6 +233,7 @@
 
 .content {
   flex: 1;
+  min-height: 0;
   padding: 14px 22px 16px 22px;
   overflow-y: auto;
   display: flex;
@@ -770,6 +772,7 @@
 
 .queue-section {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1071,6 +1074,7 @@
   align-self: center;
   margin: 0 auto;
   width: fit-content;
+  flex-shrink: 0;
 }
 
 .controls .ctrl-btn {
@@ -1188,20 +1192,23 @@
 /* ---------------------------------------------
    EMPTY STATE вЂ” floating card / dropzone
    --------------------------------------------- */
-.empty-state {
+.empty-state,
+.drop-zone {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: safe center;
   flex: 1;
-  min-height: 200px;
+  min-height: 0;
   gap: 10px;
   border: 1px solid var(--color-border, rgba(255,255,255,0.12));
   border-radius: 16px;
   padding: 24px 20px;
   cursor: pointer;
   position: relative;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
   /* Floating card */
   background: var(--color-surface, rgba(var(--theme-bg-rgb), 0.45));
   backdrop-filter: blur(12px) saturate(1.2);
@@ -1399,8 +1406,19 @@
   display: block;
 }
 
+.empty-state-url-container {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: default;
+  max-height: 100%;
+  box-sizing: border-box;
+}
+
 /* ---------------------------------------------
-   URL INPUT PILL вЂ” monolithic capsule
+   URL INPUT PILL — monolithic capsule
    --------------------------------------------- */
 .empty-state-url-row {
   display: flex;
@@ -1532,6 +1550,7 @@
   align-self: center;
   margin: 0 auto;
   width: fit-content;
+  flex-shrink: 0;
 }
 
 .controls .ctrl-btn {

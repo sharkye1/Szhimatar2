@@ -1,3 +1,5 @@
+import { isMacOS } from '../utils/platform';
+
 export type RenderMode = 'cpu' | 'gpu' | 'duo';
 export type RenderSlot = 'cpu' | 'gpu';
 
@@ -12,6 +14,41 @@ interface DispatchTarget {
 }
 
 /**
+ * Authoritative mode sanitization specification:
+ * - On macOS, 'duo' is sanitized to 'gpu' (or 'cpu' if gpuAvailable is false).
+ * - On Windows/Linux, 'duo' is preserved if gpuAvailable is true.
+ * - Malformed/invalid modes fall back safely to 'cpu'.
+ */
+export function sanitizeRenderMode(
+  mode: RenderMode | string,
+  isMac?: boolean,
+  gpuAvailable: boolean = false
+): RenderMode {
+  const validModes: RenderMode[] = ['cpu', 'gpu', 'duo'];
+  const baseMode = (validModes.includes(mode as RenderMode) ? mode : 'cpu') as RenderMode;
+  const macPlatform = isMac !== undefined ? isMac : (typeof isMacOS === 'function' ? isMacOS() : false);
+
+  if (macPlatform) {
+    if (baseMode === 'duo') {
+      return gpuAvailable ? 'gpu' : 'cpu';
+    }
+    if (baseMode === 'gpu' && !gpuAvailable) {
+      return 'cpu';
+    }
+    return baseMode;
+  }
+
+  // Windows / Linux / fallback
+  if (baseMode === 'duo' && !gpuAvailable) {
+    return 'cpu';
+  }
+  if (baseMode === 'gpu' && !gpuAvailable) {
+    return 'cpu';
+  }
+  return baseMode;
+}
+
+/**
  * RenderScheduler manages FIFO queue and CPU/GPU slots deterministically.
  * It does not know about FFmpeg details; it only schedules job IDs to slots.
  */
@@ -20,6 +57,11 @@ export class RenderScheduler {
   private slots: SchedulerSlots = { cpuSlot: null, gpuSlot: null };
   private mode: RenderMode = 'cpu';
   private gpuAvailable = false;
+  private isMac?: boolean;
+
+  constructor(isMac?: boolean) {
+    this.isMac = isMac;
+  }
 
   /**
    * Enqueue job in FIFO order (no duplicates)
@@ -47,13 +89,18 @@ export class RenderScheduler {
   }
 
   /**
-   * Set render mode
+   * Set render mode with optional platform override
    */
-  setMode(mode: RenderMode): void {
-    this.mode = mode;
-    // If GPU mode selected but not available, fallback to CPU
-    if (this.mode !== 'cpu' && !this.gpuAvailable) {
-      this.mode = 'cpu';
+  setMode(mode: RenderMode, isMac?: boolean): void {
+    const macFlag = isMac !== undefined ? isMac : this.isMac;
+    if (macFlag !== undefined) {
+      this.mode = sanitizeRenderMode(mode, macFlag, this.gpuAvailable);
+    } else {
+      this.mode = mode;
+      // If GPU mode selected but not available, fallback to CPU
+      if (this.mode !== 'cpu' && !this.gpuAvailable) {
+        this.mode = 'cpu';
+      }
     }
   }
 
@@ -139,19 +186,24 @@ export class RenderScheduler {
     const cpuFree = this.slots.cpuSlot === null;
     const gpuFree = this.slots.gpuSlot === null;
 
+    // Defensive check: if scheduler was initialized with isMac=true, duo is converted to gpu
+    const effectiveMode = (this.isMac && this.mode === 'duo')
+      ? (this.gpuAvailable ? 'gpu' : 'cpu')
+      : this.mode;
+
     // Determine targets based on mode
-    if (this.mode === 'cpu') {
+    if (effectiveMode === 'cpu') {
       if (cpuFree) {
         const next = takeNext();
         if (next) dispatch.push({ jobId: next, slot: 'cpu' });
       }
-    } else if (this.mode === 'gpu') {
+    } else if (effectiveMode === 'gpu') {
       if (this.gpuAvailable && gpuFree) {
         const next = takeNext();
         if (next) dispatch.push({ jobId: next, slot: 'gpu' });
       }
-    } else if (this.mode === 'duo') {
-      // GPU gets priority over CPU in duo mode
+    } else if (effectiveMode === 'duo') {
+      // GPU gets priority over CPU in duo mode (Windows only)
       if (this.gpuAvailable && gpuFree) {
         const nextGpu = takeNext();
         if (nextGpu) dispatch.push({ jobId: nextGpu, slot: 'gpu' });
