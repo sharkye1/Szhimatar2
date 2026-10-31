@@ -24,7 +24,85 @@ describe('Proxy and VPN Detection Display Logic & Localization', () => {
       expect('detected' in dict.proxy, `Missing proxy.detected in ${code}`).toBe(true);
       expect('vpnDetected' in dict.proxy, `Missing proxy.vpnDetected in ${code}`).toBe(true);
       expect('notDetected' in dict.proxy, `Missing proxy.notDetected in ${code}`).toBe(true);
+      expect('expand' in dict.proxy, `Missing proxy.expand in ${code}`).toBe(true);
+      expect('collapse' in dict.proxy, `Missing proxy.collapse in ${code}`).toBe(true);
+      expect('vpnHint' in dict.proxy, `Missing proxy.vpnHint in ${code}`).toBe(true);
+      expect('proxyHint' in dict.proxy, `Missing proxy.proxyHint in ${code}`).toBe(true);
+      expect('directHint' in dict.proxy, `Missing proxy.directHint in ${code}`).toBe(true);
     }
+  });
+
+  it('verifies expandable accordion proxy summary computation logic', () => {
+    const computeProxySummary = (
+      proxyMode: 'auto' | 'always' | 'disabled',
+      proxyUrl: string,
+      detectedProxy: { url: string; source: string } | null,
+      detectedVpn: string | null
+    ) => {
+      if (proxyMode === 'disabled') {
+        return {
+          isActive: false,
+          label: ru.proxy.modeDisabled,
+          type: 'disabled',
+        };
+      }
+      if (proxyUrl && proxyUrl.trim()) {
+        return {
+          isActive: true,
+          label: `${ru.proxy.summaryCustom}: ${proxyUrl.trim()}`,
+          type: 'custom',
+        };
+      }
+      if (detectedProxy) {
+        return {
+          isActive: true,
+          label: detectedProxy.url,
+          type: 'proxy',
+        };
+      }
+      if (detectedVpn) {
+        return {
+          isActive: true,
+          label: `VPN: "${detectedVpn}"`,
+          type: 'vpn',
+        };
+      }
+      return {
+        isActive: false,
+        label: ru.proxy.summaryDirect,
+        type: 'direct',
+      };
+    };
+
+    // 1. VPN active (e.g. Anywhere VPN connected on macOS)
+    const vpnSummary = computeProxySummary('auto', '', null, 'Anywhere');
+    expect(vpnSummary.isActive).toBe(true);
+    expect(vpnSummary.type).toBe('vpn');
+    expect(vpnSummary.label).toBe('VPN: "Anywhere"');
+
+    // 2. Custom proxy takes precedence over auto-detection
+    const customSummary = computeProxySummary('auto', 'http://127.0.0.1:10809', null, 'Anywhere');
+    expect(customSummary.isActive).toBe(true);
+    expect(customSummary.type).toBe('custom');
+    expect(customSummary.label).toBe('Пользовательский: http://127.0.0.1:10809');
+
+    // 3. Local proxy client detected (e.g. Clash on 7890)
+    const proxySummary = computeProxySummary('auto', '', { url: 'http://127.0.0.1:7890', source: 'Clash' }, null);
+    expect(proxySummary.isActive).toBe(true);
+    expect(proxySummary.type).toBe('proxy');
+    expect(proxySummary.label).toBe('http://127.0.0.1:7890');
+
+    // 4. Disabled mode
+    const disabledSummary = computeProxySummary('disabled', 'http://127.0.0.1:7890', null, 'Anywhere');
+    expect(disabledSummary.isActive).toBe(false);
+    expect(disabledSummary.type).toBe('disabled');
+    expect(disabledSummary.label).toContain('Отключено');
+
+    // 5. Direct (no VPN, no proxy)
+    const directSummary = computeProxySummary('auto', '', null, null);
+    expect(directSummary.isActive).toBe(false);
+    expect(directSummary.type).toBe('direct');
+    expect(directSummary.label).toBe('Прямое подключение');
   });
 
   it('verifies Russian proxy and VPN status text formatting', () => {
@@ -116,5 +194,11 @@ describe('Proxy and VPN Detection Display Logic & Localization', () => {
     expect(
       renderStatus(null, 'Anywhere, WireGuard')
     ).toBe('🟢 Подключен системный VPN: "Anywhere, WireGuard" (трафик уже идёт через него, прокси не требуется)');
+  });
+
+  it('validates NetworkProxySettings module exports and structure', async () => {
+    const module = await import('../../src/components/NetworkProxySettings');
+    expect(module.NetworkProxySettings).toBeDefined();
+    expect(typeof module.NetworkProxySettings).toBe('function');
   });
 });

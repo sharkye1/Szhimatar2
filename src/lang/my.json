@@ -598,6 +598,14 @@
     "testButton": "Izkusiti",
     "testing": "Izkusanje...",
     "customHint": "Ostavite prazno dľa avtodetekcije Clash, V2Ray, NekoBox ili sistemnogo proksi.",
-    "noProxyToTest": "Nema adresa proksi dľa izkusanja."
+    "noProxyToTest": "Nema adresa proksi dľa izkusanja.",
+    "expand": "Podrobněje",
+    "collapse": "Svernuti",
+    "statusRouteTitle": "Aktualny maršrut seti",
+    "summaryDirect": "Prjamo podkľučenje",
+    "summaryCustom": "Vlastny",
+    "vpnHint": "Vse zaprosy idut črěz aktivny sistemny VPN.",
+    "proxyHint": "Zaprosy idut črěz lokalny proksi.",
+    "directHint": "Prjamy vyhod v set."
   }
 }

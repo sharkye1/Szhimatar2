@@ -598,6 +598,14 @@
     "testButton": "Kontroli",
     "testing": "Kontrolante...",
     "customHint": "Lasu malplena por aŭtomata detekto de Clash, V2Ray, NekoBox aŭ sistema prokurilo.",
-    "noProxyToTest": "Neniu prokurilo por kontroli."
+    "noProxyToTest": "Neniu prokurilo por kontroli.",
+    "expand": "Detaloj",
+    "collapse": "Faldi",
+    "statusRouteTitle": "Aktuala Reta Itinero",
+    "summaryDirect": "Rekta konekto",
+    "summaryCustom": "Propra",
+    "vpnHint": "Ĉiuj petoj pasas tra la aktiva sistema VPN. Plia agordo ne necesas.",
+    "proxyHint": "Petoj estos plusenditaj tra la loka prokurilo.",
+    "directHint": "Rekta eliro al la reto. Se servo estas blokita, ŝaltu VPN aŭ agordu prokurilon."
   }
 }

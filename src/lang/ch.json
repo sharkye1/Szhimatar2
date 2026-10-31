@@ -598,6 +598,14 @@
     "testButton": "测试",
     "testing": "测试中...",
     "customHint": "留空可自动检测运行中的 Clash、V2Ray、NekoBox 或系统代理。",
-    "noProxyToTest": "没有可测试的代理地址。请手动输入或启动代理。"
+    "noProxyToTest": "没有可测试的代理地址。请手动输入或启动代理。",
+    "expand": "展开详情",
+    "collapse": "收起",
+    "statusRouteTitle": "当前网络路由",
+    "summaryDirect": "直连模式",
+    "summaryCustom": "自定义",
+    "vpnHint": "所有请求已通过活动系统 VPN 传输，无需额外代理配置。",
+    "proxyHint": "请求将通过本地代理客户端转发。",
+    "directHint": "直接连接。如果服务受限，请开启 VPN 或配置代理。"
   }
 }

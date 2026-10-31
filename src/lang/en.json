@@ -598,6 +598,14 @@
     "testButton": "Test",
     "testing": "Testing...",
     "customHint": "Leave empty for auto-detection of running Clash, V2Ray, NekoBox, or system proxy.",
-    "noProxyToTest": "No proxy address to test. Specify one manually or start a proxy."
+    "noProxyToTest": "No proxy address to test. Specify one manually or start a proxy.",
+    "expand": "Details",
+    "collapse": "Collapse",
+    "statusRouteTitle": "Current Network Route",
+    "summaryDirect": "Direct connection",
+    "summaryCustom": "Custom",
+    "vpnHint": "All requests route through the active system VPN. No proxy configuration required.",
+    "proxyHint": "Requests will be forwarded through the local proxy client.",
+    "directHint": "Direct connection. If a service is blocked, turn on VPN or configure a proxy."
   }
 }

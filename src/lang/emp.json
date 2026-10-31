@@ -598,6 +598,14 @@
     "testButton": "",
     "testing": "",
     "customHint": "",
-    "noProxyToTest": ""
+    "noProxyToTest": "",
+    "expand": "",
+    "collapse": "",
+    "statusRouteTitle": "",
+    "summaryDirect": "",
+    "summaryCustom": "",
+    "vpnHint": "",
+    "proxyHint": "",
+    "directHint": ""
   }
 }
