@@ -414,13 +414,21 @@
   },
   "gpu": {
     "label": "",
+    "labelMac": "",
     "checkCompatibility": "",
+    "checkCompatibilityMac": "",
     "available": "",
+    "availableMac": "",
     "unavailable": "",
+    "unavailableMac": "",
     "notAvailableTooltip": "",
+    "notAvailableTooltipMac": "",
     "compatibleFound": "",
+    "compatibleFoundMac": "",
     "notFoundOrUnavailable": "",
+    "notFoundOrUnavailableMac": "",
     "checkError": "",
+    "checkErrorMac": "",
     "pathsNotConfigured": ""
   },
   "renderMode": {

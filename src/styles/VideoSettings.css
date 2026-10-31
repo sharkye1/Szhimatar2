@@ -381,9 +381,10 @@
 }
 
 .mode-info-badge.hardware {
-    background: rgba(0, 113, 227, 0.2);
-    border: 1px solid rgba(90, 200, 250, 0.4);
-    color: #38bdf8;
+    background: linear-gradient(135deg, rgba(255, 94, 58, 0.25) 0%, rgba(255, 42, 109, 0.25) 35%, rgba(155, 81, 224, 0.25) 70%, rgba(0, 198, 255, 0.25) 100%);
+    border: 1px solid rgba(255, 94, 58, 0.45);
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(155, 81, 224, 0.35);
 }
 
 .mode-info-badge.cpu {

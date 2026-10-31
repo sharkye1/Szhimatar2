@@ -414,13 +414,21 @@
   },
   "gpu": {
     "label": "GPU (NVENC)",
+    "labelMac": "Аппаратное ускорение (Apple VideoToolbox)",
     "checkCompatibility": "Проверить совместимость GPU",
+    "checkCompatibilityMac": "Проверить Apple VideoToolbox",
     "available": "Доступен (NVENC)",
+    "availableMac": "Доступен (VideoToolbox)",
     "unavailable": "Недоступен",
+    "unavailableMac": "Недоступен (VideoToolbox)",
     "notAvailableTooltip": "GPU недоступен — проверьте совместимость в настройках",
+    "notAvailableTooltipMac": "Аппаратное ускорение VideoToolbox недоступно",
     "compatibleFound": "GPU совместим (NVENC найден). Для применения перезапустите приложение.",
+    "compatibleFoundMac": "Аппаратное ускорение совместимо (VideoToolbox найден). Для применения перезапустите приложение.",
     "notFoundOrUnavailable": "GPU не найден или NVENC недоступен",
+    "notFoundOrUnavailableMac": "Аппаратное ускорение недоступно или VideoToolbox не найден",
     "checkError": "Ошибка проверки GPU",
+    "checkErrorMac": "Ошибка проверки VideoToolbox",
     "pathsNotConfigured": "Сначала необходимо указать пути к FFmpeg и FFprobe в разделе конфигурации FFmpeg"
   },
   "renderMode": {

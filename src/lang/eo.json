@@ -414,13 +414,21 @@
   },
   "gpu": {
     "label": "GPU (NVENC)",
+    "labelMac": "Aparatara akcelo (Apple VideoToolbox)",
     "checkCompatibility": "Kontroli GPU-kongruecon",
+    "checkCompatibilityMac": "Kontroli Apple VideoToolbox",
     "available": "Disponebla (NVENC)",
+    "availableMac": "Disponebla (VideoToolbox)",
     "unavailable": "Nedisponebla",
+    "unavailableMac": "Nedisponebla (VideoToolbox)",
     "notAvailableTooltip": "GPU nedisponebla — kontrolu kongruecon en agordoj",
+    "notAvailableTooltipMac": "VideoToolbox aparata akcelo nedisponebla",
     "compatibleFound": "GPU kongruas (NVENC trovita). Por apliki, restartu la aplikaĵon.",
+    "compatibleFoundMac": "Aparatara akcelo kongruas (VideoToolbox trovita). Por apliki, restartu la aplikaĵon.",
     "notFoundOrUnavailable": "GPU ne trovita aŭ NVENC nedisponebla",
+    "notFoundOrUnavailableMac": "Aparatara akcelo nedisponebla aŭ VideoToolbox ne trovita",
     "checkError": "GPU-kontrola eraro",
+    "checkErrorMac": "VideoToolbox-kontrola eraro",
     "pathsNotConfigured": "Bonvolu unue agordi FFmpeg kaj FFprobe vojojn en la FFmpeg-agorda sekcio"
   },
   "renderMode": {

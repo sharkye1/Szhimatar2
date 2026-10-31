@@ -414,13 +414,21 @@
   },
   "gpu": {
     "label": "GPU (NVENC)",
+    "labelMac": "Hardware Acceleration (Apple VideoToolbox)",
     "checkCompatibility": "Check GPU Compatibility",
+    "checkCompatibilityMac": "Check Apple VideoToolbox",
     "available": "Available (NVENC)",
+    "availableMac": "Available (VideoToolbox)",
     "unavailable": "Unavailable",
+    "unavailableMac": "Unavailable (VideoToolbox)",
     "notAvailableTooltip": "GPU unavailable — check compatibility in settings",
+    "notAvailableTooltipMac": "VideoToolbox hardware acceleration unavailable",
     "compatibleFound": "GPU compatible (NVENC found). To apply, restart the application.",
+    "compatibleFoundMac": "Hardware acceleration is compatible (VideoToolbox found). Restart application to apply changes.",
     "notFoundOrUnavailable": "GPU not found or NVENC unavailable",
+    "notFoundOrUnavailableMac": "Hardware acceleration unavailable or VideoToolbox not found",
     "checkError": "GPU check error",
+    "checkErrorMac": "VideoToolbox check error",
     "pathsNotConfigured": "Please configure FFmpeg and FFprobe paths in the FFmpeg Configuration section first"
   },
   "renderMode": {

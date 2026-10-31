@@ -438,7 +438,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
         )}
 
         <div className="setting-group">
-          <label>{t('gpu.label')} / {t('settings.rendering')}</label>
+          <label>{(isMac ? (t('gpu.labelMac') || 'Аппаратное ускорение (Apple VideoToolbox)') : t('gpu.label'))} / {t('settings.rendering')}</label>
           <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
             {/* GPU Check section */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -457,26 +457,45 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
                     const available = await invoke<boolean>('check_gpu_compatibility');
                     setGpuAvailability(!!available);
                     updateSettings({ gpuAvailable: !!available }, true);
-                    await invoke('write_log', { message: `GPU NVENC available: ${available}` });
-                    alert(available ? t('gpu.compatibleFound') : t('gpu.notFoundOrUnavailable'));
+                    await invoke('write_log', { 
+                      message: isMac 
+                        ? `Apple VideoToolbox available: ${available}` 
+                        : `GPU NVENC available: ${available}` 
+                    });
+                    alert(
+                      available
+                        ? (isMac 
+                            ? (t('gpu.compatibleFoundMac') || 'Аппаратное ускорение совместимо (VideoToolbox найден). Для применения перезапустите приложение.') 
+                            : t('gpu.compatibleFound'))
+                        : (isMac 
+                            ? (t('gpu.notFoundOrUnavailableMac') || 'Аппаратное ускорение недоступно или VideoToolbox не найден') 
+                            : t('gpu.notFoundOrUnavailable'))
+                    );
                   } catch (e) {
                     console.error('GPU check error', e);
-                    alert(t('gpu.checkError'));
+                    alert(isMac ? (t('gpu.checkErrorMac') || t('gpu.checkError')) : t('gpu.checkError'));
                   }
                 }}
                 style={{
-                  background: theme.colors.primary,
+                  background: isMac
+                    ? 'linear-gradient(135deg, #ff5e3a 0%, #ff2a6d 35%, #9b51e0 70%, #00c6ff 100%)'
+                    : theme.colors.primary,
                   color: '#fff',
                   padding: '8px 16px',
-                  border: 'none',
-                  borderRadius: 4,
+                  border: isMac ? '1px solid rgba(255, 255, 255, 0.3)' : 'none',
+                  borderRadius: 6,
                   cursor: 'pointer',
+                  fontWeight: 600,
+                  boxShadow: isMac ? '0 2px 12px rgba(255, 42, 109, 0.4), 0 0 8px rgba(0, 198, 255, 0.25)' : 'none',
+                  transition: 'all 0.2s ease',
                 }}
               >
-                {t('gpu.checkCompatibility')}
+                {isMac ? (t('gpu.checkCompatibilityMac') || 'Проверить Apple VideoToolbox') : t('gpu.checkCompatibility')}
               </button>
-              <span style={{ color: gpuAvailable ? theme.colors.success : theme.colors.error }}>
-                {gpuAvailable ? t('gpu.available') : t('gpu.unavailable')}
+              <span style={{ color: gpuAvailable ? theme.colors.success : theme.colors.error, fontWeight: 500 }}>
+                {gpuAvailable 
+                  ? (isMac ? (t('gpu.availableMac') || 'Доступен (VideoToolbox)') : t('gpu.available')) 
+                  : (isMac ? (t('gpu.unavailableMac') || 'Недоступен') : t('gpu.unavailable'))}
               </span>
             </div>
 

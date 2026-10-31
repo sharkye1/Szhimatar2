@@ -414,13 +414,21 @@
   },
   "gpu": {
     "label": "GPU (NVENC)",
+    "labelMac": "硬件加速 (Apple VideoToolbox)",
     "checkCompatibility": "检查GPU兼容性",
+    "checkCompatibilityMac": "检查Apple VideoToolbox",
     "available": "可用 (NVENC)",
+    "availableMac": "可用 (VideoToolbox)",
     "unavailable": "不可用",
+    "unavailableMac": "不可用 (VideoToolbox)",
     "notAvailableTooltip": "GPU不可用 — 请在设置中检查兼容性",
+    "notAvailableTooltipMac": "VideoToolbox硬件加速不可用",
     "compatibleFound": "GPU兼容 (找到NVENC). 要应用更改，请重启应用程序。",
+    "compatibleFoundMac": "硬件加速兼容 (找到VideoToolbox). 要应用更改，请重启应用程序。",
     "notFoundOrUnavailable": "未找到GPU或NVENC不可用",
+    "notFoundOrUnavailableMac": "硬件加速不可用或未找到VideoToolbox",
     "checkError": "GPU检查错误",
+    "checkErrorMac": "VideoToolbox检查错误",
     "pathsNotConfigured": "请先在FFmpeg配置部分设置FFmpeg和FFprobe路径"
   },
   "renderMode": {

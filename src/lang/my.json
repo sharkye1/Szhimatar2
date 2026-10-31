@@ -414,13 +414,21 @@
   },
   "gpu": {
     "label": "GPU (NVENC)",
+    "labelMac": "Aparatno ubrzanje (Apple VideoToolbox)",
     "checkCompatibility": "Prověriti kompatibilnost GPU",
+    "checkCompatibilityMac": "Prověriti Apple VideoToolbox",
     "available": "Dostupny (NVENC)",
+    "availableMac": "Dostupny (VideoToolbox)",
     "unavailable": "Nedostupny",
+    "unavailableMac": "Nedostupny (VideoToolbox)",
     "notAvailableTooltip": "GPU nedostupny — prověriti kompatibilnost v nastavenjah",
+    "notAvailableTooltipMac": "Aparatno ubrzanje VideoToolbox nedostupno",
     "compatibleFound": "GPU kompatibilny (NVENC najdeny). Za priměnenje perезапustiti prilozhenije.",
+    "compatibleFoundMac": "Aparatno ubrzanje kompatibilno (VideoToolbox najdeny). Za priměnenje perезапustiti prilozhenije.",
     "notFoundOrUnavailable": "GPU ne najdeny ili NVENC nedostupny",
+    "notFoundOrUnavailableMac": "Aparatno ubrzanje nedostupno ili VideoToolbox ne najdeny",
     "checkError": "Greška prověrky GPU",
+    "checkErrorMac": "Greška prověrky VideoToolbox",
     "pathsNotConfigured": "Najprěv trěbno ukazati pųti k FFmpeg i FFprobe v sekciji konfiguracije FFmpeg"
   },
   "renderMode": {
