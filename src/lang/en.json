@@ -578,5 +578,22 @@
       "pending": "Queued",
       "stopped": "Stopped"
     }
+  },
+  "proxy": {
+    "title": "Network & Proxy (Bypass & Fallback)",
+    "modeLabel": "Proxy mode for media downloads:",
+    "modeAuto": "Auto-fallback (direct first, proxy upon error/block)",
+    "modeAlways": "Always through proxy",
+    "modeDisabled": "Disabled (direct only)",
+    "detected": "🟢 Proxy detected:",
+    "vpnDetected": "🟢 System VPN connected: \"{name}\" (traffic already routes through it, proxy not required)",
+    "notDetected": "No active system or local proxy/VPN detected",
+    "refreshDetect": "Detect Again",
+    "customUrlLabel": "Custom proxy address (optional):",
+    "placeholderDetected": "Default used:",
+    "testButton": "Test",
+    "testing": "Testing...",
+    "customHint": "Leave empty for auto-detection of running Clash, V2Ray, NekoBox, or system proxy.",
+    "noProxyToTest": "No proxy address to test. Specify one manually or start a proxy."
   }
 }

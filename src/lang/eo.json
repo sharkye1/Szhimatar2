@@ -578,5 +578,22 @@
       "pending": "En vico",
       "stopped": "Haltigita"
     }
+  },
+  "proxy": {
+    "title": "Reto kaj Prokurilo (Proxy)",
+    "modeLabel": "Prokura reĝimo:",
+    "modeAuto": "Aŭtomata rezervo (rekta konekto, okaze de blokado per prokurilo)",
+    "modeAlways": "Ĉiam tra prokurilo",
+    "modeDisabled": "Malŝaltita (nur rekta)",
+    "detected": "🟢 Prokurilo detektita:",
+    "vpnDetected": "🟢 Sistema VPN konektita: \"{name}\" (trafiko jam pasas tra ĝi, prokurilo ne necesas)",
+    "notDetected": "Neniu aktiva sistema aŭ loka prokurilo/VPN detektita",
+    "refreshDetect": "Detekti denove",
+    "customUrlLabel": "Propra prokurila adreso (laŭvola):",
+    "placeholderDetected": "Defaŭlte uzata:",
+    "testButton": "Kontroli",
+    "testing": "Kontrolante...",
+    "customHint": "Lasu malplena por aŭtomata detekto de Clash, V2Ray, NekoBox aŭ sistema prokurilo.",
+    "noProxyToTest": "Neniu prokurilo por kontroli."
   }
 }

@@ -578,5 +578,22 @@
       "pending": "V črědě",
       "stopped": "Ostanovljeno"
     }
+  },
+  "proxy": {
+    "title": "Mrežica i Proksi (Proxy)",
+    "modeLabel": "Režim proksi pri stęganju:",
+    "modeAuto": "Avtomatičny rezerv (prěmo, pri blokadě črěz proksi)",
+    "modeAlways": "Vsegda črěz proksi",
+    "modeDisabled": "Otkľučeno (toko prěmo)",
+    "detected": "🟢 Obnaruženy proksi:",
+    "vpnDetected": "🟢 Podkľučeny sistemny VPN: \"{name}\" (trafik uže idet črěz njego, proksi ne trěbuje se)",
+    "notDetected": "Aktivny sistemny ili lokalny proksi/VPN ne obnaruženy",
+    "refreshDetect": "Obnoviti",
+    "customUrlLabel": "Vlastny adres proksi (neobvezatno):",
+    "placeholderDetected": "Po umolčanju:",
+    "testButton": "Izkusiti",
+    "testing": "Izkusanje...",
+    "customHint": "Ostavite prazno dľa avtodetekcije Clash, V2Ray, NekoBox ili sistemnogo proksi.",
+    "noProxyToTest": "Nema adresa proksi dľa izkusanja."
   }
 }

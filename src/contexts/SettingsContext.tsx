@@ -21,6 +21,8 @@ export interface AppSettings {
   gpuAvailable: boolean;
   renderMode: string;
   screenAnimation: ScreenAnimationType;
+  proxyMode: 'auto' | 'always' | 'disabled';
+  proxyUrl: string;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -39,6 +41,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   gpuAvailable: false,
   renderMode: 'cpu',
   screenAnimation: 'default',
+  proxyMode: 'auto',
+  proxyUrl: '',
 };
 
 interface SettingsContextType {
@@ -84,6 +88,8 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
           gpuAvailable: data.gpuAvailable,
           renderMode: data.renderMode,
           screenAnimation: data.screenAnimation,
+          proxyMode: data.proxyMode || 'auto',
+          proxyUrl: data.proxyUrl || '',
         },
       });
     } catch (error) {
@@ -116,6 +122,8 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
           gpuAvailable: rawGpuAvailable,
           renderMode: sanitizedRenderMode,
           screenAnimation: (raw.screenAnimation || raw.screen_animation || DEFAULT_APP_SETTINGS.screenAnimation) as ScreenAnimationType,
+          proxyMode: (raw.proxyMode || raw.proxy_mode || DEFAULT_APP_SETTINGS.proxyMode) as 'auto' | 'always' | 'disabled',
+          proxyUrl: raw.proxyUrl ?? raw.proxy_url ?? DEFAULT_APP_SETTINGS.proxyUrl,
         };
         settingsRef.current = normalized;
         setSettings(normalized);

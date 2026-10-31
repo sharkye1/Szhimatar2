@@ -39,8 +39,16 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
   const [updateState, setUpdateState] = useState<UpdateState>(UpdateService.getState());
   const [showRestartPrompt, setShowRestartPrompt] = useState(false);
 
+  // Proxy & VPN state
+  const [detectedProxy, setDetectedProxy] = useState<{ url: string; source: string } | null>(null);
+  const [detectedVpn, setDetectedVpn] = useState<string | null>(null);
+  const [isDetectingProxy, setIsDetectingProxy] = useState<boolean>(false);
+  const [proxyTestResult, setProxyTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isTestingProxy, setIsTestingProxy] = useState<boolean>(false);
+
   useEffect(() => {
     loadLogsPath();
+    loadDetectedProxy();
     if (!isMac) {
       checkContextMenuStatus();
     }
@@ -56,6 +64,61 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
       void flushSettings();
     };
   }, [flushSettings]);
+
+  const loadDetectedProxy = async () => {
+    setIsDetectingProxy(true);
+    try {
+      const res = await invoke<{
+        proxy: { url: string; source: string } | null;
+        vpnName?: string | null;
+        vpn_name?: string | null;
+      } | null>('detect_system_proxy');
+
+      if (res && typeof res === 'object') {
+        setDetectedProxy(res.proxy ?? null);
+        const vpnRaw = (res.vpnName ?? res.vpn_name ?? '').trim();
+        const vpnClean = vpnRaw.replace(/^"+|"+$/g, '').trim();
+        setDetectedVpn(vpnClean || null);
+      } else {
+        setDetectedProxy(null);
+        setDetectedVpn(null);
+      }
+    } catch (error) {
+      console.error('Failed to detect system proxy/vpn:', error);
+      setDetectedProxy(null);
+      setDetectedVpn(null);
+    } finally {
+      setIsDetectingProxy(false);
+    }
+  };
+
+  const handleTestProxy = async () => {
+    const targetUrl = settings.proxyUrl.trim() || (detectedProxy ? detectedProxy.url : '');
+    if (!targetUrl) {
+      setProxyTestResult({
+        success: false,
+        message: t('proxy.noProxyToTest'),
+      });
+      return;
+    }
+    setIsTestingProxy(true);
+    setProxyTestResult(null);
+    try {
+      const msg = await invoke<string>('test_proxy_connection', { proxyUrl: targetUrl });
+      setProxyTestResult({
+        success: true,
+        message: msg || `OK: ${targetUrl}`,
+      });
+    } catch (error: unknown) {
+      const errMsg = typeof error === 'string' ? error : String(error);
+      setProxyTestResult({
+        success: false,
+        message: errMsg,
+      });
+    } finally {
+      setIsTestingProxy(false);
+    }
+  };
 
   const handleBack = async () => {
     await flushSettings();
@@ -612,6 +675,159 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
         )}
 
         <VideoGuide title={t('videoGuide.title')} />
+
+        {/* Network & Proxy Settings */}
+        <div className="setting-group">
+          <label>{t('proxy.title')}</label>
+          <div
+            className="glass-card"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 14,
+              padding: 16,
+              borderRadius: 8,
+            }}
+          >
+            {/* Mode selection */}
+            <div>
+              <div style={{ fontSize: 13, marginBottom: 6, color: theme.colors.text }}>
+                {t('proxy.modeLabel')}
+              </div>
+              <select
+                value={settings.proxyMode || 'auto'}
+                onChange={(e) => updateSettings({ proxyMode: e.target.value as 'auto' | 'always' | 'disabled' }, true)}
+                style={{ width: '100%', maxWidth: 500 }}
+              >
+                <option value="auto">{t('proxy.modeAuto')}</option>
+                <option value="always">{t('proxy.modeAlways')}</option>
+                <option value="disabled">{t('proxy.modeDisabled')}</option>
+              </select>
+            </div>
+
+            {/* Detected proxy status */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '10px 12px',
+                background: theme.colors.background,
+                borderRadius: 6,
+                border: `1px solid ${theme.colors.border}`,
+                flexWrap: 'wrap',
+                gap: 8,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {detectedProxy ? (
+                  <>
+                    <span style={{ fontSize: 13, color: theme.colors.textSecondary }}>
+                      {t('proxy.detected')}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: theme.colors.primary,
+                        padding: '2px 8px',
+                        background: `${theme.colors.primary}20`,
+                        borderRadius: 4,
+                      }}
+                    >
+                      {detectedProxy.url} ({detectedProxy.source})
+                    </span>
+                  </>
+                ) : detectedVpn ? (
+                  <span style={{ fontSize: 13, color: theme.colors.textSecondary }}>
+                    {t('proxy.vpnDetected').replace('{name}', detectedVpn)}
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 13, color: theme.colors.textSecondary }}>
+                    {t('proxy.notDetected')}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={loadDetectedProxy}
+                disabled={isDetectingProxy}
+                style={{
+                  background: 'transparent',
+                  color: theme.colors.primary,
+                  border: `1px solid ${theme.colors.primary}60`,
+                  borderRadius: 4,
+                  padding: '4px 10px',
+                  cursor: isDetectingProxy ? 'not-allowed' : 'pointer',
+                  fontSize: 12,
+                }}
+              >
+                {t('proxy.refreshDetect')}
+              </button>
+            </div>
+
+            {/* Custom proxy input */}
+            <div>
+              <div style={{ fontSize: 13, marginBottom: 6, color: theme.colors.text }}>
+                {t('proxy.customUrlLabel')}
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  value={settings.proxyUrl || ''}
+                  onChange={(e) => updateSettings({ proxyUrl: e.target.value }, true)}
+                  placeholder={
+                    detectedProxy
+                      ? `${t('proxy.placeholderDetected')} ${detectedProxy.url}`
+                      : 'http://127.0.0.1:7890 или socks5://127.0.0.1:10808'
+                  }
+                  style={{ flex: '1 1 260px' }}
+                />
+                <button
+                  type="button"
+                  onClick={handleTestProxy}
+                  disabled={isTestingProxy}
+                  style={{
+                    background: theme.colors.primary,
+                    color: '#fff',
+                    padding: '8px 14px',
+                    border: 'none',
+                    borderRadius: 4,
+                    cursor: isTestingProxy ? 'not-allowed' : 'pointer',
+                    fontSize: 13,
+                    fontWeight: 500,
+                  }}
+                >
+                  {isTestingProxy ? t('proxy.testing') : t('proxy.testButton')}
+                </button>
+              </div>
+              <div style={{ fontSize: 12, color: theme.colors.textSecondary, marginTop: 4 }}>
+                {t('proxy.customHint')}
+              </div>
+
+              {proxyTestResult && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 12,
+                    padding: '6px 10px',
+                    borderRadius: 4,
+                    background: proxyTestResult.success
+                      ? `${theme.colors.success}20`
+                      : `${theme.colors.error}20`,
+                    color: proxyTestResult.success ? theme.colors.success : theme.colors.error,
+                    border: `1px solid ${proxyTestResult.success ? theme.colors.success : theme.colors.error}40`,
+                    wordBreak: 'break-all',
+                  }}
+                >
+                  {proxyTestResult.success ? '✓ ' : '✗ '}
+                  {proxyTestResult.message}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
 
         <div className="setting-group">
           <label>{t('logs.title')}</label>

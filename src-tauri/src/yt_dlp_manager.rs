@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -27,6 +27,61 @@ lazy_static! {
         Regex::new(r#"\[ExtractAudio\]\s+Destination:\s+(.+)$"#).expect("valid extract audio regex");
     static ref FORMATS_RE: Regex =
         Regex::new(r#"Downloading \d+ format\(s\):\s*([^\s]+)"#).expect("valid formats regex");
+    static ref PROXY_REQUIRED_HOSTS: Arc<Mutex<HashSet<String>>> =
+        Arc::new(Mutex::new(HashSet::new()));
+}
+
+pub fn sanitize_url_input(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.len() > 7 {
+        if let Some(pos) = trimmed[7..].find("https://").or_else(|| trimmed[7..].find("http://")) {
+            return trimmed[..7 + pos].trim().to_string();
+        }
+    }
+    trimmed.to_string()
+}
+
+pub fn extract_host_from_url(url: &str) -> Option<String> {
+    let clean = sanitize_url_input(url);
+    let trimmed = clean.trim();
+    let stripped = if let Some(pos) = trimmed.find("://") {
+        &trimmed[pos + 3..]
+    } else {
+        trimmed
+    };
+    let without_auth = stripped.split('@').last().unwrap_or(stripped);
+    let host = without_auth.split(&['/', '?', '#', ':'][..]).next()?.trim().to_lowercase();
+    let clean = host.trim_start_matches("www.").to_string();
+    if clean.is_empty() {
+        None
+    } else {
+        Some(clean)
+    }
+}
+
+pub fn mark_host_requires_proxy(url: &str) {
+    if let Some(host) = extract_host_from_url(url) {
+        if let Ok(mut set) = PROXY_REQUIRED_HOSTS.lock() {
+            set.insert(host);
+        }
+    }
+}
+
+pub fn unmark_host_requires_proxy(url: &str) {
+    if let Some(host) = extract_host_from_url(url) {
+        if let Ok(mut set) = PROXY_REQUIRED_HOSTS.lock() {
+            set.remove(&host);
+        }
+    }
+}
+
+pub fn does_host_require_proxy(url: &str) -> bool {
+    if let Some(host) = extract_host_from_url(url) {
+        if let Ok(set) = PROXY_REQUIRED_HOSTS.lock() {
+            return set.iter().any(|d| host == *d || host.ends_with(&format!(".{}", d)));
+        }
+    }
+    false
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -301,6 +356,12 @@ pub fn is_network_error(err: &str) -> bool {
         || lower.contains("ssl error")
         || lower.contains("tls error")
         || lower.contains("http error 403")
+        || lower.contains("http error 401")
+        || lower.contains("http error 451")
+        || lower.contains("georestricted")
+        || lower.contains("geo-restricted")
+        || lower.contains("not available in your country")
+        || lower.contains("blocked in your country")
         || lower.contains("http error 429")
         || lower.contains("winerror 10060")
         || lower.contains("winerror 10054")
@@ -580,6 +641,16 @@ pub fn build_technical_details(
             environment.push(format!("{}: {}", var, sanitized));
         }
     }
+
+    if let Some(effective_proxy) = crate::proxy_manager::resolve_effective_proxy_url() {
+        let sanitized = if let Some(ref re) = re_cred {
+            re.replace_all(&effective_proxy, "://***:***@").to_string()
+        } else {
+            effective_proxy
+        };
+        environment.push(format!("Configured/Detected Proxy: {}", sanitized));
+    }
+
     if environment.is_empty() {
         environment.push("Proxy: Прямое подключение (прокси не обнаружен в окружении)".to_string());
     }
@@ -829,10 +900,10 @@ pub fn get_system_download_dir() -> Result<String, String> {
     Ok(dir.display().to_string())
 }
 
-#[tauri::command]
-pub async fn get_video_formats(
-    app_handle: AppHandle,
-    url: String,
+async fn fetch_formats_with_yt_dlp(
+    app_handle: &AppHandle,
+    url: &str,
+    proxy: Option<&str>,
 ) -> Result<VideoMetadataResponse, TechnicalDetails> {
     let mut args = vec![
         "-J".to_string(),
@@ -840,7 +911,7 @@ pub async fn get_video_formats(
         "utf-8".to_string(),
         "--force-ipv4".to_string(),
         "--socket-timeout".to_string(),
-        "10".to_string(),
+        "15".to_string(),
         "--retries".to_string(),
         "2".to_string(),
         "--fragment-retries".to_string(),
@@ -858,19 +929,25 @@ pub async fn get_video_formats(
         "no-youtube-unavailable-videos".to_string(),
     ];
 
+    if let Some(p) = proxy {
+        args.push("--proxy".to_string());
+        args.push(p.to_string());
+    }
+
     if let Some(ffmpeg_loc) = resolve_ffmpeg_location() {
         let normalized = ffmpeg_loc.to_string_lossy().replace('\\', "/");
         args.push("--ffmpeg-location".to_string());
         args.push(normalized);
     }
 
-    args.push(url.clone());
+    let clean_url = sanitize_url_input(url);
+    args.push(clean_url.clone());
 
-    let yt_dlp_path = match ensure_yt_dlp_installed(&app_handle).await {
+    let yt_dlp_path = match ensure_yt_dlp_installed(app_handle).await {
         Ok(path) => path,
         Err(e) => {
             let details = build_technical_details(
-                &url,
+                &clean_url,
                 &PathBuf::from(yt_dlp_executable_name()),
                 &args,
                 None,
@@ -894,11 +971,17 @@ pub async fn get_video_formats(
         .env("PYTHONUTF8", "1")
         .args(&args);
 
-    let output = match tokio::time::timeout(Duration::from_secs(14), command.output()).await {
+    let timeout_duration = if proxy.is_some() {
+        Duration::from_secs(25)
+    } else {
+        Duration::from_secs(20)
+    };
+
+    let output = match tokio::time::timeout(timeout_duration, command.output()).await {
         Ok(Ok(out)) => out,
         Ok(Err(e)) => {
             let details = build_technical_details(
-                &url,
+                &clean_url,
                 &yt_dlp_path,
                 &args,
                 None,
@@ -910,13 +993,19 @@ pub async fn get_video_formats(
         }
         Err(_) => {
             let details = build_technical_details(
-                &url,
+                url,
                 &yt_dlp_path,
                 &args,
                 None,
-                "Превышено время ожидания проверки ссылки (таймаут сети 14 сек)".to_string(),
+                format!(
+                    "Превышено время ожидания проверки ссылки (таймаут сети {} сек)",
+                    timeout_duration.as_secs()
+                ),
                 None,
-                Some("Таймаут подключения (14 секунд). Сервер не ответил на запрос или соединение было сброшено/заблокировано сетевым оборудованием или провайдером (DPI / РКН / VPN).".to_string()),
+                Some(format!(
+                    "Таймаут подключения ({} секунд). Сервер не ответил на запрос или соединение было сброшено/заблокировано сетевым оборудованием или провайдером (DPI / РКН / VPN).",
+                    timeout_duration.as_secs()
+                )),
             );
             return Err(details);
         }
@@ -926,7 +1015,7 @@ pub async fn get_video_formats(
         let stdout_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
         let stderr_str = String::from_utf8_lossy(&output.stderr).trim().to_string();
         let details = build_technical_details(
-            &url,
+            url,
             &yt_dlp_path,
             &args,
             output.status.code(),
@@ -943,7 +1032,7 @@ pub async fn get_video_formats(
             let stdout_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
             let stderr_str = String::from_utf8_lossy(&output.stderr).trim().to_string();
             let details = build_technical_details(
-                &url,
+                url,
                 &yt_dlp_path,
                 &args,
                 output.status.code(),
@@ -954,18 +1043,6 @@ pub async fn get_video_formats(
             return Err(details);
         }
     };
-    let _ = app_handle.emit_all(
-        "download-manager-log",
-        format!(
-            "Discovered yt-dlp formats for {}{}",
-            info.title.as_deref().unwrap_or("media"),
-            if info.formats.is_empty() {
-                " (no formats found)"
-            } else {
-                ""
-            }
-        ),
-    );
 
     let formats = choose_best_video_formats(&info);
     Ok(VideoMetadataResponse {
@@ -973,6 +1050,105 @@ pub async fn get_video_formats(
         duration: info.duration,
         formats,
     })
+}
+
+#[tauri::command]
+pub async fn get_video_formats(
+    app_handle: AppHandle,
+    url: String,
+) -> Result<VideoMetadataResponse, TechnicalDetails> {
+    let settings = crate::load_settings().unwrap_or_default();
+    let proxy_mode = settings.proxy_mode;
+    let effective_proxy = crate::proxy_manager::resolve_effective_proxy_url();
+
+    let start_with_proxy = match proxy_mode.as_str() {
+        "disabled" => false,
+        "always" => effective_proxy.is_some(),
+        _ => effective_proxy.is_some() && does_host_require_proxy(&url),
+    };
+
+    if start_with_proxy {
+        if let Some(ref p) = effective_proxy {
+            let res = fetch_formats_with_yt_dlp(&app_handle, &url, Some(p)).await;
+            if res.is_ok() {
+                mark_host_requires_proxy(&url);
+                return res;
+            }
+            if proxy_mode != "always" {
+                let _ = app_handle.emit_all(
+                    "download-manager-log",
+                    format!(
+                        "Proxy attempt failed for {}, falling back to direct connection...",
+                        url
+                    ),
+                );
+                let direct_res = fetch_formats_with_yt_dlp(&app_handle, &url, None).await;
+                if direct_res.is_ok() {
+                    unmark_host_requires_proxy(&url);
+                    return direct_res;
+                }
+            }
+            return res;
+        }
+    }
+
+    // Stage 1: Direct attempt
+    let first_attempt = fetch_formats_with_yt_dlp(&app_handle, &url, None).await;
+    match first_attempt {
+        Ok(res) => {
+            unmark_host_requires_proxy(&url);
+            let _ = app_handle.emit_all(
+                "download-manager-log",
+                format!(
+                    "Discovered yt-dlp formats for {}",
+                    res.title.as_deref().unwrap_or("media")
+                ),
+            );
+            Ok(res)
+        }
+        Err(direct_err) => {
+            // Stage 2: Fallback to proxy if available and not disabled
+            if proxy_mode != "disabled" {
+                let fallback_proxy = effective_proxy
+                    .clone()
+                    .or_else(crate::proxy_manager::resolve_effective_proxy_url);
+                if let Some(ref p_url) = fallback_proxy {
+                    let _ = app_handle.emit_all(
+                        "download-manager-log",
+                        format!(
+                            "Direct format discovery failed for {}, retrying via proxy ({})...",
+                            url, p_url
+                        ),
+                    );
+
+                    let second_attempt =
+                        fetch_formats_with_yt_dlp(&app_handle, &url, Some(p_url)).await;
+                    match second_attempt {
+                        Ok(res) => {
+                            mark_host_requires_proxy(&url);
+                            let _ = app_handle.emit_all(
+                                "download-manager-log",
+                                format!(
+                                    "Discovered yt-dlp formats for {} via proxy ({})",
+                                    res.title.as_deref().unwrap_or("media"),
+                                    p_url
+                                ),
+                            );
+                            return Ok(res);
+                        }
+                        Err(mut proxy_err) => {
+                            proxy_err.hint = Some(format!(
+                                "Прямое подключение не удалось ({}), и подключение через прокси {} также завершилось ошибкой. Проверьте настройки прокси.",
+                                direct_err.status, p_url
+                            ));
+                            return Err(proxy_err);
+                        }
+                    }
+                }
+            }
+            Err(direct_err)
+        }
+    }
 }
 
 fn sanitize_meta_field(s: &str) -> Option<String> {
@@ -1040,6 +1216,73 @@ fn parse_progress_meta(line: &str) -> (Option<String>, Option<f64>) {
     (None, None)
 }
 
+fn build_download_command_args(
+    normalized_save_path_str: &str,
+    format: &str,
+    quality: &str,
+    url: &str,
+    proxy: Option<&str>,
+) -> Vec<String> {
+    let mut command_args: Vec<String> = vec![
+        "--encoding".to_string(),
+        "utf-8".to_string(),
+        "--newline".to_string(),
+        "--no-colors".to_string(),
+        "--force-ipv4".to_string(),
+        "--socket-timeout".to_string(),
+        if proxy.is_some() { "20".to_string() } else { "15".to_string() },
+        "--retries".to_string(),
+        if proxy.is_some() { "3".to_string() } else { "2".to_string() },
+        "--fragment-retries".to_string(),
+        if proxy.is_some() { "3".to_string() } else { "2".to_string() },
+        "--no-check-certificates".to_string(),
+        "--windows-filenames".to_string(),
+        "--user-agent".to_string(),
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36".to_string(),
+        "--no-warnings".to_string(),
+        "--no-playlist".to_string(),
+        "--compat-options".to_string(),
+        "no-youtube-unavailable-videos".to_string(),
+        "-P".to_string(),
+        normalized_save_path_str.to_string(),
+        "-o".to_string(),
+        "%(title).150s.%(ext)s".to_string(),
+        "--progress".to_string(),
+        "--progress-template".to_string(),
+        "download:SZ_PROGRESS:%(progress._percent_str)s|%(progress._eta_str)s|%(progress._speed_str)s|%(progress._total_bytes_str,progress._total_bytes_estimate_str,progress._downloaded_bytes_str)s|%(info.title)s|%(info.duration)s".to_string(),
+        "--progress-template".to_string(),
+        "postprocess:SZ_POST:%(progress.status)s|%(info.filepath)s|%(info.title)s|%(info.duration)s".to_string(),
+    ];
+
+    if let Some(p) = proxy {
+        command_args.push("--proxy".to_string());
+        command_args.push(p.to_string());
+    }
+
+    if let Some(ffmpeg_loc) = resolve_ffmpeg_location() {
+        let normalized_ffmpeg = ffmpeg_loc.to_string_lossy().replace('\\', "/");
+        command_args.push("--ffmpeg-location".to_string());
+        command_args.push(normalized_ffmpeg);
+    }
+
+    if format.eq_ignore_ascii_case("mp3") {
+        command_args.push("-x".to_string());
+        command_args.push("--audio-format".to_string());
+        command_args.push("mp3".to_string());
+    } else {
+        if !quality.trim().is_empty() {
+            command_args.push("-f".to_string());
+            command_args.push(quality.to_string());
+        }
+
+        command_args.push("--merge-output-format".to_string());
+        command_args.push("mp4".to_string());
+    }
+
+    command_args.push(url.to_string());
+    command_args
+}
+
 #[tauri::command]
 pub async fn download_media_link(
     app_handle: AppHandle,
@@ -1050,6 +1293,7 @@ pub async fn download_media_link(
     job_id: Option<String>,
     initial_title: Option<String>,
 ) -> Result<String, String> {
+    let clean_url = sanitize_url_input(&url);
     let yt_dlp_path = ensure_yt_dlp_installed(&app_handle).await?;
     let job_id =
         job_id.unwrap_or_else(|| format!("download-{}", chrono::Utc::now().timestamp_millis()));
@@ -1079,409 +1323,604 @@ pub async fn download_media_link(
         "download-started",
         DownloadStartedPayload {
             job_id: job_id_clone.clone(),
-            url: url.clone(),
+            url: clean_url.clone(),
             title: initial_title.clone(),
             save_path: resolved_save_path.display().to_string(),
         },
     );
 
+    let clean_url_task = clean_url.clone();
     tauri::async_runtime::spawn(async move {
-        let mut command_args: Vec<String> = vec![
-            "--encoding".to_string(),
-            "utf-8".to_string(),
-            "--newline".to_string(),
-            "--no-colors".to_string(),
-            "--force-ipv4".to_string(),
-            "--socket-timeout".to_string(),
-            "15".to_string(),
-            "--retries".to_string(),
-            "3".to_string(),
-            "--fragment-retries".to_string(),
-            "3".to_string(),
-            "--no-check-certificates".to_string(),
-            "--windows-filenames".to_string(),
-            "--user-agent".to_string(),
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36".to_string(),
-            "--no-warnings".to_string(),
-            "--no-playlist".to_string(),
-            "--compat-options".to_string(),
-            "no-youtube-unavailable-videos".to_string(),
-            "-P".to_string(),
-            normalized_save_path_str.clone(),
-            "-o".to_string(),
-            "%(title).150s.%(ext)s".to_string(),
-            "--progress".to_string(),
-            "--progress-template".to_string(),
-            "download:SZ_PROGRESS:%(progress._percent_str)s|%(progress._eta_str)s|%(progress._speed_str)s|%(progress._total_bytes_str,progress._total_bytes_estimate_str,progress._downloaded_bytes_str)s|%(info.title)s|%(info.duration)s".to_string(),
-            "--progress-template".to_string(),
-            "postprocess:SZ_POST:%(progress.status)s|%(info.filepath)s|%(info.title)s|%(info.duration)s".to_string(),
-        ];
+        let url = clean_url_task;
+        let settings = crate::load_settings().unwrap_or_default();
+        let proxy_mode = settings.proxy_mode;
+        let effective_proxy = crate::proxy_manager::resolve_effective_proxy_url();
 
-        if let Some(ffmpeg_loc) = resolve_ffmpeg_location() {
-            let normalized_ffmpeg = ffmpeg_loc.to_string_lossy().replace('\\', "/");
-            command_args.push("--ffmpeg-location".to_string());
-            command_args.push(normalized_ffmpeg);
-        }
-
-        if format.eq_ignore_ascii_case("mp3") {
-            command_args.push("-x".to_string());
-            command_args.push("--audio-format".to_string());
-            command_args.push("mp3".to_string());
-        } else {
-            if !quality.trim().is_empty() {
-                command_args.push("-f".to_string());
-                command_args.push(quality.clone());
-            }
-
-            command_args.push("--merge-output-format".to_string());
-            command_args.push("mp4".to_string());
-        }
-
-        command_args.push(url.clone());
-
-        let mut command = tokio::process::Command::new(&yt_dlp_path);
-        #[cfg(target_os = "windows")]
-        {
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
-            command.creation_flags(CREATE_NO_WINDOW);
-        }
-        command
-            .env("PYTHONIOENCODING", "utf-8")
-            .env("PYTHONUTF8", "1")
-            .env("PYTHONLEGACYWINDOWSSTDIO", "utf-8")
-            .args(&command_args)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped());
-
-        let mut child = match command.spawn() {
-            Ok(c) => c,
-            Err(e) => {
-                let details = build_technical_details(
-                    &url,
-                    &yt_dlp_path,
-                    &command_args,
-                    None,
-                    format!("Failed to spawn yt-dlp: {}", e),
-                    None,
-                    Some(e.to_string()),
-                );
-                let _ = app_handle.emit_all(
-                    "download-error",
-                    DownloadErrorPayload {
-                        job_id: job_id_clone.clone(),
-                        url: url.clone(),
-                        error: format!("Failed to spawn yt-dlp: {}", e),
-                        details: Some(details),
-                    },
-                );
-                return;
-            }
+        let initial_use_proxy = match proxy_mode.as_str() {
+            "disabled" => false,
+            "always" => effective_proxy.is_some(),
+            _ => effective_proxy.is_some() && does_host_require_proxy(&url),
         };
 
-        // Register in ProcessManager
-        {
-            if let Ok(mut manager) = crate::process_manager::PROCESS_MANAGER.lock() {
-                manager.register(
-                    job_id_clone.clone(),
-                    crate::process_manager::TaskType::Download,
-                    child.id(),
-                    cancel_token_clone.clone(),
-                );
-            }
-        }
+        let mut current_proxy = if initial_use_proxy {
+            effective_proxy.clone()
+        } else {
+            None
+        };
 
-        let stdout = child.stdout.take();
-        let stderr = child.stderr.take();
-
-        let app_handle_progress = app_handle.clone();
-        let job_id_progress = job_id_clone.clone();
-        let url_progress = url.clone();
-
-        let discovered_title: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(initial_title));
+        let discovered_title: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(initial_title.clone()));
         let discovered_duration: Arc<Mutex<Option<f64>>> = Arc::new(Mutex::new(None));
         let discovered_filepath: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
 
-        let title_for_stdout = Arc::clone(&discovered_title);
-        let duration_for_stdout = Arc::clone(&discovered_duration);
-        let filepath_for_stdout = Arc::clone(&discovered_filepath);
+        let mut attempt = 0;
+        while attempt < 2 {
+            attempt += 1;
 
-        let stdout_handle = tokio::spawn(async move {
-            let mut captured_lines: Vec<String> = Vec::new();
-            let mut last_emit = Instant::now() - Duration::from_millis(200);
-            let mut has_multiple_streams = false;
-            let mut current_stream = 0usize;
-            let mut highest_reported_percent = 0.0f64;
+            let command_args = build_download_command_args(
+                &normalized_save_path_str,
+                &format,
+                &quality,
+                &url,
+                current_proxy.as_deref(),
+            );
 
-            if let Some(stdout) = stdout {
-                use tokio::io::AsyncBufReadExt;
-                let reader = tokio::io::BufReader::new(stdout);
-                let mut lines = reader.lines();
+            let mut command = tokio::process::Command::new(&yt_dlp_path);
+            #[cfg(target_os = "windows")]
+            {
+                const CREATE_NO_WINDOW: u32 = 0x08000000;
+                command.creation_flags(CREATE_NO_WINDOW);
+            }
+            command
+                .env("PYTHONIOENCODING", "utf-8")
+                .env("PYTHONUTF8", "1")
+                .env("PYTHONLEGACYWINDOWSSTDIO", "utf-8")
+                .args(&command_args)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped());
 
-                while let Ok(Some(line)) = lines.next_line().await {
-                    let trimmed = line.trim();
+            let mut child = match command.spawn() {
+                Ok(c) => c,
+                Err(e) => {
+                    let details = build_technical_details(
+                        &url,
+                        &yt_dlp_path,
+                        &command_args,
+                        None,
+                        format!("Failed to spawn yt-dlp: {}", e),
+                        None,
+                        Some(e.to_string()),
+                    );
+                    let _ = app_handle.emit_all(
+                        "download-error",
+                        DownloadErrorPayload {
+                            job_id: job_id_clone.clone(),
+                            url: url.clone(),
+                            error: format!("Failed to spawn yt-dlp: {}", e),
+                            details: Some(details),
+                        },
+                    );
+                    break;
+                }
+            };
 
-                    // Detect multi-stream format (e.g. 136+140)
-                    if let Some(caps) = FORMATS_RE.captures(trimmed) {
-                        if let Some(m) = caps.get(1) {
-                            if m.as_str().contains('+') {
-                                has_multiple_streams = true;
-                            }
-                        }
-                    }
+            // Register in ProcessManager
+            {
+                if let Ok(mut manager) = crate::process_manager::PROCESS_MANAGER.lock() {
+                    manager.register(
+                        job_id_clone.clone(),
+                        crate::process_manager::TaskType::Download,
+                        child.id(),
+                        cancel_token_clone.clone(),
+                    );
+                }
+            }
 
-                    // Parse postprocess template marker
-                    if let Some(pos) = trimmed.find("SZ_POST:") {
-                        let payload = &trimmed[pos + "SZ_POST:".len()..];
-                        let parts: Vec<&str> = payload.split('|').collect();
-                        let status = parts.first().map(|s| s.trim()).unwrap_or("");
+            let stdout = child.stdout.take();
+            let stderr = child.stderr.take();
 
-                        if let Some(path) = parts.get(1).and_then(|s| sanitize_meta_field(s)) {
-                            let clean_path = path.trim_matches('"').to_string();
-                            let is_intermediate = clean_path.ends_with(".part")
-                                || clean_path.ends_with(".ytdl")
-                                || clean_path.contains(".temp.")
-                                || clean_path.contains(".f1")
-                                || clean_path.contains(".f2")
-                                || clean_path.contains(".f3");
+            let app_handle_progress = app_handle.clone();
+            let job_id_progress = job_id_clone.clone();
+            let url_progress = url.clone();
 
-                            if let Ok(mut lock) = filepath_for_stdout.lock() {
-                                let lock_is_final = lock.as_ref().map(|curr| {
-                                    curr.ends_with(".mp3") || curr.ends_with(".mp4")
-                                }).unwrap_or(false);
+            let title_for_stdout = Arc::clone(&discovered_title);
+            let duration_for_stdout = Arc::clone(&discovered_duration);
+            let filepath_for_stdout = Arc::clone(&discovered_filepath);
 
-                                let new_is_target = clean_path.ends_with(".mp3") || clean_path.ends_with(".mp4");
+            let stdout_handle = tokio::spawn(async move {
+                let mut captured_lines: Vec<String> = Vec::new();
+                let mut last_emit = Instant::now() - Duration::from_millis(200);
+                let mut has_multiple_streams = false;
+                let mut current_stream = 0usize;
+                let mut highest_reported_percent = 0.0f64;
 
-                                if (status == "finished" || lock.is_none()) && (!lock_is_final || new_is_target) && !is_intermediate {
-                                    *lock = Some(clean_path);
+                if let Some(stdout) = stdout {
+                    use tokio::io::AsyncBufReadExt;
+                    let reader = tokio::io::BufReader::new(stdout);
+                    let mut lines = reader.lines();
+
+                    while let Ok(Some(line)) = lines.next_line().await {
+                        let trimmed = line.trim();
+
+                        // Detect multi-stream format (e.g. 136+140)
+                        if let Some(caps) = FORMATS_RE.captures(trimmed) {
+                            if let Some(m) = caps.get(1) {
+                                if m.as_str().contains('+') {
+                                    has_multiple_streams = true;
                                 }
                             }
                         }
-                        if let Some(title) = parts.get(2).and_then(|s| sanitize_meta_field(s)) {
-                            if let Ok(mut lock) = title_for_stdout.lock() {
-                                if lock.is_none() {
-                                    *lock = Some(title);
+
+                        // Parse postprocess template marker
+                        if let Some(pos) = trimmed.find("SZ_POST:") {
+                            let payload = &trimmed[pos + "SZ_POST:".len()..];
+                            let parts: Vec<&str> = payload.split('|').collect();
+                            let status = parts.first().map(|s| s.trim()).unwrap_or("");
+
+                            if let Some(path) = parts.get(1).and_then(|s| sanitize_meta_field(s)) {
+                                let clean_path = path.trim_matches('"').to_string();
+                                let is_intermediate = clean_path.ends_with(".part")
+                                    || clean_path.ends_with(".ytdl")
+                                    || clean_path.contains(".temp.")
+                                    || clean_path.contains(".f1")
+                                    || clean_path.contains(".f2")
+                                    || clean_path.contains(".f3");
+
+                                if let Ok(mut lock) = filepath_for_stdout.lock() {
+                                    let lock_is_final = lock.as_ref().map(|curr| {
+                                        curr.ends_with(".mp3") || curr.ends_with(".mp4")
+                                    }).unwrap_or(false);
+
+                                    let new_is_target = clean_path.ends_with(".mp3") || clean_path.ends_with(".mp4");
+
+                                    if (status == "finished" || lock.is_none()) && (!lock_is_final || new_is_target) && !is_intermediate {
+                                        *lock = Some(clean_path);
+                                    }
                                 }
                             }
+                            if let Some(title) = parts.get(2).and_then(|s| sanitize_meta_field(s)) {
+                                if let Ok(mut lock) = title_for_stdout.lock() {
+                                    if lock.is_none() {
+                                        *lock = Some(title);
+                                    }
+                                }
+                            }
+                            if let Some(dur) = parts.get(3).and_then(|s| sanitize_meta_field(s)).and_then(|s| s.parse::<f64>().ok()) {
+                                if let Ok(mut lock) = duration_for_stdout.lock() {
+                                    if lock.is_none() {
+                                        *lock = Some(dur);
+                                    }
+                                }
+                            }
+
+                            if status == "started" {
+                                highest_reported_percent = highest_reported_percent.max(99.0);
+                                let cur_title = title_for_stdout.lock().ok().and_then(|t| t.clone());
+                                let _ = app_handle_progress.emit_all(
+                                    "download-progress",
+                                    DownloadProgressPayload {
+                                        job_id: job_id_progress.clone(),
+                                        url: url_progress.clone(),
+                                        title: cur_title,
+                                        progress_percent: highest_reported_percent,
+                                        eta: None,
+                                        speed: None,
+                                        total_size: None,
+                                        line: line.clone(),
+                                    },
+                                );
+                            }
                         }
-                        if let Some(dur) = parts.get(3).and_then(|s| sanitize_meta_field(s)).and_then(|s| s.parse::<f64>().ok()) {
-                            if let Ok(mut lock) = duration_for_stdout.lock() {
-                                if lock.is_none() {
+
+                        // Legacy markers
+                        if let Some(pos) = trimmed.find("SZ_TITLE:") {
+                            let title = trimmed[pos + "SZ_TITLE:".len()..].trim().to_string();
+                            if !title.is_empty() {
+                                if let Ok(mut lock) = title_for_stdout.lock() {
+                                    *lock = Some(title.clone());
+                                }
+                                let _ = app_handle_progress.emit_all(
+                                    "download-progress",
+                                    DownloadProgressPayload {
+                                        job_id: job_id_progress.clone(),
+                                        url: url_progress.clone(),
+                                        title: Some(title),
+                                        progress_percent: highest_reported_percent,
+                                        eta: None,
+                                        speed: None,
+                                        total_size: None,
+                                        line: line.clone(),
+                                    },
+                                );
+                            }
+                        } else if let Some(pos) = trimmed.find("SZ_DURATION:") {
+                            let dur_str = trimmed[pos + "SZ_DURATION:".len()..].trim();
+                            if let Ok(dur) = dur_str.parse::<f64>() {
+                                if let Ok(mut lock) = duration_for_stdout.lock() {
                                     *lock = Some(dur);
                                 }
                             }
-                        }
-
-                        if status == "started" {
-                            highest_reported_percent = highest_reported_percent.max(99.0);
-                            let cur_title = title_for_stdout.lock().ok().and_then(|t| t.clone());
-                            let _ = app_handle_progress.emit_all(
-                                "download-progress",
-                                DownloadProgressPayload {
-                                    job_id: job_id_progress.clone(),
-                                    url: url_progress.clone(),
-                                    title: cur_title,
-                                    progress_percent: highest_reported_percent,
-                                    eta: None,
-                                    speed: None,
-                                    total_size: None,
-                                    line: line.clone(),
-                                },
-                            );
-                        }
-                    }
-
-                    // Legacy markers
-                    if let Some(pos) = trimmed.find("SZ_TITLE:") {
-                        let title = trimmed[pos + "SZ_TITLE:".len()..].trim().to_string();
-                        if !title.is_empty() {
-                            if let Ok(mut lock) = title_for_stdout.lock() {
-                                *lock = Some(title.clone());
-                            }
-                            let _ = app_handle_progress.emit_all(
-                                "download-progress",
-                                DownloadProgressPayload {
-                                    job_id: job_id_progress.clone(),
-                                    url: url_progress.clone(),
-                                    title: Some(title),
-                                    progress_percent: highest_reported_percent,
-                                    eta: None,
-                                    speed: None,
-                                    total_size: None,
-                                    line: line.clone(),
-                                },
-                            );
-                        }
-                    } else if let Some(pos) = trimmed.find("SZ_DURATION:") {
-                        let dur_str = trimmed[pos + "SZ_DURATION:".len()..].trim();
-                        if let Ok(dur) = dur_str.parse::<f64>() {
-                            if let Ok(mut lock) = duration_for_stdout.lock() {
-                                *lock = Some(dur);
-                            }
-                        }
-                    } else if let Some(pos) = trimmed.find("SZ_FILEPATH:") {
-                        let path = trimmed[pos + "SZ_FILEPATH:".len()..].trim().trim_matches('"').to_string();
-                        if !path.is_empty() {
-                            if let Ok(mut lock) = filepath_for_stdout.lock() {
-                                *lock = Some(path);
-                            }
-                        }
-                    }
-
-                    // Path detectors from yt-dlp logs
-                    if let Some(caps) = MERGER_RE.captures(trimmed) {
-                        if let Some(m) = caps.get(1) {
-                            let clean = m.as_str().trim().trim_matches('"').to_string();
-                            if let Ok(mut lock) = filepath_for_stdout.lock() {
-                                *lock = Some(clean);
-                            }
-                        }
-                    } else if let Some(caps) = EXTRACT_AUDIO_RE.captures(trimmed) {
-                        if let Some(m) = caps.get(1) {
-                            let clean = m.as_str().trim().trim_matches('"').to_string();
-                            if let Ok(mut lock) = filepath_for_stdout.lock() {
-                                *lock = Some(clean);
-                            }
-                        }
-                    } else if let Some(caps) = ALREADY_DOWNLOADED_RE.captures(trimmed) {
-                        if let Some(m) = caps.get(1) {
-                            let clean = m.as_str().trim().trim_matches('"').to_string();
-                            if let Ok(mut lock) = filepath_for_stdout.lock() {
-                                *lock = Some(clean);
-                            }
-                        }
-                    } else if let Some(caps) = DEST_RE.captures(trimmed) {
-                        current_stream += 1;
-                        if let Some(m) = caps.get(1) {
-                            let clean = m.as_str().trim().trim_matches('"').to_string();
-                            if let Ok(mut lock) = filepath_for_stdout.lock() {
-                                if lock.is_none() {
-                                    *lock = Some(clean);
+                        } else if let Some(pos) = trimmed.find("SZ_FILEPATH:") {
+                            let path = trimmed[pos + "SZ_FILEPATH:".len()..].trim().trim_matches('"').to_string();
+                            if !path.is_empty() {
+                                if let Ok(mut lock) = filepath_for_stdout.lock() {
+                                    *lock = Some(path);
                                 }
                             }
                         }
-                    }
 
-                    let (meta_title, meta_dur) = parse_progress_meta(&line);
-                    if let Some(t) = meta_title {
-                        if let Ok(mut lock) = title_for_stdout.lock() {
-                            if lock.is_none() {
-                                *lock = Some(t);
+                        // Path detectors from yt-dlp logs
+                        if let Some(caps) = MERGER_RE.captures(trimmed) {
+                            if let Some(m) = caps.get(1) {
+                                let clean = m.as_str().trim().trim_matches('"').to_string();
+                                if let Ok(mut lock) = filepath_for_stdout.lock() {
+                                    *lock = Some(clean);
+                                }
+                            }
+                        } else if let Some(caps) = EXTRACT_AUDIO_RE.captures(trimmed) {
+                            if let Some(m) = caps.get(1) {
+                                let clean = m.as_str().trim().trim_matches('"').to_string();
+                                if let Ok(mut lock) = filepath_for_stdout.lock() {
+                                    *lock = Some(clean);
+                                }
+                            }
+                        } else if let Some(caps) = ALREADY_DOWNLOADED_RE.captures(trimmed) {
+                            if let Some(m) = caps.get(1) {
+                                let clean = m.as_str().trim().trim_matches('"').to_string();
+                                if let Ok(mut lock) = filepath_for_stdout.lock() {
+                                    *lock = Some(clean);
+                                }
+                            }
+                        } else if let Some(caps) = DEST_RE.captures(trimmed) {
+                            current_stream += 1;
+                            if let Some(m) = caps.get(1) {
+                                let clean = m.as_str().trim().trim_matches('"').to_string();
+                                if let Ok(mut lock) = filepath_for_stdout.lock() {
+                                    if lock.is_none() {
+                                        *lock = Some(clean);
+                                    }
+                                }
                             }
                         }
-                    }
-                    if let Some(d) = meta_dur {
-                        if let Ok(mut lock) = duration_for_stdout.lock() {
-                            if lock.is_none() {
-                                *lock = Some(d);
+
+                        let (meta_title, meta_dur) = parse_progress_meta(&line);
+                        if let Some(t) = meta_title {
+                            if let Ok(mut lock) = title_for_stdout.lock() {
+                                if lock.is_none() {
+                                    *lock = Some(t);
+                                }
                             }
                         }
-                    }
+                        if let Some(d) = meta_dur {
+                            if let Ok(mut lock) = duration_for_stdout.lock() {
+                                if lock.is_none() {
+                                    *lock = Some(d);
+                                }
+                            }
+                        }
 
-                    if let Some((progress_percent, eta, speed, total_size)) = parse_progress_line(&line) {
-                        let mapped_percent = if has_multiple_streams {
-                            if current_stream <= 1 {
-                                (progress_percent * 0.88).min(88.0)
+                        if let Some((progress_percent, eta, speed, total_size)) = parse_progress_line(&line) {
+                            let mapped_percent = if has_multiple_streams {
+                                if current_stream <= 1 {
+                                    (progress_percent * 0.88).min(88.0)
+                                } else {
+                                    (88.0 + progress_percent * 0.10).min(98.0)
+                                }
                             } else {
-                                (88.0 + progress_percent * 0.10).min(98.0)
+                                progress_percent.min(98.0)
+                            };
+
+                            highest_reported_percent = highest_reported_percent.max(mapped_percent);
+
+                            if last_emit.elapsed() >= Duration::from_millis(80) || highest_reported_percent >= 98.0 {
+                                last_emit = Instant::now();
+                                let cur_title = title_for_stdout.lock().ok().and_then(|t| t.clone());
+                                let _ = app_handle_progress.emit_all(
+                                    "download-progress",
+                                    DownloadProgressPayload {
+                                        job_id: job_id_progress.clone(),
+                                        url: url_progress.clone(),
+                                        title: cur_title,
+                                        progress_percent: highest_reported_percent,
+                                        eta,
+                                        speed,
+                                        total_size,
+                                        line: line.clone(),
+                                    },
+                                );
                             }
-                        } else {
-                            progress_percent.min(98.0)
-                        };
+                        }
+                        if !line.trim().is_empty()
+                            && !trimmed.starts_with("download:SZ_PROGRESS:")
+                            && !trimmed.starts_with("postprocess:SZ_POST:")
+                        {
+                            if captured_lines.len() < 100 {
+                                captured_lines.push(line);
+                            }
+                        }
+                    }
+                }
+                captured_lines.join("\n")
+            });
 
-                        highest_reported_percent = highest_reported_percent.max(mapped_percent);
+            let stderr_handle = tokio::spawn(async move {
+                let mut err_lines = Vec::new();
+                if let Some(stderr) = stderr {
+                    use tokio::io::AsyncBufReadExt;
+                    let reader = tokio::io::BufReader::new(stderr);
+                    let mut lines = reader.lines();
 
-                        if last_emit.elapsed() >= Duration::from_millis(80) || highest_reported_percent >= 98.0 {
-                            last_emit = Instant::now();
-                            let cur_title = title_for_stdout.lock().ok().and_then(|t| t.clone());
-                            let _ = app_handle_progress.emit_all(
-                                "download-progress",
-                                DownloadProgressPayload {
-                                    job_id: job_id_progress.clone(),
-                                    url: url_progress.clone(),
-                                    title: cur_title,
-                                    progress_percent: highest_reported_percent,
-                                    eta,
-                                    speed,
-                                    total_size,
-                                    line: line.clone(),
+                    while let Ok(Some(line)) = lines.next_line().await {
+                        let trimmed = line.trim();
+                        if !trimmed.is_empty() {
+                            if err_lines.len() < 150 {
+                                err_lines.push(line);
+                            }
+                        }
+                    }
+                }
+                err_lines.join("\n")
+            });
+
+            tokio::select! {
+                res = child.wait() => {
+                    let last_stdout: String = stdout_handle.await.unwrap_or_default();
+                    let stderr_output: String = stderr_handle.await.unwrap_or_default();
+
+                    let status = match res {
+                        Ok(s) => s,
+                        Err(e) => {
+                            let details = build_technical_details(
+                                &url,
+                                &yt_dlp_path,
+                                &command_args,
+                                None,
+                                format!("yt-dlp wait error: {}", e),
+                                None,
+                                Some(e.to_string()),
+                            );
+                            let _ = app_handle.emit_all(
+                                "download-error",
+                                DownloadErrorPayload {
+                                    job_id: job_id_clone.clone(),
+                                    url: url.clone(),
+                                    error: format!("yt-dlp wait error: {}", e),
+                                    details: Some(details),
                                 },
                             );
+                            break;
                         }
-                    }
-                    if !line.trim().is_empty()
-                        && !trimmed.starts_with("download:SZ_PROGRESS:")
-                        && !trimmed.starts_with("postprocess:SZ_POST:")
-                    {
-                        if captured_lines.len() < 100 {
-                            captured_lines.push(line);
+                    };
+
+                    let was_stopped = {
+                        if let Ok(mut manager) = crate::process_manager::PROCESS_MANAGER.lock() {
+                            manager.take_stopped(&job_id_clone)
+                        } else {
+                            false
                         }
-                    }
-                }
-            }
-            captured_lines.join("\n")
-        });
+                    };
 
-        let stderr_handle = tokio::spawn(async move {
-            let mut err_lines = Vec::new();
-            if let Some(stderr) = stderr {
-                use tokio::io::AsyncBufReadExt;
-                let reader = tokio::io::BufReader::new(stderr);
-                let mut lines = reader.lines();
-
-                while let Ok(Some(line)) = lines.next_line().await {
-                    let trimmed = line.trim();
-                    if !trimmed.is_empty() {
-                        if err_lines.len() < 150 {
-                            err_lines.push(line);
+                    if was_stopped {
+                        let _ = app_handle.emit_all(
+                            "download-stopped",
+                            serde_json::json!({
+                                "job_id": job_id_clone.clone(),
+                                "stopped_by": "user"
+                            }),
+                        );
+                        break;
+                    } else if status.success() {
+                        if current_proxy.is_some() {
+                            mark_host_requires_proxy(&url);
+                        } else {
+                            unmark_host_requires_proxy(&url);
                         }
-                    }
-                }
-            }
-            err_lines.join("\n")
-        });
 
-        tokio::select! {
-            res = child.wait() => {
-                let last_stdout: String = stdout_handle.await.unwrap_or_default();
-                let stderr_output: String = stderr_handle.await.unwrap_or_default();
+                        let final_title = discovered_title
+                            .lock()
+                            .ok()
+                            .and_then(|t| t.clone())
+                            .unwrap_or_else(|| {
+                                "Downloaded Media".to_string()
+                            });
 
-                let status = match res {
-                    Ok(s) => s,
-                    Err(e) => {
+                        let explicit_filepath = discovered_filepath.lock().ok().and_then(|f| f.clone());
+                        let final_filepath = {
+                            let mut resolved: Option<PathBuf> = None;
+                            if let Some(p) = explicit_filepath {
+                                let path = PathBuf::from(&p);
+                                let abs_path = if path.is_absolute() {
+                                    path
+                                } else {
+                                    resolved_save_path.join(path)
+                                };
+
+                                if abs_path.is_file() {
+                                    resolved = Some(abs_path);
+                                } else {
+                                    let expected_ext = if format.eq_ignore_ascii_case("mp3") { "mp3" } else { "mp4" };
+                                    let target_ext_path = abs_path.with_extension(expected_ext);
+                                    if target_ext_path.is_file() {
+                                        resolved = Some(target_ext_path);
+                                    } else if let Some(stem) = abs_path.file_stem() {
+                                        if let Ok(entries) = fs::read_dir(&resolved_save_path) {
+                                            for entry in entries.flatten() {
+                                                let ep = entry.path();
+                                                if ep.is_file() && ep.file_stem() == Some(stem) {
+                                                    resolved = Some(ep);
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Fallback: newest matching file in resolved_save_path
+                            resolved.unwrap_or_else(|| {
+                                let mut newest_file: Option<(PathBuf, std::time::SystemTime)> = None;
+                                if let Ok(entries) = fs::read_dir(&resolved_save_path) {
+                                    for entry in entries.flatten() {
+                                        let path = entry.path();
+                                        if path.is_file() {
+                                            if let Ok(meta) = path.metadata() {
+                                                if let Ok(modified) = meta.modified() {
+                                                    if newest_file.as_ref().map(|(_, t)| modified > *t).unwrap_or(true) {
+                                                        newest_file = Some((path, modified));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                newest_file.map(|(p, _)| p).unwrap_or_else(|| resolved_save_path.clone())
+                            })
+                        };
+
+                        let file_size_bytes = if final_filepath.is_file() {
+                            fs::metadata(&final_filepath).map(|m| m.len()).unwrap_or(0)
+                        } else {
+                            0
+                        };
+
+                        let file_size_str = if file_size_bytes > 0 {
+                            format_bytes(file_size_bytes)
+                        } else {
+                            "—".to_string()
+                        };
+
+                        let final_duration = discovered_duration.lock().ok().and_then(|d| *d);
+                        let final_duration_str = final_duration.map(format_duration_compact);
+
+                        let _ = app_handle.emit_all(
+                            "download-complete",
+                            DownloadCompletePayload {
+                                job_id: job_id_clone.clone(),
+                                url: url.clone(),
+                                title: final_title,
+                                file_path: final_filepath.display().to_string(),
+                                file_size: file_size_str,
+                                file_size_bytes,
+                                duration_seconds: final_duration,
+                                duration_formatted: final_duration_str,
+                                save_path: resolved_save_path.display().to_string(),
+                            },
+                        );
+                        break;
+                    } else {
+                        // Check if we should retry
+                        if attempt == 1 && !cancel_token_clone.is_cancelled() && !was_stopped {
+                            if current_proxy.is_none() && proxy_mode != "disabled" {
+                                let retry_proxy = effective_proxy
+                                    .clone()
+                                    .or_else(crate::proxy_manager::resolve_effective_proxy_url);
+                                if let Some(proxy_url) = retry_proxy {
+                                    let _ = app_handle.emit_all(
+                                        "download-manager-log",
+                                        format!(
+                                            "Direct download failed for job {}, retrying via proxy ({})...",
+                                            job_id_clone, proxy_url
+                                        ),
+                                    );
+                                    let cur_title = discovered_title
+                                        .lock()
+                                        .ok()
+                                        .and_then(|t| t.clone())
+                                        .or_else(|| initial_title.clone());
+                                    let _ = app_handle.emit_all(
+                                        "download-progress",
+                                        DownloadProgressPayload {
+                                            job_id: job_id_clone.clone(),
+                                            url: url.clone(),
+                                            title: cur_title,
+                                            progress_percent: 0.0,
+                                            eta: None,
+                                            speed: None,
+                                            total_size: None,
+                                            line: "Прямое скачивание не удалось. Повторная попытка через прокси...".to_string(),
+                                        },
+                                    );
+                                    if let Ok(mut lock) = discovered_filepath.lock() {
+                                        *lock = None;
+                                    }
+                                    current_proxy = Some(proxy_url);
+                                    continue;
+                                }
+                            } else if current_proxy.is_some() && proxy_mode == "auto" {
+                                let _ = app_handle.emit_all(
+                                    "download-manager-log",
+                                    format!(
+                                        "Proxy download failed for job {}, falling back to direct connection...",
+                                        job_id_clone
+                                    ),
+                                );
+                                let cur_title = discovered_title
+                                    .lock()
+                                    .ok()
+                                    .and_then(|t| t.clone())
+                                    .or_else(|| initial_title.clone());
+                                let _ = app_handle.emit_all(
+                                    "download-progress",
+                                    DownloadProgressPayload {
+                                        job_id: job_id_clone.clone(),
+                                        url: url.clone(),
+                                        title: cur_title,
+                                        progress_percent: 0.0,
+                                        eta: None,
+                                        speed: None,
+                                        total_size: None,
+                                        line: "Подключение через прокси не удалось. Повторная попытка напрямую...".to_string(),
+                                    },
+                                );
+                                if let Ok(mut lock) = discovered_filepath.lock() {
+                                    *lock = None;
+                                }
+                                current_proxy = None;
+                                continue;
+                            }
+                        }
+
+                        let raw_err = if !stderr_output.trim().is_empty() {
+                            stderr_output.trim().to_string()
+                        } else if !last_stdout.trim().is_empty() {
+                            last_stdout.trim().to_string()
+                        } else {
+                            format!("yt-dlp exited with status: {}", status)
+                        };
+
+                        let error_msg = if is_network_error(&raw_err) {
+                            format!(
+                                "Ошибка соединения (таймаут или блокировка сети). Проверьте интернет или включите VPN.\n{}",
+                                raw_err
+                            )
+                        } else {
+                            raw_err
+                        };
+
                         let details = build_technical_details(
                             &url,
                             &yt_dlp_path,
                             &command_args,
-                            None,
-                            format!("yt-dlp wait error: {}", e),
-                            None,
-                            Some(e.to_string()),
+                            status.code(),
+                            format!("yt-dlp exited with status: {}", status),
+                            if !last_stdout.trim().is_empty() { Some(last_stdout) } else { None },
+                            if !stderr_output.trim().is_empty() { Some(stderr_output) } else { None },
                         );
+
                         let _ = app_handle.emit_all(
                             "download-error",
                             DownloadErrorPayload {
                                 job_id: job_id_clone.clone(),
                                 url: url.clone(),
-                                error: format!("yt-dlp wait error: {}", e),
+                                error: error_msg,
                                 details: Some(details),
                             },
                         );
-                        if let Ok(mut manager) = crate::process_manager::PROCESS_MANAGER.lock() {
-                            manager.unregister(&job_id_clone);
-                        }
-                        return;
+                        break;
                     }
-                };
-
-                let was_stopped = {
-                    if let Ok(mut manager) = crate::process_manager::PROCESS_MANAGER.lock() {
-                        manager.take_stopped(&job_id_clone)
-                    } else {
-                        false
-                    }
-                };
-
-                if was_stopped {
+                }
+                _ = cancel_token_clone.cancelled() => {
+                    eprintln!("🛑 [yt-dlp] Download {} cancelled by user", job_id_clone);
+                    let _ = child.kill().await;
                     let _ = app_handle.emit_all(
                         "download-stopped",
                         serde_json::json!({
@@ -1489,146 +1928,8 @@ pub async fn download_media_link(
                             "stopped_by": "user"
                         }),
                     );
-                } else if status.success() {
-                    let final_title = discovered_title
-                        .lock()
-                        .ok()
-                        .and_then(|t| t.clone())
-                        .unwrap_or_else(|| {
-                            "Downloaded Media".to_string()
-                        });
-
-                    let explicit_filepath = discovered_filepath.lock().ok().and_then(|f| f.clone());
-                    let final_filepath = {
-                        let mut resolved: Option<PathBuf> = None;
-                        if let Some(p) = explicit_filepath {
-                            let path = PathBuf::from(&p);
-                            let abs_path = if path.is_absolute() {
-                                path
-                            } else {
-                                resolved_save_path.join(path)
-                            };
-
-                            if abs_path.is_file() {
-                                resolved = Some(abs_path);
-                            } else {
-                                let expected_ext = if format.eq_ignore_ascii_case("mp3") { "mp3" } else { "mp4" };
-                                let target_ext_path = abs_path.with_extension(expected_ext);
-                                if target_ext_path.is_file() {
-                                    resolved = Some(target_ext_path);
-                                } else if let Some(stem) = abs_path.file_stem() {
-                                    if let Ok(entries) = fs::read_dir(&resolved_save_path) {
-                                        for entry in entries.flatten() {
-                                            let ep = entry.path();
-                                            if ep.is_file() && ep.file_stem() == Some(stem) {
-                                                resolved = Some(ep);
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Fallback: newest matching file in resolved_save_path
-                        resolved.unwrap_or_else(|| {
-                            let mut newest_file: Option<(PathBuf, std::time::SystemTime)> = None;
-                            if let Ok(entries) = fs::read_dir(&resolved_save_path) {
-                                for entry in entries.flatten() {
-                                    let path = entry.path();
-                                    if path.is_file() {
-                                        if let Ok(meta) = path.metadata() {
-                                            if let Ok(modified) = meta.modified() {
-                                                if newest_file.as_ref().map(|(_, t)| modified > *t).unwrap_or(true) {
-                                                    newest_file = Some((path, modified));
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            newest_file.map(|(p, _)| p).unwrap_or_else(|| resolved_save_path.clone())
-                        })
-                    };
-
-                    let file_size_bytes = if final_filepath.is_file() {
-                        fs::metadata(&final_filepath).map(|m| m.len()).unwrap_or(0)
-                    } else {
-                        0
-                    };
-
-                    let file_size_str = if file_size_bytes > 0 {
-                        format_bytes(file_size_bytes)
-                    } else {
-                        "—".to_string()
-                    };
-
-                    let final_duration = discovered_duration.lock().ok().and_then(|d| *d);
-                    let final_duration_str = final_duration.map(format_duration_compact);
-
-                    let _ = app_handle.emit_all(
-                        "download-complete",
-                        DownloadCompletePayload {
-                            job_id: job_id_clone.clone(),
-                            url,
-                            title: final_title,
-                            file_path: final_filepath.display().to_string(),
-                            file_size: file_size_str,
-                            file_size_bytes,
-                            duration_seconds: final_duration,
-                            duration_formatted: final_duration_str,
-                            save_path: resolved_save_path.display().to_string(),
-                        },
-                    );
-                } else {
-                    let raw_err = if !stderr_output.trim().is_empty() {
-                        stderr_output.trim().to_string()
-                    } else if !last_stdout.trim().is_empty() {
-                        last_stdout.trim().to_string()
-                    } else {
-                        format!("yt-dlp exited with status: {}", status)
-                    };
-
-                    let error_msg = if is_network_error(&raw_err) {
-                        format!(
-                            "Ошибка соединения (таймаут или блокировка сети). Проверьте интернет или включите VPN.\n{}",
-                            raw_err
-                        )
-                    } else {
-                        raw_err
-                    };
-
-                    let details = build_technical_details(
-                        &url,
-                        &yt_dlp_path,
-                        &command_args,
-                        status.code(),
-                        format!("yt-dlp exited with status: {}", status),
-                        if !last_stdout.trim().is_empty() { Some(last_stdout) } else { None },
-                        if !stderr_output.trim().is_empty() { Some(stderr_output) } else { None },
-                    );
-
-                    let _ = app_handle.emit_all(
-                        "download-error",
-                        DownloadErrorPayload {
-                            job_id: job_id_clone.clone(),
-                            url,
-                            error: error_msg,
-                            details: Some(details),
-                        },
-                    );
+                    break;
                 }
-            }
-            _ = cancel_token_clone.cancelled() => {
-                eprintln!("🛑 [yt-dlp] Download {} cancelled by user", job_id_clone);
-                let _ = child.kill().await;
-                let _ = app_handle.emit_all(
-                    "download-stopped",
-                    serde_json::json!({
-                        "job_id": job_id_clone.clone(),
-                        "stopped_by": "user"
-                    }),
-                );
             }
         }
 
@@ -1870,6 +2171,91 @@ mod tests {
         assert_eq!(details.stdout, Some("stdout text".to_string()));
         assert!(details.stderr.unwrap().contains("Errno 54"));
         assert!(details.hint.is_some());
+    }
+
+    #[test]
+    fn test_sanitize_url_input() {
+        let single = "https://soundcloud.com/user-323054879/mixing-by-cyb-bpm94-ver2";
+        assert_eq!(sanitize_url_input(single), single);
+
+        let glued = "https://soundcloud.com/user/track?si=123https://soundcloud.com/user/track?si=123";
+        assert_eq!(sanitize_url_input(glued), "https://soundcloud.com/user/track?si=123");
+
+        let glued_http = "https://soundcloud.com/trackhttp://soundcloud.com/track";
+        assert_eq!(sanitize_url_input(glued_http), "https://soundcloud.com/track");
+    }
+
+    #[test]
+    fn test_extract_host_from_url() {
+        assert_eq!(
+            extract_host_from_url("https://soundcloud.com/artist/track"),
+            Some("soundcloud.com".to_string())
+        );
+        assert_eq!(
+            extract_host_from_url("http://www.youtube.com/watch?v=123"),
+            Some("youtube.com".to_string())
+        );
+        assert_eq!(
+            extract_host_from_url("api-v2.soundcloud.com/stream"),
+            Some("api-v2.soundcloud.com".to_string())
+        );
+        assert_eq!(
+            extract_host_from_url("https://user:pass@soundcloud.com/artist/track"),
+            Some("soundcloud.com".to_string())
+        );
+        assert_eq!(extract_host_from_url(""), None);
+    }
+
+    #[test]
+    fn test_proxy_required_host_tracking() {
+        let sc_url = "https://soundcloud.com/user/track-123";
+        assert!(!does_host_require_proxy("https://soundcloud.com/test-initial"));
+
+        mark_host_requires_proxy(sc_url);
+        assert!(does_host_require_proxy("https://soundcloud.com/other-track"));
+        assert!(does_host_require_proxy("https://api-v2.soundcloud.com/stream"));
+        assert!(!does_host_require_proxy("https://fake-soundcloud.com/track"));
+        assert!(!does_host_require_proxy("https://youtube.com/watch?v=456"));
+
+        unmark_host_requires_proxy(sc_url);
+        assert!(!does_host_require_proxy("https://soundcloud.com/other-track"));
+    }
+
+    #[test]
+    fn test_is_network_error_extensions() {
+        assert!(is_network_error("HTTP Error 401: Unauthorized"));
+        assert!(is_network_error("HTTP Error 403: Forbidden"));
+        assert!(is_network_error("HTTP Error 451: Unavailable For Legal Reasons"));
+        assert!(is_network_error("Video is georestricted in your country"));
+        assert!(is_network_error("The track is not available in your country"));
+        assert!(!is_network_error("invalid ffmpeg arguments"));
+    }
+
+    #[test]
+    fn test_build_download_command_args_with_and_without_proxy() {
+        let args_direct = build_download_command_args(
+            "/tmp/downloads",
+            "mp4",
+            "bestvideo+bestaudio",
+            "https://youtube.com/watch?v=123",
+            None,
+        );
+        assert!(!args_direct.contains(&"--proxy".to_string()));
+        assert!(args_direct.contains(&"-P".to_string()));
+        assert!(args_direct.contains(&"/tmp/downloads".to_string()));
+
+        let args_proxy = build_download_command_args(
+            "/tmp/downloads",
+            "mp3",
+            "",
+            "https://soundcloud.com/artist/song",
+            Some("http://127.0.0.1:7890"),
+        );
+        assert!(args_proxy.contains(&"--proxy".to_string()));
+        assert!(args_proxy.contains(&"http://127.0.0.1:7890".to_string()));
+        assert!(args_proxy.contains(&"-x".to_string()));
+        assert!(args_proxy.contains(&"--audio-format".to_string()));
+        assert!(args_proxy.contains(&"mp3".to_string()));
     }
 }
 

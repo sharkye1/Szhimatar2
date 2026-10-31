@@ -18,6 +18,7 @@ mod process_manager;
 use process_manager::PROCESS_MANAGER;
 
 mod yt_dlp_manager;
+mod proxy_manager;
 
 #[cfg(windows)]
 mod job_object {
@@ -98,31 +99,39 @@ mod job_object {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct Settings {
-    theme: String,
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct Settings {
+    pub theme: String,
     #[serde(default, rename = "modifiedTheme")]
-    modified_theme: bool,
-    language: String,
-    ffmpeg_path: String,
-    ffprobe_path: String,
-    output_suffix: String,
+    pub modified_theme: bool,
+    pub language: String,
+    pub ffmpeg_path: String,
+    pub ffprobe_path: String,
+    pub output_suffix: String,
     #[serde(default)]
-    use_background_image: bool,
+    pub use_background_image: bool,
     #[serde(default)]
-    background_image_path: String,
+    pub background_image_path: String,
     #[serde(default = "default_glass_opacity", rename = "glassOpacity")]
-    glass_opacity: f32,
+    pub glass_opacity: f32,
     #[serde(default = "default_glass_blur", rename = "glassBlur")]
-    glass_blur: f32,
-    default_video_codec: String,
-    default_audio_codec: String,
+    pub glass_blur: f32,
+    pub default_video_codec: String,
+    pub default_audio_codec: String,
     #[serde(rename = "gpuAvailable")]
-    gpu_available: bool,
+    pub gpu_available: bool,
     #[serde(rename = "renderMode")]
-    render_mode: String,
+    pub render_mode: String,
     #[serde(rename = "screenAnimation", default = "default_screen_animation")]
-    screen_animation: String,
+    pub screen_animation: String,
+    #[serde(rename = "proxyMode", default = "default_proxy_mode")]
+    pub proxy_mode: String,
+    #[serde(rename = "proxyUrl", default)]
+    pub proxy_url: String,
+}
+
+fn default_proxy_mode() -> String {
+    "auto".to_string()
 }
 
 fn default_screen_animation() -> String {
@@ -155,6 +164,8 @@ impl Default for Settings {
             gpu_available: false,
             render_mode: "cpu".to_string(),
             screen_animation: "default".to_string(),
+            proxy_mode: "auto".to_string(),
+            proxy_url: "".to_string(),
         }
     }
 }
@@ -182,7 +193,7 @@ fn ensure_app_dirs() -> Result<(), String> {
 }
 
 #[tauri::command]
-fn load_settings() -> Result<Settings, String> {
+pub(crate) fn load_settings() -> Result<Settings, String> {
     let settings_path = get_app_data_dir().join("settings.json");
 
     if settings_path.exists() {
@@ -194,7 +205,7 @@ fn load_settings() -> Result<Settings, String> {
 }
 
 #[tauri::command]
-fn save_settings(settings: Settings) -> Result<(), String> {
+pub(crate) fn save_settings(settings: Settings) -> Result<(), String> {
     let settings_path = get_app_data_dir().join("settings.json");
     let content = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
 
@@ -3381,103 +3392,7 @@ fn detect_proxy_settings_windows() -> (bool, Vec<String>) {
 
 #[cfg(windows)]
 fn detect_vpn_interfaces_windows() -> Vec<String> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-    let script = "$adapters = Get-NetAdapter -ErrorAction SilentlyContinue | Select-Object Name, InterfaceDescription, Status; $adapters | ConvertTo-Json -Compress";
-
-    let output = Command::new("powershell")
-        .creation_flags(CREATE_NO_WINDOW)
-        .args(["-NoProfile", "-Command", script])
-        .output();
-
-    let keywords = [
-        "vpn",
-        "wireguard",
-        "wg",
-        "openvpn",
-        "tap",
-        "tun",
-        "wintun",
-        "ppp",
-        "pptp",
-        "l2tp",
-        "ikev2",
-        "clash",
-        "mihomo",
-        "nordlynx",
-        "mullvad",
-        "proton",
-        "outline",
-        "cisco",
-        "forticlient",
-        "anyconnect",
-        "zerotier",
-        "tailscale",
-        "hamachi",
-    ];
-
-    let mut matches = Vec::new();
-
-    let Ok(output) = output else {
-        return matches;
-    };
-
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if stdout.is_empty() {
-        return matches;
-    }
-
-    let parse_adapter = |item: &serde_json::Value, acc: &mut Vec<String>| {
-        let status = item
-            .get("Status")
-            .and_then(|s| s.as_str())
-            .unwrap_or("")
-            .to_lowercase();
-
-        if status != "up" {
-            return;
-        }
-
-        let name = item
-            .get("Name")
-            .and_then(|s| s.as_str())
-            .unwrap_or("")
-            .trim()
-            .to_string();
-
-        let description = item
-            .get("InterfaceDescription")
-            .and_then(|s| s.as_str())
-            .unwrap_or("")
-            .trim()
-            .to_string();
-
-        let haystack = format!("{} {}", name.to_lowercase(), description.to_lowercase());
-        if keywords.iter().any(|k| haystack.contains(k)) {
-            if description.is_empty() {
-                acc.push(name);
-            } else if name.is_empty() {
-                acc.push(description);
-            } else {
-                acc.push(format!("{} ({})", name, description));
-            }
-        }
-    };
-
-    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
-        if let Some(items) = json.as_array() {
-            for item in items {
-                parse_adapter(item, &mut matches);
-            }
-        } else if json.is_object() {
-            parse_adapter(&json, &mut matches);
-        }
-    }
-
-    matches.sort();
-    matches.dedup();
-    matches
+    proxy_manager::detect_vpn_adapters_windows()
 }
 
 #[cfg(windows)]
@@ -3596,7 +3511,13 @@ fn detect_clash_activity_windows() -> Vec<String> {
 fn check_network_proxy_vpn_status() -> Result<NetworkProxyVpnStatus, String> {
     #[cfg(windows)]
     {
-        let (proxy_enabled, proxy_details) = detect_proxy_settings_windows();
+        let (mut proxy_enabled, mut proxy_details) = detect_proxy_settings_windows();
+        if !proxy_enabled {
+            if let Some(detected) = proxy_manager::detect_system_or_local_proxy() {
+                proxy_enabled = true;
+                proxy_details.push(format!("Active proxy detected: {} ({})", detected.url, detected.source));
+            }
+        }
         let vpn_interfaces = detect_vpn_interfaces_windows();
         let clash_details = detect_clash_activity_windows();
         let vpn_likely_active = !vpn_interfaces.is_empty();
@@ -3617,16 +3538,50 @@ fn check_network_proxy_vpn_status() -> Result<NetworkProxyVpnStatus, String> {
 
     #[cfg(not(windows))]
     {
+        let detected = proxy_manager::detect_system_or_local_proxy();
+        let proxy_enabled = detected.is_some();
+        let mut proxy_details = Vec::new();
+        if let Some(ref p) = detected {
+            proxy_details.push(format!("Active proxy detected: {} ({})", p.url, p.source));
+        }
+
+        #[cfg(target_os = "macos")]
+        let vpn_interfaces = proxy_manager::detect_vpn_interfaces_macos();
+        #[cfg(not(target_os = "macos"))]
+        let vpn_interfaces = Vec::new();
+
+        let vpn_likely_active = !vpn_interfaces.is_empty();
+        let clash_likely_active = proxy_enabled;
+        let mut clash_details = Vec::new();
+        if let Some(ref p) = detected {
+            clash_details.push(format!("Active proxy: {} ({})", p.url, p.source));
+        }
+
         Ok(NetworkProxyVpnStatus {
-            proxy_enabled: false,
-            proxy_details: Vec::new(),
-            vpn_likely_active: false,
-            vpn_interfaces: Vec::new(),
-            clash_likely_active: false,
-            clash_details: Vec::new(),
-            warning_needed: false,
+            proxy_enabled,
+            proxy_details,
+            vpn_likely_active,
+            vpn_interfaces,
+            clash_likely_active,
+            clash_details,
+            warning_needed: proxy_enabled || vpn_likely_active || clash_likely_active,
         })
     }
+}
+
+#[tauri::command]
+fn detect_system_proxy() -> proxy_manager::ProxyDetectionResult {
+    proxy_manager::detect_proxy_and_vpn()
+}
+
+#[tauri::command]
+async fn test_proxy_connection(proxy_url: String) -> Result<String, String> {
+    proxy_manager::test_proxy_url(&proxy_url).await
+}
+
+#[tauri::command]
+fn get_effective_proxy() -> Option<String> {
+    proxy_manager::resolve_effective_proxy_url()
 }
 #[tauri::command]
 #[allow(unused_variables)]
@@ -3765,8 +3720,11 @@ fn main() {
             get_preview_frame,
             get_preview_video,
             get_video_info_for_preview,
-            // Network safety checks
+            // Network safety checks & Proxy
             check_network_proxy_vpn_status,
+            detect_system_proxy,
+            test_proxy_connection,
+            get_effective_proxy,
             // yt-dlp commands
             yt_dlp_manager::get_video_formats,
             yt_dlp_manager::get_system_download_dir,

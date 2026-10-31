@@ -578,5 +578,22 @@
       "pending": "排队中",
       "stopped": "已停止"
     }
+  },
+  "proxy": {
+    "title": "网络与代理 (Network & Proxy)",
+    "modeLabel": "下载媒体时的代理模式:",
+    "modeAuto": "自动回退 (优先直连，受阻时走代理)",
+    "modeAlways": "始终走代理",
+    "modeDisabled": "禁用代理 (仅直连)",
+    "detected": "🟢 检测到代理:",
+    "vpnDetected": "🟢 已连接系统 VPN: \"{name}\" (流量已通过它传输，无需代理)",
+    "notDetected": "未检测到活动的系统或本地代理/VPN",
+    "refreshDetect": "重新检测",
+    "customUrlLabel": "自定义代理地址 (可选):",
+    "placeholderDetected": "默认使用:",
+    "testButton": "测试",
+    "testing": "测试中...",
+    "customHint": "留空可自动检测运行中的 Clash、V2Ray、NekoBox 或系统代理。",
+    "noProxyToTest": "没有可测试的代理地址。请手动输入或启动代理。"
   }
 }

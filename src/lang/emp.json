@@ -578,5 +578,22 @@
       "pending": "",
       "stopped": ""
     }
+  },
+  "proxy": {
+    "title": "",
+    "modeLabel": "",
+    "modeAuto": "",
+    "modeAlways": "",
+    "modeDisabled": "",
+    "detected": "",
+    "vpnDetected": "",
+    "notDetected": "",
+    "refreshDetect": "",
+    "customUrlLabel": "",
+    "placeholderDetected": "",
+    "testButton": "",
+    "testing": "",
+    "customHint": "",
+    "noProxyToTest": ""
   }
 }

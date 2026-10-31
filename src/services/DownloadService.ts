@@ -108,7 +108,10 @@ class DownloadServiceImpl {
         const item = this.queue.get(payload.job_id);
         if (item) {
           item.status = 'downloading';
-          item.progress = Math.max(item.progress, payload.progress_percent);
+          item.progress = payload.progress_percent === 0 ? 0 : Math.max(item.progress, payload.progress_percent);
+          if (payload.line && payload.progress_percent === 0) {
+            item.message = payload.line;
+          }
           if (payload.progress_percent >= 99 && !payload.eta) {
             item.eta = null;
             item.speed = null;
