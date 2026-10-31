@@ -11,6 +11,17 @@ export interface BaseDownloadFormatOption {
 export const normalizeInputUrl = (raw: string): string => {
   let trimmed = raw.trim();
   if (!trimmed) return '';
+
+  // Detect and fix accidentally duplicated / glued URLs (e.g. "https://...https://...")
+  const secondProtoOffset = 7; // length of "http://"
+  if (trimmed.length > secondProtoOffset) {
+    const remaining = trimmed.slice(secondProtoOffset);
+    const secondProtoIdx = remaining.search(/https?:\/\//i);
+    if (secondProtoIdx !== -1) {
+      trimmed = trimmed.slice(0, secondProtoOffset + secondProtoIdx).trim();
+    }
+  }
+
   if (!/^https?:\/\//i.test(trimmed) && /^[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+(\/|\?|$)/.test(trimmed)) {
     trimmed = `https://${trimmed}`;
   }
@@ -90,3 +101,20 @@ export const normalizeDownloadFormats = <
 
   return merged;
 };
+
+export const normalizeProxyUrl = (raw: string): string => {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  const lower = trimmed.toLowerCase();
+  if (
+    lower.startsWith('http://') ||
+    lower.startsWith('https://') ||
+    lower.startsWith('socks5://') ||
+    lower.startsWith('socks5h://') ||
+    lower.startsWith('socks4://')
+  ) {
+    return trimmed;
+  }
+  return `http://${trimmed}`;
+};
+

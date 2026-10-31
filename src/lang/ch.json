@@ -418,13 +418,21 @@
   },
   "gpu": {
     "label": "GPU (NVENC)",
+    "labelMac": "硬件加速 (Apple VideoToolbox)",
     "checkCompatibility": "检查GPU兼容性",
+    "checkCompatibilityMac": "检查Apple VideoToolbox",
     "available": "可用 (NVENC)",
+    "availableMac": "可用 (VideoToolbox)",
     "unavailable": "不可用",
+    "unavailableMac": "不可用 (VideoToolbox)",
     "notAvailableTooltip": "GPU不可用 — 请在设置中检查兼容性",
+    "notAvailableTooltipMac": "VideoToolbox硬件加速不可用",
     "compatibleFound": "GPU兼容 (找到NVENC). 要应用更改，请重启应用程序。",
+    "compatibleFoundMac": "硬件加速兼容 (找到VideoToolbox). 要应用更改，请重启应用程序。",
     "notFoundOrUnavailable": "未找到GPU或NVENC不可用",
+    "notFoundOrUnavailableMac": "硬件加速不可用或未找到VideoToolbox",
     "checkError": "GPU检查错误",
+    "checkErrorMac": "VideoToolbox检查错误",
     "pathsNotConfigured": "请先在FFmpeg配置部分设置FFmpeg和FFprobe路径"
   },
   "renderMode": {
@@ -574,5 +582,22 @@
       "pending": "排队中",
       "stopped": "已停止"
     }
+  },
+  "proxy": {
+    "title": "网络与代理 (Network & Proxy)",
+    "modeLabel": "下载媒体时的代理模式:",
+    "modeAuto": "自动回退 (优先直连，受阻时走代理)",
+    "modeAlways": "始终走代理",
+    "modeDisabled": "禁用代理 (仅直连)",
+    "detected": "🟢 检测到代理:",
+    "vpnDetected": "🟢 已连接系统 VPN: \"{name}\" (流量已通过它传输，无需代理)",
+    "notDetected": "未检测到活动的系统或本地代理/VPN",
+    "refreshDetect": "重新检测",
+    "customUrlLabel": "自定义代理地址 (可选):",
+    "placeholderDetected": "默认使用:",
+    "testButton": "测试",
+    "testing": "测试中...",
+    "customHint": "留空可自动检测运行中的 Clash、V2Ray、NekoBox 或系统代理。",
+    "noProxyToTest": "没有可测试的代理地址。请手动输入或启动代理。"
   }
 }

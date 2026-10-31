@@ -418,13 +418,21 @@
   },
   "gpu": {
     "label": "GPU (NVENC) ",
+    "labelMac": "Аппаратное ускорение (Apple VideoToolbox)",
     "checkCompatibility": "Проверить совместимость GPU ",
+    "checkCompatibilityMac": "Проверить Apple VideoToolbox",
     "available": "Доступен  (NVENC)",
+    "availableMac": "Доступен (VideoToolbox)",
     "unavailable": "Недоступен ",
+    "unavailableMac": "Недоступен (VideoToolbox)",
     "notAvailableTooltip": "GPU недоступен  — проверьте совместимость в настройках",
+    "notAvailableTooltipMac": "Аппаратное ускорение VideoToolbox недоступно",
     "compatibleFound": "GPU совместим  (NVENC найден). Для взрывания перезапустите приложение.",
+    "compatibleFoundMac": "Аппаратное ускорение совместимо (VideoToolbox найден). Для применения перезапустите приложение.",
     "notFoundOrUnavailable": "GPU не найден или NVENC недоступен ",
+    "notFoundOrUnavailableMac": "Аппаратное ускорение недоступно или VideoToolbox не найден",
     "checkError": "Ошибка проверки GPU ",
+    "checkErrorMac": "Ошибка проверки VideoToolbox",
     "pathsNotConfigured": "Сначала взорвите пути к FFmpeg и FFprobe во взрывном разделе конфигурации FFmpeg "
   },
   "renderMode": {
@@ -574,5 +582,22 @@
       "pending": "В очереди на взрыв",
       "stopped": "Взрыв остановлен"
     }
+  },
+  "proxy": {
+    "title": "Взрыв-Сеть и Прокси (Обход блокировок)",
+    "modeLabel": "Режим прокси при скачивании медиа:",
+    "modeAuto": "Автоматический резерв (прямое подключение, при блокировке — через прокси)",
+    "modeAlways": "Всегда через прокси",
+    "modeDisabled": "Отключено (только прямое подключение)",
+    "detected": "🟢 Обнаружен турбо-прокси:",
+    "vpnDetected": "🟢 Подключен боевой VPN: \"{name}\" (трафик уже мчит через него, прокси не требуется)",
+    "notDetected": "Активный системный или локальный прокси/VPN не обнаружен",
+    "refreshDetect": "Определить заново",
+    "customUrlLabel": "Пользовательский адрес прокси (опционально):",
+    "placeholderDetected": "По умолчанию используется:",
+    "testButton": "Проверить",
+    "testing": "Проверка...",
+    "customHint": "Оставьте пустым для автоопределения запущенного Clash, V2Ray, NekoBox или системного прокси.",
+    "noProxyToTest": "Нет адреса прокси для проверки. Укажите адрес вручную или запустите прокси."
   }
 }

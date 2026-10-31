@@ -59,9 +59,9 @@ const CPU_GRADIENTS: Record<string, GradientConfig> = {
     glow: 'rgba(237, 28, 36, 0.6)',
   },
   apple: {
-    primary: '#0071e3',
-    secondary: '#5ac8fa',
-    glow: 'rgba(0, 113, 227, 0.6)',
+    primary: '#ff5e3a',
+    secondary: '#00c6ff',
+    glow: 'rgba(255, 42, 109, 0.65)',
   },
   unknown: {
     primary: '#6366f1',
@@ -87,14 +87,14 @@ const GPU_GRADIENTS: Record<string, GradientConfig> = {
     glow: 'rgba(0, 113, 197, 0.6)',
   },
   apple: {
-    primary: '#0071e3',
-    secondary: '#5ac8fa',
-    glow: 'rgba(0, 113, 227, 0.6)',
+    primary: '#ff5e3a',
+    secondary: '#00c6ff',
+    glow: 'rgba(255, 42, 109, 0.65)',
   },
   videotoolbox: {
-    primary: '#0071e3',
-    secondary: '#5ac8fa',
-    glow: 'rgba(0, 113, 227, 0.6)',
+    primary: '#ff5e3a',
+    secondary: '#00c6ff',
+    glow: 'rgba(255, 42, 109, 0.65)',
   },
   unknown: {
     primary: '#8b5cf6',
@@ -181,6 +181,9 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
   const isCpuActive = mode === 'cpu' || (!isMac && mode === 'duo');
   const isGpuActive = mode === 'gpu' || (!isMac && mode === 'duo');
   const duoDisabled = !gpuAvailable;
+
+  const isAppleCpu = isMac || (hardwareInfo.cpu_vendor || '').toLowerCase() === 'apple';
+  const isAppleGpu = isMac || (hardwareInfo.gpu_vendor || '').toLowerCase() === 'apple' || (hardwareInfo.gpu_vendor || '').toLowerCase() === 'videotoolbox';
 
   // Button labels: Software/Hardware on macOS, CPU/GPU on Windows
   const cpuLabel = useMemo(() => {
@@ -299,7 +302,7 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
 
   return (
     <div 
-      className={`render-mode-selector ${isDuoActive ? 'duo-active' : ''} ${isRendering ? 'rendering' : ''}`}
+      className={`render-mode-selector ${isMac ? 'is-macos' : ''} ${isDuoActive ? 'duo-active' : ''} ${isRendering ? 'rendering' : ''}`}
       style={{
         '--cpu-primary': cpuGradient.primary,
         '--cpu-secondary': cpuGradient.secondary,
@@ -341,7 +344,7 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
 
       {/* CPU / Software Button */}
       <motion.button
-        className={`mode-button cpu-button ${isCpuActive ? 'active' : ''} ${isHovered === 'cpu' ? 'hovered' : ''}`}
+        className={`mode-button cpu-button ${isAppleCpu ? 'is-apple' : ''} ${isCpuActive ? 'active' : ''} ${isHovered === 'cpu' ? 'hovered' : ''}`}
         onClick={handleCpuClick}
         onMouseEnter={() => setIsHovered('cpu')}
         onMouseLeave={() => setIsHovered(null)}
@@ -385,7 +388,7 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
 
       {/* GPU / Hardware Button */}
       <motion.button
-        className={`mode-button gpu-button ${isGpuActive ? 'active' : ''} ${isHovered === 'gpu' ? 'hovered' : ''} ${!gpuAvailable ? 'disabled' : ''}`}
+        className={`mode-button gpu-button ${isAppleGpu ? 'is-apple' : ''} ${isGpuActive ? 'active' : ''} ${isHovered === 'gpu' ? 'hovered' : ''} ${!gpuAvailable ? 'disabled' : ''}`}
         onClick={handleGpuClick}
         onMouseEnter={() => setIsHovered('gpu')}
         onMouseLeave={() => setIsHovered(null)}

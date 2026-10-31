@@ -250,6 +250,35 @@
 }
 
 /* ============================================================================
+   Apple Silicon M-Series Styling (Official M1 multicolor iridescent aesthetic)
+   ============================================================================ */
+
+.render-mode-selector.is-macos .cpu-button.active,
+.render-mode-selector.is-macos .gpu-button.active,
+.mode-button.is-apple.active {
+    background: linear-gradient(135deg, #ff5e3a 0%, #ff2a6d 35%, #9b51e0 70%, #00c6ff 100%) !important;
+    border-color: rgba(255, 255, 255, 0.45) !important;
+    color: #fff !important;
+    box-shadow: 0 0 16px rgba(255, 42, 109, 0.5), 0 0 10px rgba(0, 198, 255, 0.4) !important;
+}
+
+.render-mode-selector.is-macos .cpu-button:hover:not(:disabled):not(.active),
+.render-mode-selector.is-macos .gpu-button:hover:not(:disabled):not(.active),
+.mode-button.is-apple:hover:not(:disabled):not(.active) {
+    background: linear-gradient(135deg, rgba(255, 94, 58, 0.18), rgba(0, 198, 255, 0.18)) !important;
+    border-color: rgba(255, 94, 58, 0.5) !important;
+    color: rgba(255, 255, 255, 0.95) !important;
+    box-shadow: 0 0 10px rgba(155, 81, 224, 0.35) !important;
+}
+
+.render-mode-selector.is-macos .vendor-badge,
+.mode-button.is-apple .vendor-badge {
+    background: rgba(0, 0, 0, 0.35) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    color: rgba(255, 255, 255, 0.95) !important;
+}
+
+/* ============================================================================
    Duo Button (Center)
    ============================================================================ */
 

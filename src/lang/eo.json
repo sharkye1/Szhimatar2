@@ -418,13 +418,21 @@
   },
   "gpu": {
     "label": "GPU (NVENC)",
+    "labelMac": "Aparatara akcelo (Apple VideoToolbox)",
     "checkCompatibility": "Kontroli GPU-kongruecon",
+    "checkCompatibilityMac": "Kontroli Apple VideoToolbox",
     "available": "Disponebla (NVENC)",
+    "availableMac": "Disponebla (VideoToolbox)",
     "unavailable": "Nedisponebla",
+    "unavailableMac": "Nedisponebla (VideoToolbox)",
     "notAvailableTooltip": "GPU nedisponebla — kontrolu kongruecon en agordoj",
+    "notAvailableTooltipMac": "VideoToolbox aparata akcelo nedisponebla",
     "compatibleFound": "GPU kongruas (NVENC trovita). Por apliki, restartu la aplikaĵon.",
+    "compatibleFoundMac": "Aparatara akcelo kongruas (VideoToolbox trovita). Por apliki, restartu la aplikaĵon.",
     "notFoundOrUnavailable": "GPU ne trovita aŭ NVENC nedisponebla",
+    "notFoundOrUnavailableMac": "Aparatara akcelo nedisponebla aŭ VideoToolbox ne trovita",
     "checkError": "GPU-kontrola eraro",
+    "checkErrorMac": "VideoToolbox-kontrola eraro",
     "pathsNotConfigured": "Bonvolu unue agordi FFmpeg kaj FFprobe vojojn en la FFmpeg-agorda sekcio"
   },
   "renderMode": {
@@ -574,5 +582,22 @@
       "pending": "En vico",
       "stopped": "Haltigita"
     }
+  },
+  "proxy": {
+    "title": "Reto kaj Prokurilo (Proxy)",
+    "modeLabel": "Prokura reĝimo:",
+    "modeAuto": "Aŭtomata rezervo (rekta konekto, okaze de blokado per prokurilo)",
+    "modeAlways": "Ĉiam tra prokurilo",
+    "modeDisabled": "Malŝaltita (nur rekta)",
+    "detected": "🟢 Prokurilo detektita:",
+    "vpnDetected": "🟢 Sistema VPN konektita: \"{name}\" (trafiko jam pasas tra ĝi, prokurilo ne necesas)",
+    "notDetected": "Neniu aktiva sistema aŭ loka prokurilo/VPN detektita",
+    "refreshDetect": "Detekti denove",
+    "customUrlLabel": "Propra prokurila adreso (laŭvola):",
+    "placeholderDetected": "Defaŭlte uzata:",
+    "testButton": "Kontroli",
+    "testing": "Kontrolante...",
+    "customHint": "Lasu malplena por aŭtomata detekto de Clash, V2Ray, NekoBox aŭ sistema prokurilo.",
+    "noProxyToTest": "Neniu prokurilo por kontroli."
   }
 }

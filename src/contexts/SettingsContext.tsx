@@ -22,6 +22,8 @@ export interface AppSettings {
   renderMode: string;
   screenAnimation: ScreenAnimationType;
   ecoMode: boolean;
+  proxyMode: 'auto' | 'always' | 'disabled';
+  proxyUrl: string;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -41,6 +43,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   renderMode: 'cpu',
   screenAnimation: 'default',
   ecoMode: false,
+  proxyMode: 'auto',
+  proxyUrl: '',
 };
 
 interface SettingsContextType {
@@ -87,6 +91,8 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
           renderMode: data.renderMode,
           screenAnimation: data.screenAnimation,
           ecoMode: data.ecoMode,
+          proxyMode: data.proxyMode || 'auto',
+          proxyUrl: data.proxyUrl || '',
         },
       });
     } catch (error) {
@@ -120,6 +126,8 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
           renderMode: sanitizedRenderMode,
           screenAnimation: (raw.screenAnimation || raw.screen_animation || DEFAULT_APP_SETTINGS.screenAnimation) as ScreenAnimationType,
           ecoMode: !!(raw.ecoMode ?? raw.eco_mode ?? DEFAULT_APP_SETTINGS.ecoMode),
+          proxyMode: (raw.proxyMode || raw.proxy_mode || DEFAULT_APP_SETTINGS.proxyMode) as 'auto' | 'always' | 'disabled',
+          proxyUrl: raw.proxyUrl ?? raw.proxy_url ?? DEFAULT_APP_SETTINGS.proxyUrl,
         };
         settingsRef.current = normalized;
         setSettings(normalized);

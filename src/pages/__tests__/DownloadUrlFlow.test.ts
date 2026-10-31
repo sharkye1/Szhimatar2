@@ -7,7 +7,9 @@ import {
   formatDownloadHeight,
   formatDownloadOptionLabel,
   normalizeDownloadFormats,
+  normalizeProxyUrl,
 } from '../../utils/downloadHelpers';
+import { DEFAULT_APP_SETTINGS } from '../../contexts/SettingsContext';
 
 describe('Download URL Flow and Feedback Helpers', () => {
   const DEFAULT_DOWNLOAD_FORMATS = [
@@ -42,6 +44,11 @@ describe('Download URL Flow and Feedback Helpers', () => {
     it('keeps existing http:// and https:// unchanged', () => {
       expect(normalizeInputUrl('https://youtube.com/watch?v=123')).toBe('https://youtube.com/watch?v=123');
       expect(normalizeInputUrl('http://insecure.site/video.mp4')).toBe('http://insecure.site/video.mp4');
+    });
+
+    it('cleans up accidentally duplicated / glued URLs', () => {
+      const glued = 'https://soundcloud.com/user/track?si=123https://soundcloud.com/user/track?si=123';
+      expect(normalizeInputUrl(glued)).toBe('https://soundcloud.com/user/track?si=123');
     });
 
     it('handles empty string or plain text', () => {
@@ -188,6 +195,95 @@ describe('Download URL Flow and Feedback Helpers', () => {
         '/Users/test/Downloads',
         'Artist - Song'
       );
+    });
+  });
+
+  describe('Proxy Settings & Fallback Logic', () => {
+    it('initializes proxyMode to auto and proxyUrl to empty string', () => {
+      expect(DEFAULT_APP_SETTINGS.proxyMode).toBe('auto');
+      expect(DEFAULT_APP_SETTINGS.proxyUrl).toBe('');
+    });
+
+    describe('normalizeProxyUrl', () => {
+      it('prepends http:// when scheme is missing', () => {
+        expect(normalizeProxyUrl('127.0.0.1:7890')).toBe('http://127.0.0.1:7890');
+        expect(normalizeProxyUrl('localhost:10809')).toBe('http://localhost:10809');
+      });
+
+      it('preserves existing schemes (case-insensitive)', () => {
+        expect(normalizeProxyUrl('http://127.0.0.1:7890')).toBe('http://127.0.0.1:7890');
+        expect(normalizeProxyUrl('HTTP://127.0.0.1:7890')).toBe('HTTP://127.0.0.1:7890');
+        expect(normalizeProxyUrl('https://proxy.example.com:8443')).toBe('https://proxy.example.com:8443');
+        expect(normalizeProxyUrl('socks5://127.0.0.1:10808')).toBe('socks5://127.0.0.1:10808');
+        expect(normalizeProxyUrl('SOCKS5://127.0.0.1:10808')).toBe('SOCKS5://127.0.0.1:10808');
+        expect(normalizeProxyUrl('socks5h://127.0.0.1:10808')).toBe('socks5h://127.0.0.1:10808');
+        expect(normalizeProxyUrl('socks4://127.0.0.1:1080')).toBe('socks4://127.0.0.1:1080');
+      });
+
+      it('trims leading and trailing whitespace', () => {
+        expect(normalizeProxyUrl('  http://127.0.0.1:7890  ')).toBe('http://127.0.0.1:7890');
+        expect(normalizeProxyUrl('   ')).toBe('');
+        expect(normalizeProxyUrl('')).toBe('');
+      });
+    });
+
+    describe('Effective Proxy Resolution Simulation', () => {
+      interface ProxyConfig {
+        mode: 'auto' | 'always' | 'disabled';
+        customUrl: string;
+        detectedUrl?: string;
+      }
+
+      const resolveEffectiveProxy = (config: ProxyConfig): string | null => {
+        if (config.mode === 'disabled') {
+          return null;
+        }
+        const custom = config.customUrl.trim();
+        if (custom) {
+          return normalizeProxyUrl(custom);
+        }
+        if (config.detectedUrl && config.detectedUrl.trim()) {
+          return normalizeProxyUrl(config.detectedUrl);
+        }
+        return null;
+      };
+
+      it('returns null when mode is disabled even if detected or custom proxy exists', () => {
+        expect(
+          resolveEffectiveProxy({
+            mode: 'disabled',
+            customUrl: 'http://127.0.0.1:7890',
+            detectedUrl: 'http://127.0.0.1:7890',
+          })
+        ).toBeNull();
+      });
+
+      it('prefers customUrl over detectedUrl in auto mode', () => {
+        const resolved = resolveEffectiveProxy({
+          mode: 'auto',
+          customUrl: 'socks5://127.0.0.1:10808',
+          detectedUrl: 'http://127.0.0.1:7890',
+        });
+        expect(resolved).toBe('socks5://127.0.0.1:10808');
+      });
+
+      it('falls back to detectedUrl when customUrl is empty in auto mode', () => {
+        const resolved = resolveEffectiveProxy({
+          mode: 'auto',
+          customUrl: '',
+          detectedUrl: '127.0.0.1:7890',
+        });
+        expect(resolved).toBe('http://127.0.0.1:7890');
+      });
+
+      it('returns detectedUrl in always mode when customUrl is empty', () => {
+        const resolved = resolveEffectiveProxy({
+          mode: 'always',
+          customUrl: '',
+          detectedUrl: 'http://127.0.0.1:7897',
+        });
+        expect(resolved).toBe('http://127.0.0.1:7897');
+      });
     });
   });
 });

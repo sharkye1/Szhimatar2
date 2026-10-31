@@ -418,13 +418,21 @@
   },
   "gpu": {
     "label": "",
+    "labelMac": "",
     "checkCompatibility": "",
+    "checkCompatibilityMac": "",
     "available": "",
+    "availableMac": "",
     "unavailable": "",
+    "unavailableMac": "",
     "notAvailableTooltip": "",
+    "notAvailableTooltipMac": "",
     "compatibleFound": "",
+    "compatibleFoundMac": "",
     "notFoundOrUnavailable": "",
+    "notFoundOrUnavailableMac": "",
     "checkError": "",
+    "checkErrorMac": "",
     "pathsNotConfigured": ""
   },
   "renderMode": {
@@ -574,5 +582,22 @@
       "pending": "",
       "stopped": ""
     }
+  },
+  "proxy": {
+    "title": "",
+    "modeLabel": "",
+    "modeAuto": "",
+    "modeAlways": "",
+    "modeDisabled": "",
+    "detected": "",
+    "vpnDetected": "",
+    "notDetected": "",
+    "refreshDetect": "",
+    "customUrlLabel": "",
+    "placeholderDetected": "",
+    "testButton": "",
+    "testing": "",
+    "customHint": "",
+    "noProxyToTest": ""
   }
 }
