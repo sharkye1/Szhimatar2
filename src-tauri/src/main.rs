@@ -2827,6 +2827,14 @@ async fn get_preview_frame(
     Ok(STANDARD.encode(&output.stdout))
 }
 
+/// Maps CRF value (0..=51) to VideoToolbox -q:v scale (1..=100)
+/// Formula: clamp(round(((51 - crf) * 100) / 51), 1, 100)
+#[allow(dead_code)]
+pub fn calculate_videotoolbox_quality(crf: i32) -> i32 {
+    let crf_clamped = crf.clamp(0, 51);
+    (((51.0 - crf_clamped as f64) * 100.0 / 51.0).round() as i32).clamp(1, 100)
+}
+
 /// Extract a short video clip (3 seconds) from video at given time with settings applied
 /// Uses IDENTICAL encoding parameters as final render for honest preview
 /// Returns path to temporary video file
@@ -2903,9 +2911,29 @@ async fn get_preview_video(
     filters.push("format=yuv420p".to_string());
 
     // Determine encoder based on codec and GPU preference
+    #[cfg(target_os = "macos")]
+    let use_gpu = settings.prefer_gpu.unwrap_or(false)
+        && (settings.codec == "h264" || settings.codec == "h265" || settings.codec == "hevc");
+
+    #[cfg(target_os = "macos")]
+    let encoder = if use_gpu {
+        if settings.codec == "h265" || settings.codec == "hevc" {
+            "hevc_videotoolbox"
+        } else {
+            "h264_videotoolbox"
+        }
+    } else {
+        match settings.codec.as_str() {
+            "h265" | "hevc" => "libx265",
+            _ => "libx264",
+        }
+    };
+
+    #[cfg(not(target_os = "macos"))]
     let use_nvenc = settings.prefer_gpu.unwrap_or(false)
         && (settings.codec == "h264" || settings.codec == "h265" || settings.codec == "hevc");
 
+    #[cfg(not(target_os = "macos"))]
     let encoder = if use_nvenc {
         if settings.codec == "h265" || settings.codec == "hevc" {
             "hevc_nvenc"
@@ -2942,6 +2970,93 @@ async fn get_preview_video(
         .max(0.1)
         .min(100.0);
 
+    #[cfg(target_os = "macos")]
+    if use_gpu {
+        // VideoToolbox rate control on macOS - omit all NVENC flags (-spatial-aq, -temporal-aq, -rc, -cq, -preset, -tune)
+        let vt_quality = calculate_videotoolbox_quality(crf_val);
+        if rate_control == "crf" {
+            cmd_args.extend([
+                "-q:v".to_string(),
+                vt_quality.to_string(),
+            ]);
+        } else if rate_control == "constrained_crf" {
+            cmd_args.extend([
+                "-q:v".to_string(),
+                vt_quality.to_string(),
+                "-b:v".to_string(),
+                format!("{}M", bitrate_val),
+                "-maxrate".to_string(),
+                format!("{}M", (bitrate_val * 1.5).max(1.0)),
+            ]);
+        } else {
+            // VBR / CBR mode with target bitrate
+            cmd_args.extend([
+                "-b:v".to_string(),
+                format!("{}M", bitrate_val),
+                "-maxrate".to_string(),
+                format!("{}M", (bitrate_val * 1.5).max(1.0)),
+            ]);
+        }
+    } else {
+        // CPU encoders (libx264/libx265)
+        if rate_control == "crf" {
+            cmd_args.extend([
+                "-crf".to_string(),
+                crf_val.to_string(),
+            ]);
+        } else if rate_control == "constrained_crf" {
+            cmd_args.extend([
+                "-crf".to_string(),
+                crf_val.to_string(),
+                "-maxrate".to_string(),
+                format!("{}M", bitrate_val),
+                "-bufsize".to_string(),
+                format!("{}M", (bitrate_val * 2.0).max(1.0)),
+            ]);
+        } else {
+            // VBR
+            cmd_args.extend([
+                "-b:v".to_string(),
+                format!("{}M", bitrate_val),
+                "-maxrate".to_string(),
+                format!("{}M", (bitrate_val * 1.5).max(1.0)),
+                "-bufsize".to_string(),
+                format!("{}M", (bitrate_val * 3.0).max(2.0)),
+            ]);
+        }
+
+        // Preset and Tune for CPU
+        let preset = settings
+            .preset
+            .as_ref()
+            .map(|p| p.as_str())
+            .unwrap_or("medium");
+        let valid_presets = [
+            "ultrafast",
+            "superfast",
+            "veryfast",
+            "faster",
+            "fast",
+            "medium",
+            "slow",
+            "slower",
+            "veryslow",
+        ];
+        let cpu_preset = if valid_presets.contains(&preset) {
+            preset
+        } else {
+            "medium"
+        };
+        cmd_args.extend(["-preset".to_string(), cpu_preset.to_string()]);
+
+        if let Some(tune) = &settings.tune {
+            if !tune.is_empty() && tune != "none" {
+                cmd_args.extend(["-tune".to_string(), tune.clone()]);
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
     if use_nvenc {
         // NVENC rate control - MUST match RenderService.ts logic exactly
         if rate_control == "crf" {
@@ -3855,5 +3970,18 @@ mod tests {
         let (gpu_vendor, gpu_name) = detect_gpu_vendor();
         assert_eq!(gpu_vendor, "apple");
         assert!(gpu_name.contains("Apple Silicon VideoToolbox") || gpu_name.contains("VideoToolbox"));
+    }
+
+    #[test]
+    fn test_calculate_videotoolbox_quality_mapping() {
+        assert_eq!(calculate_videotoolbox_quality(0), 100);
+        assert_eq!(calculate_videotoolbox_quality(18), 65);
+        assert_eq!(calculate_videotoolbox_quality(22), 57);
+        assert_eq!(calculate_videotoolbox_quality(23), 55);
+        assert_eq!(calculate_videotoolbox_quality(28), 45);
+        assert_eq!(calculate_videotoolbox_quality(51), 1);
+        // Clamping edge cases
+        assert_eq!(calculate_videotoolbox_quality(-10), 100);
+        assert_eq!(calculate_videotoolbox_quality(100), 1);
     }
 }

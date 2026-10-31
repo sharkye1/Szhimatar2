@@ -121,25 +121,38 @@ export type ProcessingChangeCallback = (isProcessing: boolean) => void;
 // FFmpeg Command Builder
 // ============================================================================
 
+/**
+ * Maps CRF value (0..=51) to VideoToolbox -q:v scale (1..=100)
+ * Formula: clamp(Math.round(((51 - crf) * 100) / 51), 1, 100)
+ */
+export function calculateVideoToolboxQuality(crf: number): number {
+  if (isNaN(crf)) return 55; // Default corresponding to standard CRF 23
+  const rawQuality = Math.round(((51 - crf) * 100) / 51);
+  return Math.max(1, Math.min(100, rawQuality));
+}
+
 export class FFmpegCommandBuilder {
   private videoSettings: VideoSettings;
   private audioSettings: AudioSettings;
   private watermarkSettings?: WatermarkSettings;
   private preferGpu: boolean;
   private outputPath: string;
+  private isMac: boolean;
 
   constructor(
     videoSettings: VideoSettings,
     audioSettings: AudioSettings,
     watermarkSettings?: WatermarkSettings,
     preferGpu: boolean = false,
-    outputPath: string = ''
+    outputPath: string = '',
+    isMac: boolean = isMacOS()
   ) {
     this.videoSettings = videoSettings;
     this.audioSettings = audioSettings;
     this.watermarkSettings = watermarkSettings;
     this.preferGpu = preferGpu;
     this.outputPath = outputPath;
+    this.isMac = isMac;
   }
 
   /**
@@ -162,7 +175,16 @@ export class FFmpegCommandBuilder {
       args.push('-c:v', 'copy');
     } else {
       // Hardware-accelerated decoding (HW decoding on input)
-      const hwaccel = this.videoSettings.hwaccel || 'auto';
+      let hwaccel = this.videoSettings.hwaccel || 'auto';
+      if (this.isMac) {
+        if (['cuda', 'd3d11va', 'dxva2', 'qsv'].includes(hwaccel)) {
+          hwaccel = 'auto';
+        }
+      } else {
+        if (hwaccel === 'videotoolbox') {
+          hwaccel = 'auto';
+        }
+      }
       if (hwaccel !== 'disabled') {
         args.push('-hwaccel', hwaccel);
       }
@@ -550,13 +572,29 @@ export class FFmpegCommandBuilder {
       'hevc': 'hevc_nvenc',
     };
 
+    // VideoToolbox encoders for macOS
+    const videotoolboxCodecMap: Record<string, string> = {
+      'h264': 'h264_videotoolbox',
+      'h265': 'hevc_videotoolbox',
+      'hevc': 'hevc_videotoolbox',
+    };
+
     if (this.preferGpu) {
-      const gpuEncoder = gpuCodecMap[this.videoSettings.codec];
-      if (!gpuEncoder) {
-        console.warn(`[FFmpegCommandBuilder] GPU not supported for codec ${this.videoSettings.codec}, falling back to CPU`);
+      if (this.isMac) {
+        const vtEncoder = videotoolboxCodecMap[this.videoSettings.codec];
+        if (vtEncoder) {
+          return vtEncoder;
+        }
+        console.warn(`[FFmpegCommandBuilder] VideoToolbox not supported for codec ${this.videoSettings.codec}, falling back to CPU`);
         return cpuCodecMap[this.videoSettings.codec] || this.videoSettings.codec;
+      } else {
+        const gpuEncoder = gpuCodecMap[this.videoSettings.codec];
+        if (!gpuEncoder) {
+          console.warn(`[FFmpegCommandBuilder] GPU not supported for codec ${this.videoSettings.codec}, falling back to CPU`);
+          return cpuCodecMap[this.videoSettings.codec] || this.videoSettings.codec;
+        }
+        return gpuEncoder;
       }
-      return gpuEncoder;
     }
 
     return cpuCodecMap[this.videoSettings.codec] || this.videoSettings.codec;
@@ -568,13 +606,35 @@ export class FFmpegCommandBuilder {
    * GPU (NVENC): uses -cq / -rc constqp (constant quality) or -rc vbr (bitrate mode)
    */
   private addEncoderQualityParams(args: string[], encoder: string, isNvenc: boolean): void {
+    const isVideoToolbox = encoder.includes('videotoolbox');
     const rateControl = this.videoSettings.rateControlMode || 'crf';
-    const crfValue = Math.max(0, Math.min(51, parseInt(this.videoSettings.crf || '23', 10)));
+    const rawCrf = (this.videoSettings.crf !== undefined && this.videoSettings.crf !== null && this.videoSettings.crf !== '')
+      ? (typeof this.videoSettings.crf === 'number' ? this.videoSettings.crf : parseInt(this.videoSettings.crf, 10))
+      : 23;
+    const crfValue = isNaN(rawCrf) ? 23 : Math.max(0, Math.min(51, rawCrf));
     const bitrateValue = Math.max(0.1, Math.min(200, parseFloat(this.videoSettings.bitrate || '5')));
     const maxrateValue = this.videoSettings.maxrate ? parseFloat(this.videoSettings.maxrate) : (bitrateValue * 1.5);
     const bufsizeValue = this.videoSettings.bufsize ? parseFloat(this.videoSettings.bufsize) : (bitrateValue * 3);
 
-    if (isNvenc) {
+    if (isVideoToolbox) {
+      if (rateControl === 'crf') {
+        const vtQuality = calculateVideoToolboxQuality(crfValue);
+        args.push('-q:v', vtQuality.toString());
+      } else if (rateControl === 'constrained_crf') {
+        const vtQuality = calculateVideoToolboxQuality(crfValue);
+        args.push('-q:v', vtQuality.toString());
+        args.push('-b:v', `${bitrateValue}M`);
+        if (this.videoSettings.maxrate) {
+          args.push('-maxrate', `${this.videoSettings.maxrate}M`);
+        }
+      } else {
+        // VBR / CBR
+        args.push('-b:v', `${bitrateValue}M`);
+        if (this.videoSettings.maxrate) {
+          args.push('-maxrate', `${this.videoSettings.maxrate}M`);
+        }
+      }
+    } else if (isNvenc) {
       if (rateControl === 'crf') {
         // NVENC Constant Quality mode without forcing any target bitrate
         args.push('-rc', 'constqp');
@@ -669,6 +729,10 @@ export class FFmpegCommandBuilder {
    * Add encoder-specific preset and tuning
    */
   private addEncoderPreset(args: string[], encoder: string, isNvenc: boolean): void {
+    if (encoder.includes('videotoolbox')) {
+      return;
+    }
+
     const preset = this.videoSettings.preset;
 
     if (isNvenc) {
