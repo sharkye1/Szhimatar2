@@ -112,6 +112,10 @@ $RECYCLE.BIN/
 .mocha-timeout
 src/services/__tests__/
 *test*
+!tests/
+!tests/**
+!TEST_INFRA.md
+!TEST_READY.md
 
 # --- Production artifacts ---
 *.log
