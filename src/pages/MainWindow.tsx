@@ -901,6 +901,8 @@ const MainWindow: React.FC<MainWindowProps> = ({
               width: '100%',
               maxWidth: isCompact ? '100%' : '560px',
               boxSizing: 'border-box',
+              maxHeight: isCompact ? '380px' : '440px',
+              overflowY: 'auto',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
