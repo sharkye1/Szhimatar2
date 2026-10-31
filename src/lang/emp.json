@@ -317,7 +317,11 @@
     "save": "",
     "cancel": "",
     "glassOpacity": "Image Dimming",
-    "glassBlur": "Image Blur"
+    "glassBlur": "Image Blur",
+    "ecoMode": "",
+    "ecoModeDescription": "",
+    "ecoModeEnabled": "",
+    "ecoModeDisabled": ""
   },
   "watermark": {
     "title": "",

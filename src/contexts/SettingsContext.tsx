@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 
 export type ScreenAnimationType = 'default' | 'soft-blur' | 'physics' | 'scale-fade' | 'none';
@@ -19,6 +19,7 @@ export interface AppSettings {
   gpuAvailable: boolean;
   renderMode: string;
   screenAnimation: ScreenAnimationType;
+  ecoMode: boolean;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -37,6 +38,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   gpuAvailable: false,
   renderMode: 'cpu',
   screenAnimation: 'default',
+  ecoMode: false,
 };
 
 interface SettingsContextType {
@@ -82,6 +84,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
           gpuAvailable: data.gpuAvailable,
           renderMode: data.renderMode,
           screenAnimation: data.screenAnimation,
+          ecoMode: data.ecoMode,
         },
       });
     } catch (error) {
@@ -110,6 +113,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
           gpuAvailable: !!raw.gpuAvailable,
           renderMode: raw.renderMode || DEFAULT_APP_SETTINGS.renderMode,
           screenAnimation: (raw.screenAnimation || raw.screen_animation || DEFAULT_APP_SETTINGS.screenAnimation) as ScreenAnimationType,
+          ecoMode: !!(raw.ecoMode ?? raw.eco_mode ?? DEFAULT_APP_SETTINGS.ecoMode),
         };
         settingsRef.current = normalized;
         setSettings(normalized);

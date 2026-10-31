@@ -317,7 +317,11 @@
     "save": "Sahraniti",
     "cancel": "Otkazati",
     "glassOpacity": "Image Dimming",
-    "glassBlur": "Image Blur"
+    "glassBlur": "Image Blur",
+    "ecoMode": "Eko-režim",
+    "ecoModeDescription": "Izključaje zamućenje i sjaj kurzora dža menšego izkoristyvanja resursy",
+    "ecoModeEnabled": "Vključeno",
+    "ecoModeDisabled": "Izključeno"
   },
   "watermark": {
     "title": "Nastavenja vodoznaka",

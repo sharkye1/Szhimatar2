@@ -317,7 +317,11 @@
     "save": "Save",
     "cancel": "Cancel",
     "glassOpacity": "Image Dimming",
-    "glassBlur": "Image Blur"
+    "glassBlur": "Image Blur",
+    "ecoMode": "Eco Mode (power saving)",
+    "ecoModeDescription": "Disables blur effects and cursor glow to reduce CPU and GPU usage",
+    "ecoModeEnabled": "Enabled",
+    "ecoModeDisabled": "Disabled"
   },
   "watermark": {
     "title": "Watermark Settings",

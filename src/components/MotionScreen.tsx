@@ -142,7 +142,6 @@ export const MotionScreen: React.FC<MotionScreenProps> = ({ children, animationT
         height: '100vh',
         position: 'relative',
         overflow: 'hidden',
-        willChange: 'opacity, transform, filter',
         display: 'flex',
         flexDirection: 'column',
       }}

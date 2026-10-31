@@ -317,7 +317,11 @@
     "save": "保存",
     "cancel": "取消",
     "glassOpacity": "Image Dimming",
-    "glassBlur": "Image Blur"
+    "glassBlur": "Image Blur",
+    "ecoMode": "节能模式",
+    "ecoModeDescription": "禁用模糊效果和光标光晕以降低 CPU 和 GPU 使用率",
+    "ecoModeEnabled": "已启用",
+    "ecoModeDisabled": "已禁用"
   },
   "watermark": {
     "title": "水印设置",

@@ -317,7 +317,11 @@
     "save": "Konservi",
     "cancel": "Nuligi",
     "glassOpacity": "Image Dimming",
-    "glassBlur": "Image Blur"
+    "glassBlur": "Image Blur",
+    "ecoMode": "Ekologia reĝimo",
+    "ecoModeDescription": "Malŝaltas malklarajn efikojn kaj kursoran brilon por ŝpari rimedojn",
+    "ecoModeEnabled": "Ŝaltita",
+    "ecoModeDisabled": "Malŝaltita"
   },
   "watermark": {
     "title": "Agordoj de akvomarko",

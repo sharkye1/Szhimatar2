@@ -1,22 +1,46 @@
 import React, { useEffect, useRef } from 'react';
 import '../styles/cursor-glow.css';
 import { useIsProcessing } from '../hooks/useRenderQueue';
+import { useSettings } from '../contexts/SettingsContext';
+import { appWindow } from '@tauri-apps/api/window';
 
 export const CursorGlow: React.FC = () => {
   const glowRef = useRef<HTMLDivElement>(null);
   const auraRef = useRef<HTMLDivElement>(null);
   const isProcessing = useIsProcessing();
+  const { settings } = useSettings();
 
   useEffect(() => {
+    if (settings.ecoMode) return;
+
     let idleTimer: ReturnType<typeof setTimeout> | null = null;
     let rafId: number | null = null;
+    let unlistenFocus: (() => void) | null = null;
+    let isMounted = true;
 
     let targetX = window.innerWidth / 2;
     let targetY = window.innerHeight / 2;
     let lastRenderedX = -1;
     let lastRenderedY = -1;
 
-    const root = document.documentElement;
+    const hideGlow = () => {
+      if (glowRef.current) {
+        glowRef.current.classList.remove('moving');
+        glowRef.current.classList.add('idle');
+      }
+      if (auraRef.current) {
+        auraRef.current.classList.remove('moving');
+        auraRef.current.classList.add('idle');
+      }
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      if (idleTimer) {
+        clearTimeout(idleTimer);
+        idleTimer = null;
+      }
+    };
 
     const render = () => {
       rafId = null;
@@ -32,13 +56,22 @@ export const CursorGlow: React.FC = () => {
         if (auraRef.current) {
           auraRef.current.style.translate = translateVal;
         }
-
-        root.style.setProperty('--mouse-x', `${targetX}px`);
-        root.style.setProperty('--mouse-y', `${targetY}px`);
       }
     };
 
+    const isWindowBlurredOrPaused = () => {
+      if (document.hidden) return true;
+      if (typeof document.hasFocus === 'function' && !document.hasFocus()) return true;
+      if (document.body.classList.contains('app-paused')) return true;
+      return false;
+    };
+
     const handleMouseMove = (e: MouseEvent) => {
+      // Do not wake up cursor effects if window is paused, blurred, or hidden
+      if (isWindowBlurredOrPaused()) {
+        return;
+      }
+
       targetX = e.clientX;
       targetY = e.clientY;
 
@@ -58,27 +91,60 @@ export const CursorGlow: React.FC = () => {
       }
 
       idleTimer = setTimeout(() => {
-        if (glowRef.current) {
-          glowRef.current.classList.remove('moving');
-          glowRef.current.classList.add('idle');
-        }
-        if (auraRef.current) {
-          auraRef.current.classList.remove('moving');
-          auraRef.current.classList.add('idle');
-        }
+        hideGlow();
       }, 150);
     };
 
+    const handleBlur = () => {
+      hideGlow();
+    };
+
+    const handleFocus = () => {
+      // Intentionally do not immediately show glow on focus; wait for active mouse movement
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        hideGlow();
+      }
+    };
+
     window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    appWindow.onFocusChanged(({ payload: focused }) => {
+      if (!focused) {
+        hideGlow();
+      }
+    }).then(unlisten => {
+      if (isMounted) {
+        unlistenFocus = unlisten;
+      } else {
+        unlisten();
+      }
+    }).catch(err => {
+      console.warn('[CursorGlow] Failed to listen to onFocusChanged:', err);
+    });
 
     return () => {
+      isMounted = false;
       window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (unlistenFocus) {
+        unlistenFocus();
+      }
       if (idleTimer) clearTimeout(idleTimer);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
-  }, []);
+  }, [settings.ecoMode]);
 
   useEffect(() => {
+    if (settings.ecoMode) return;
+
     if (glowRef.current && auraRef.current) {
       if (isProcessing) {
         glowRef.current.classList.add('rendering');
@@ -88,7 +154,11 @@ export const CursorGlow: React.FC = () => {
         auraRef.current.classList.remove('rendering');
       }
     }
-  }, [isProcessing]);
+  }, [isProcessing, settings.ecoMode]);
+
+  if (settings.ecoMode) {
+    return null;
+  }
 
   return (
     <>
@@ -100,4 +170,5 @@ export const CursorGlow: React.FC = () => {
 };
 
 export default CursorGlow;
+
 

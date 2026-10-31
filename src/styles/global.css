@@ -48,9 +48,8 @@ body {
   height: 100vh;
   z-index: 0;
   pointer-events: none;
-  background-size: 200% 200%;
+  background-size: cover;
   background-position: center;
-  animation: gradientShift 15s ease infinite;
   transition: background 0.25s ease;
 }
 
@@ -75,20 +74,6 @@ body {
 
 .app-background.has-image-background::before {
   display: none;
-}
-
-@keyframes gradientShift {
-  0% {
-    background-position: 0% 50%;
-  }
-
-  50% {
-    background-position: 100% 50%;
-  }
-
-  100% {
-    background-position: 0% 50%;
-  }
 }
 
 .app-background::after {
@@ -151,7 +136,7 @@ button::before {
   height: 100%;
   pointer-events: none;
   opacity: 0;
-  background: radial-gradient(120px circle at var(--mouse-x) var(--mouse-y),
+  background: radial-gradient(120px circle at 50% 50%,
       rgba(var(--primary-rgb), 0.25),
       transparent 70%);
   transition: opacity 0.2s ease;
@@ -284,3 +269,55 @@ pre,
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(128, 128, 128, 0.7);
 }
+
+/* Pause animations when window is unfocused or backgrounded */
+body.app-paused *,
+body.app-paused *::before,
+body.app-paused *::after {
+  animation-play-state: paused !important;
+}
+
+body.app-paused .cursor-glow,
+body.app-paused .cursor-aura {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transition: none !important;
+}
+
+/* ========== ECO MODE (POWER SAVING) ========== */
+body.eco-mode {
+  --glass-blur: 0px !important;
+  --glass-blur-light: 0px !important;
+  --bg-image-blur: 0px !important;
+}
+
+body.eco-mode *,
+body.eco-mode *::before,
+body.eco-mode *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  transition: none !important;
+}
+
+body.eco-mode .app-background.has-image-background {
+  filter: brightness(var(--bg-image-brightness, 100%)) !important;
+  transform: none !important;
+}
+
+body.eco-mode .glass-element,
+body.eco-mode .glass-element-light,
+body.eco-mode .header,
+body.eco-mode .settings-header,
+body.eco-mode .controls,
+body.eco-mode .download-queue-card,
+body.eco-mode .empty-state,
+body.eco-mode .queue-list,
+body.eco-mode .stats-modal {
+  background: rgba(var(--theme-bg-rgb), 0.88) !important;
+}
+
+body.eco-mode .cursor-glow,
+body.eco-mode .cursor-aura {
+  display: none !important;
+}
+

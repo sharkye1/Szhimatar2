@@ -208,12 +208,20 @@ const PreviewPanel: React.FC<PreviewPanelProps> = ({
       setOriginalFrame(null);
       setProcessedFrame(null);
       setPreviewVideoPath(null);
+      if (videoRef.current) {
+        videoRef.current.removeAttribute('src');
+        videoRef.current.load();
+      }
     };
   }, []); 
 
   // Clear old frames when switching modes to free memory
   useEffect(() => {
     if (mode === 'frame') {
+      if (videoRef.current) {
+        videoRef.current.removeAttribute('src');
+        videoRef.current.load();
+      }
       setPreviewVideoPath(null);
     } else {
       setOriginalFrame(null);

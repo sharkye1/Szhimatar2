@@ -190,6 +190,23 @@ interface TrimFramePreviewState {
   loading: boolean;
 }
 
+const formatTrimTime = (seconds: number): string => {
+  const safeSeconds = Math.max(0, seconds);
+  const minutes = Math.floor(safeSeconds / 60);
+  const secs = safeSeconds % 60;
+  return `${minutes}:${secs.toFixed(1).padStart(4, '0')}`;
+};
+
+const formatDurationCompact = (seconds: number): string => {
+  const safeSeconds = Math.max(0, seconds);
+  if (safeSeconds < 60) {
+    return `${safeSeconds.toFixed(1)}s`;
+  }
+  const minutes = Math.floor(safeSeconds / 60);
+  const secs = safeSeconds - minutes * 60;
+  return `${minutes}m ${secs.toFixed(1)}s`;
+};
+
 const MainWindow: React.FC<MainWindowProps> = ({
   onNavigate,
   videoSettings,
@@ -801,11 +818,9 @@ const MainWindow: React.FC<MainWindowProps> = ({
   }, []);
 
 
-  const handleRemoveJob = (jobId: string) => {
+  const handleRemoveJob = useCallback((jobId: string) => {
     removeJob(jobId);
-  };
-
-
+  }, [removeJob]);
 
   const handleClearCompleted = () => {
     clearCompleted();
@@ -813,7 +828,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
   };
 
   // Get status display text, color and icon
-  const getStatusDisplay = (job: RenderJob) => {
+  const getStatusDisplay = useCallback((job: RenderJob) => {
     const statusConfig: Record<string, { text: string; color: string; icon: React.ReactNode }> = {
       pending: { text: t('queue.status.pending'), color: theme.colors.textSecondary, icon: <Clock size={14} strokeWidth={2} /> },
       processing: { text: t('queue.status.processing'), color: theme.colors.primary, icon: <RefreshCw size={14} strokeWidth={2} /> },
@@ -824,7 +839,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
     };
     
     return statusConfig[job.status] || statusConfig.pending;
-  };
+  }, [theme, t]);
 
   const handleApplyPreset = (preset: AppPreset) => {
     setVideoSettings(preset.video);
@@ -836,31 +851,14 @@ const MainWindow: React.FC<MainWindowProps> = ({
     setSelectedPresetName(preset.name || '');
   };
 
-  const handleShowInExplorer = async (filePath: string) => {
+  const handleShowInExplorer = useCallback(async (filePath: string) => {
     try {
       await invoke('show_in_explorer', { filePath });
     } catch (error) {
       console.error('Failed to show file in explorer:', error);
       // Optionally show a notification to user
     }
-  };
-
-  const formatTrimTime = (seconds: number): string => {
-    const safeSeconds = Math.max(0, seconds);
-    const minutes = Math.floor(safeSeconds / 60);
-    const secs = safeSeconds % 60;
-    return `${minutes}:${secs.toFixed(1).padStart(4, '0')}`;
-  };
-
-  const formatDurationCompact = (seconds: number): string => {
-    const safeSeconds = Math.max(0, seconds);
-    if (safeSeconds < 60) {
-      return `${safeSeconds.toFixed(1)}s`;
-    }
-    const minutes = Math.floor(safeSeconds / 60);
-    const secs = safeSeconds - minutes * 60;
-    return `${minutes}m ${secs.toFixed(1)}s`;
-  };
+  }, []);
 
   const needsTopPreviewSpace = Boolean(
     trimFramePreview && jobs.length > 0 && trimFramePreview.jobId === jobs[0].id,

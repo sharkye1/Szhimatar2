@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { invoke } from '@tauri-apps/api/tauri';
 import { appWindow } from '@tauri-apps/api/window';
@@ -34,7 +34,7 @@ type DefaultPresetResponse = {
 };
 
 function AppContent() {
-  const { screenAnimation } = useSettings();
+  const { screenAnimation, settings } = useSettings();
   const [currentScreen, setCurrentScreen] = useState<Screen>('main');
   const [videoSettings, setVideoSettings] = useState<VideoSettingsType>(DEFAULT_VIDEO_SETTINGS);
   const [audioSettings, setAudioSettings] = useState<AudioSettingsType>(DEFAULT_AUDIO_SETTINGS);
@@ -42,6 +42,70 @@ function AppContent() {
   const [watermarkSettings, setWatermarkSettings] = useState<WatermarkSettingsType>(DEFAULT_WATERMARK_SETTINGS);
   const [selectedPresetName, setSelectedPresetName] = useState<string>('');
   const [cliFiles, setCliFiles] = useState<string[]>([]);
+
+  // Sync eco-mode class on body
+  useEffect(() => {
+    document.body.classList.toggle('eco-mode', !!settings.ecoMode);
+  }, [settings.ecoMode]);
+
+  // Pause animations when window loses focus or is hidden
+  useEffect(() => {
+    let unlistenFocus: (() => void) | null = null;
+    let isMounted = true;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        document.body.classList.add('app-paused');
+      } else if (document.hasFocus()) {
+        document.body.classList.remove('app-paused');
+      }
+    };
+
+    const handleBlur = () => {
+      document.body.classList.add('app-paused');
+    };
+
+    const handleFocus = () => {
+      if (!document.hidden) {
+        document.body.classList.remove('app-paused');
+      }
+    };
+
+    // Initial check on mount: if hidden or not focused, mark as paused immediately
+    if (document.hidden || (typeof document.hasFocus === 'function' && !document.hasFocus())) {
+      document.body.classList.add('app-paused');
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
+
+    appWindow.onFocusChanged(({ payload: focused }) => {
+      if (!focused) {
+        document.body.classList.add('app-paused');
+      } else if (!document.hidden) {
+        document.body.classList.remove('app-paused');
+      }
+    }).then(unlisten => {
+      if (isMounted) {
+        unlistenFocus = unlisten;
+      } else {
+        unlisten();
+      }
+    }).catch(err => {
+      console.warn('[App] Failed to listen to onFocusChanged:', err);
+    });
+
+    return () => {
+      isMounted = false;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('focus', handleFocus);
+      if (unlistenFocus) {
+        unlistenFocus();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

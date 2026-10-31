@@ -317,7 +317,11 @@
     "save": "Сохранить",
     "cancel": "Отмена",
     "glassOpacity": "Image Dimming",
-    "glassBlur": "Image Blur"
+    "glassBlur": "Image Blur",
+    "ecoMode": "⚡Эко-турбо-режим💥",
+    "ecoModeDescription": "Вырубает мыло и подсветку чтобы не взорвать пекарню",
+    "ecoModeEnabled": "Врублен",
+    "ecoModeDisabled": "Вырублен"
   },
   "watermark": {
     "title": "Настройки водяного знака",

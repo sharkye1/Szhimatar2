@@ -246,6 +246,65 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
           </div>
         </div>
 
+        {/* Eco Mode toggle */}
+        <div
+          className="setting-group"
+          style={{
+            marginBottom: '20px',
+            padding: '14px 16px',
+            borderRadius: '10px',
+            background: 'rgba(var(--theme-bg-rgb), 0.25)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ fontWeight: 600, fontSize: '14px' }}>{t('settings.ecoMode')}</span>
+              <span style={{ fontSize: '12px', color: theme.colors.textSecondary }}>
+                {t('settings.ecoModeDescription')}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={settings.ecoMode}
+                onClick={() => updateSettings({ ecoMode: !settings.ecoMode }, true)}
+                style={{
+                  width: 56,
+                  height: 30,
+                  borderRadius: 30,
+                  border: `1px solid ${settings.ecoMode ? theme.colors.primary : theme.colors.border}`,
+                  background: settings.ecoMode ? `${theme.colors.primary}CC` : 'rgba(var(--theme-bg-rgb), 0.3)',
+                  position: 'relative',
+                  transition: 'all 0.22s ease',
+                  padding: 0,
+                  flexShrink: 0,
+                  cursor: 'pointer',
+                }}
+                title={t('settings.ecoMode')}
+              >
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: 3,
+                    left: settings.ecoMode ? 29 : 3,
+                    width: 22,
+                    height: 22,
+                    borderRadius: '50%',
+                    background: '#fff',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.35)',
+                    transition: 'left 0.22s ease',
+                  }}
+                />
+              </button>
+              <span style={{ minWidth: 60, fontSize: '13px', fontWeight: 500 }}>
+                {settings.ecoMode ? t('settings.ecoModeEnabled') : t('settings.ecoModeDisabled')}
+              </span>
+            </div>
+          </div>
+        </div>
+
         <div
           style={{
             display: 'flex',

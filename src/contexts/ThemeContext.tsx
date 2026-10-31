@@ -189,15 +189,17 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     // UI Glass variables
     root.style.setProperty('--glass-opacity', isLight ? '0.25' : '0.15');
     root.style.setProperty('--glass-border-color', isLight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.1)');
-    root.style.setProperty('--glass-blur', '12px');
+    const isEcoMode = !!settings.ecoMode;
+    const effectiveGlassBlur = isEcoMode ? 0 : glassBlur;
+    root.style.setProperty('--glass-blur', isEcoMode ? '0px' : '12px');
     root.style.setProperty('--glass-opacity-light', isLight ? '0.15' : '0.08');
-    root.style.setProperty('--glass-blur-light', '8px');
+    root.style.setProperty('--glass-blur-light', isEcoMode ? '0px' : '8px');
 
     // Background Image variables based on user sliders
     const imgBrightness = Math.max(0, 100 - glassOpacity);
     root.style.setProperty('--bg-image-brightness', `${imgBrightness}%`);
-    root.style.setProperty('--bg-image-blur', `${glassBlur}px`);
-    const scale = 1 + (glassBlur * 0.003);
+    root.style.setProperty('--bg-image-blur', `${effectiveGlassBlur}px`);
+    const scale = 1 + (effectiveGlassBlur * 0.003);
     root.style.setProperty('--bg-image-scale', `${scale}`);
 
     // Set background for the app-background element
@@ -208,11 +210,11 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const bgStyle = themeBackgrounds[themeName] || themeBackgrounds['dark-blue'];
       bgElement.style.backgroundImage = '';
       bgElement.style.background = bgStyle;
-      bgElement.style.backgroundSize = '200% 200%';
+      bgElement.style.backgroundSize = 'cover';
       bgElement.style.backgroundPosition = 'center';
-      bgElement.style.backgroundRepeat = 'repeat';
+      bgElement.style.backgroundRepeat = 'no-repeat';
       bgElement.style.backgroundColor = '';
-      bgElement.style.animation = 'gradientShift 15s ease infinite';
+      bgElement.style.animation = 'none';
     };
 
     const applyImageBackground = async () => {
@@ -246,7 +248,7 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return () => {
       cancelled = true;
     };
-  }, [baseTheme, themeName, modifiedTheme, useImageBackground, backgroundImagePath, glassOpacity, glassBlur]);
+  }, [baseTheme, themeName, modifiedTheme, useImageBackground, backgroundImagePath, glassOpacity, glassBlur, settings.ecoMode]);
 
   const setTheme = (name: string) => {
     if (themes[name]) {

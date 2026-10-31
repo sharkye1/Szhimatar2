@@ -123,6 +123,8 @@ struct Settings {
     render_mode: String,
     #[serde(rename = "screenAnimation", default = "default_screen_animation")]
     screen_animation: String,
+    #[serde(default, rename = "ecoMode")]
+    eco_mode: bool,
 }
 
 fn default_screen_animation() -> String {
@@ -155,6 +157,7 @@ impl Default for Settings {
             gpu_available: false,
             render_mode: "cpu".to_string(),
             screen_animation: "default".to_string(),
+            eco_mode: false,
         }
     }
 }
@@ -3404,6 +3407,12 @@ async fn start_drag_file(
 }
 
 fn main() {
+    // Native WebView2 performance and power efficiency flags
+    std::env::set_var(
+        "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+        "--enable-features=CalculateNativeWinOcclusion,IntensiveWakeUpThrottling,TurnOffStreamingMediaSuspending --disable-background-timer-throttling=0",
+    );
+
     #[cfg(windows)]
     job_object::init_job_object();
 
