@@ -201,7 +201,7 @@ fn save_settings(settings: Settings) -> Result<(), String> {
     fs::write(&settings_path, content).map_err(|e| e.to_string())
 }
 
-/// Check GPU (NVENC) compatibility and persist result in settings.json
+/// Check GPU/VideoToolbox compatibility and persist result in settings.json
 /// WARNING: This can be overridden for UI testing, but actual FFmpeg rendering
 /// will still use real hardware capabilities
 #[tauri::command]
@@ -216,12 +216,21 @@ async fn check_gpu_compatibility() -> Result<bool, String> {
     }
 
     let config = load_ffmpeg_config();
-    if config.ffmpeg_path.trim().is_empty() {
+    let ffmpeg_path = if !config.ffmpeg_path.trim().is_empty() {
+        config.ffmpeg_path.clone()
+    } else {
+        find_binary_in_path("ffmpeg")
+            .or_else(|| search_standard_dirs("ffmpeg"))
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default()
+    };
+
+    if ffmpeg_path.trim().is_empty() {
         return Err("FFmpeg path not configured".to_string());
     }
 
     // Fast async execution using tokio::process::Command
-    let mut cmd = tokio::process::Command::new(&config.ffmpeg_path);
+    let mut cmd = tokio::process::Command::new(&ffmpeg_path);
     cmd.args(["-hide_banner", "-encoders"]);
 
     #[cfg(target_os = "windows")]
@@ -236,6 +245,13 @@ async fn check_gpu_compatibility() -> Result<bool, String> {
         .map_err(|e| format!("Failed to run ffmpeg: {}", e))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_lowercase();
+
+    #[cfg(target_os = "macos")]
+    let gpu_available = stdout.contains("h264_videotoolbox")
+        || stdout.contains("hevc_videotoolbox")
+        || stdout.contains("videotoolbox");
+
+    #[cfg(not(target_os = "macos"))]
     let gpu_available = stdout.contains("nvenc");
 
     // Persist in settings
@@ -258,6 +274,7 @@ async fn detect_hardware_info() -> Result<HardwareInfo, String> {
         return Ok(HardwareInfo {
             cpu_vendor: override_config.cpu_vendor,
             gpu_vendor: override_config.gpu_vendor,
+            cpu_brand: None,
         });
     }
 
@@ -270,16 +287,42 @@ async fn detect_hardware_info() -> Result<HardwareInfo, String> {
         cpu_vendor, cpu_reason, gpu_vendor, gpu_reason
     ));
 
+    #[cfg(target_os = "macos")]
+    let cpu_brand = if cpu_vendor != "unknown" {
+        Some(cpu_reason)
+    } else {
+        None
+    };
+
+    #[cfg(target_os = "windows")]
+    let cpu_brand = if cpu_reason.starts_with("Registry ProcessorNameString: ") {
+        Some(cpu_reason.trim_start_matches("Registry ProcessorNameString: ").to_string())
+    } else if cpu_vendor != "unknown" {
+        Some(cpu_reason)
+    } else {
+        None
+    };
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let cpu_brand = if cpu_vendor != "unknown" {
+        Some(cpu_reason)
+    } else {
+        None
+    };
+
     Ok(HardwareInfo {
         cpu_vendor,
         gpu_vendor,
+        cpu_brand,
     })
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
-struct HardwareInfo {
-    cpu_vendor: String,
-    gpu_vendor: String,
+pub struct HardwareInfo {
+    pub cpu_vendor: String,
+    pub gpu_vendor: String,
+    #[serde(default)]
+    pub cpu_brand: Option<String>,
 }
 
 /// Hardware override configuration for testing (DOES NOT affect actual rendering)
@@ -316,12 +359,32 @@ fn load_hardware_override() -> Option<HardwareOverride> {
     }
 }
 
+#[allow(dead_code)]
 fn summarize_for_log(input: &str, max_len: usize) -> String {
     let compact = input.split_whitespace().collect::<Vec<_>>().join(" ");
     if compact.len() <= max_len {
         compact
     } else {
         format!("{}...", &compact[..max_len])
+    }
+}
+
+/// Parse CPU brand string into (vendor, cleaned_brand)
+#[allow(dead_code)]
+fn parse_cpu_brand_string(brand: &str) -> (&'static str, &str) {
+    let trimmed = brand.trim();
+    if trimmed.is_empty() {
+        return ("unknown", trimmed);
+    }
+    let lower = trimmed.to_lowercase();
+    if lower.contains("apple") || lower.contains("virtualapple") {
+        ("apple", trimmed)
+    } else if lower.contains("intel") {
+        ("intel", trimmed)
+    } else if lower.contains("amd") {
+        ("amd", trimmed)
+    } else {
+        ("unknown", trimmed)
     }
 }
 
@@ -411,7 +474,42 @@ fn detect_cpu_vendor() -> (String, String) {
         );
     }
 
-    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    #[cfg(target_os = "macos")]
+    {
+        let sysctl_res = Command::new("sysctl")
+            .args(["-n", "machdep.cpu.brand_string"])
+            .output()
+            .or_else(|_| {
+                Command::new("/usr/sbin/sysctl")
+                    .args(["-n", "machdep.cpu.brand_string"])
+                    .output()
+            });
+
+        if let Ok(output) = sysctl_res {
+            if output.status.success() {
+                let raw_brand = String::from_utf8_lossy(&output.stdout);
+                let (vendor, brand) = parse_cpu_brand_string(&raw_brand);
+                if vendor != "unknown" {
+                    return (vendor.to_string(), brand.to_string());
+                } else if !brand.is_empty() {
+                    return (
+                        "unknown".to_string(),
+                        format!(
+                            "sysctl machdep.cpu.brand_string unmatched: '{}'",
+                            summarize_for_log(brand, 180)
+                        ),
+                    );
+                }
+            }
+        }
+
+        return (
+            "unknown".to_string(),
+            "sysctl machdep.cpu.brand_string failed".to_string(),
+        );
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
     {
         return ("unknown".to_string(), "platform fallback".to_string());
     }
@@ -530,7 +628,78 @@ fn detect_gpu_vendor() -> (String, String) {
         return ("unknown".to_string(), "lspci command failed".to_string());
     }
 
-    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    #[cfg(target_os = "macos")]
+    {
+        // 1. Ultra-fast path: sysctl brand string check (<3 ms)
+        // On Apple Silicon (M1/M2/M3/M4), CPU and GPU are unified on the SoC
+        let sysctl_res = Command::new("sysctl")
+            .args(["-n", "machdep.cpu.brand_string"])
+            .output()
+            .or_else(|_| {
+                Command::new("/usr/sbin/sysctl")
+                    .args(["-n", "machdep.cpu.brand_string"])
+                    .output()
+            });
+
+        if let Ok(output) = sysctl_res {
+            if output.status.success() {
+                let raw = String::from_utf8_lossy(&output.stdout);
+                let (vendor, brand) = parse_cpu_brand_string(&raw);
+                if vendor == "apple" {
+                    return (
+                        "apple".to_string(),
+                        format!("Apple Silicon VideoToolbox ({})", brand),
+                    );
+                }
+            }
+        }
+
+        // 2. Fallback for Intel Macs / discrete / external GPUs: system_profiler
+        if let Ok(output) = Command::new("system_profiler")
+            .arg("SPDisplaysDataType")
+            .output()
+        {
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let lower = stdout.to_lowercase();
+
+                let chipset = stdout
+                    .lines()
+                    .find(|l| l.contains("Chipset Model:"))
+                    .and_then(|l| l.split(':').nth(1))
+                    .map(|s| s.trim().to_string());
+
+                if lower.contains("apple") {
+                    let name = chipset.unwrap_or_else(|| "Apple Silicon".to_string());
+                    return ("apple".to_string(), format!("Apple VideoToolbox ({})", name));
+                } else if lower.contains("amd") || lower.contains("radeon") {
+                    let name = chipset.unwrap_or_else(|| "AMD Radeon".to_string());
+                    return ("amd".to_string(), format!("macOS VideoToolbox ({})", name));
+                } else if lower.contains("intel") {
+                    let name = chipset.unwrap_or_else(|| "Intel Graphics".to_string());
+                    return ("intel".to_string(), format!("macOS VideoToolbox ({})", name));
+                } else if lower.contains("nvidia") || lower.contains("geforce") {
+                    let name = chipset.unwrap_or_else(|| "NVIDIA".to_string());
+                    return ("nvidia".to_string(), format!("macOS VideoToolbox ({})", name));
+                }
+
+                return (
+                    "apple".to_string(),
+                    format!(
+                        "macOS VideoToolbox unmatched display: '{}'",
+                        summarize_for_log(&stdout, 180)
+                    ),
+                );
+            }
+        }
+
+        return (
+            "apple".to_string(),
+            "macOS VideoToolbox (integrated)".to_string(),
+        );
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
     {
         return ("unknown".to_string(), "platform fallback".to_string());
     }
@@ -842,14 +1011,9 @@ fn get_binary_version_internal(path: &str) -> Option<String> {
 
 /// Search for binary in PATH using 'where' (Windows) or 'which' (Unix)
 fn find_binary_in_path(binary_name: &str) -> Option<PathBuf> {
-    let exe_name = if cfg!(windows) {
-        format!("{}.exe", binary_name)
-    } else {
-        binary_name.to_string()
-    };
-
     #[cfg(target_os = "windows")]
     {
+        let exe_name = format!("{}.exe", binary_name);
         // Use 'where' command on Windows
         if let Ok(output) = Command::new("where").arg(&exe_name).output() {
             if output.status.success() {
@@ -2101,11 +2265,14 @@ fn get_current_exe_path() -> Result<String, String> {
 }
 
 #[cfg(not(windows))]
+#[allow(dead_code)]
 fn get_current_exe_path() -> Result<String, String> {
     Err("Context menu is only supported on Windows".to_string())
 }
 
+#[cfg(windows)]
 const CONTEXT_MENU_NAME: &str = "CompressWithSzhimatar";
+#[cfg(windows)]
 const VIDEO_EXTENSIONS: &[&str] = &[
     ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".mpeg", ".mpg", ".3gp",
 ];
@@ -3347,6 +3514,7 @@ fn check_network_proxy_vpn_status() -> Result<NetworkProxyVpnStatus, String> {
     }
 }
 #[tauri::command]
+#[allow(unused_variables)]
 fn copy_file_to_clipboard(file_path: String) -> Result<(), String> {
     #[cfg(windows)]
     {
@@ -3369,6 +3537,7 @@ fn copy_file_to_clipboard(file_path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+#[allow(unused_variables)]
 async fn start_drag_file(
     app: tauri::AppHandle,
     window: tauri::Window,
@@ -3600,5 +3769,91 @@ mod tests {
         let (input2, output2) = split_ffmpeg_args(&args_no_trim);
         assert!(input2.is_empty());
         assert_eq!(output2, args_no_trim);
+    }
+
+    #[test]
+    fn test_parse_cpu_brand_string_apple_silicon() {
+        let (vendor, brand) = parse_cpu_brand_string("Apple M1\n");
+        assert_eq!(vendor, "apple");
+        assert_eq!(brand, "Apple M1");
+
+        let (vendor, brand) = parse_cpu_brand_string("  Apple M2 Pro  ");
+        assert_eq!(vendor, "apple");
+        assert_eq!(brand, "Apple M2 Pro");
+
+        let (vendor, brand) = parse_cpu_brand_string("Apple M3 Max");
+        assert_eq!(vendor, "apple");
+        assert_eq!(brand, "Apple M3 Max");
+
+        let (vendor, brand) = parse_cpu_brand_string("Apple M4");
+        assert_eq!(vendor, "apple");
+        assert_eq!(brand, "Apple M4");
+    }
+
+    #[test]
+    fn test_parse_cpu_brand_string_rosetta() {
+        let (vendor, brand) = parse_cpu_brand_string("VirtualApple @ 2.50GHz");
+        assert_eq!(vendor, "apple");
+        assert_eq!(brand, "VirtualApple @ 2.50GHz");
+    }
+
+    #[test]
+    fn test_parse_cpu_brand_string_intel() {
+        let (vendor, brand) = parse_cpu_brand_string("Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz");
+        assert_eq!(vendor, "intel");
+        assert_eq!(brand, "Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz");
+    }
+
+    #[test]
+    fn test_parse_cpu_brand_string_amd() {
+        let (vendor, brand) = parse_cpu_brand_string("AMD Ryzen 9 5900X");
+        assert_eq!(vendor, "amd");
+        assert_eq!(brand, "AMD Ryzen 9 5900X");
+    }
+
+    #[test]
+    fn test_parse_cpu_brand_string_empty_and_unknown() {
+        let (vendor, brand) = parse_cpu_brand_string("");
+        assert_eq!(vendor, "unknown");
+        assert_eq!(brand, "");
+
+        let (vendor, brand) = parse_cpu_brand_string("   \n\t  ");
+        assert_eq!(vendor, "unknown");
+        assert_eq!(brand, "");
+
+        let (vendor, brand) = parse_cpu_brand_string("QuantumSuperChip 9000");
+        assert_eq!(vendor, "unknown");
+        assert_eq!(brand, "QuantumSuperChip 9000");
+    }
+
+    #[test]
+    fn test_gpu_acceleration_detection_parsing() {
+        let macos_stdout = "
+ V....D h264_videotoolbox    VideoToolbox H.264 Encoder (codec h264)
+ V....D hevc_videotoolbox    VideoToolbox H.265 Encoder (codec hevc)
+        ";
+        assert!(
+            macos_stdout.contains("videotoolbox")
+                || macos_stdout.contains("h264_videotoolbox")
+                || macos_stdout.contains("hevc_videotoolbox")
+        );
+
+        let windows_stdout = "
+ V..... h264_nvenc           NVIDIA NVENC H.264 encoder (codec h264)
+ V..... hevc_nvenc           NVIDIA NVENC hevc encoder (codec hevc)
+        ";
+        assert!(windows_stdout.contains("nvenc"));
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_macos_hardware_detection_live() {
+        let (cpu_vendor, cpu_brand) = detect_cpu_vendor();
+        assert_eq!(cpu_vendor, "apple");
+        assert!(cpu_brand.contains("Apple M"));
+
+        let (gpu_vendor, gpu_name) = detect_gpu_vendor();
+        assert_eq!(gpu_vendor, "apple");
+        assert!(gpu_name.contains("Apple Silicon VideoToolbox") || gpu_name.contains("VideoToolbox"));
     }
 }
