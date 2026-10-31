@@ -3692,6 +3692,7 @@ async fn start_drag_file(
 
 fn main() {
     // Native WebView2 performance and power efficiency flags
+    #[cfg(windows)]
     std::env::set_var(
         "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
         "--enable-features=CalculateNativeWinOcclusion,IntensiveWakeUpThrottling,TurnOffStreamingMediaSuspending --disable-background-timer-throttling=0",
