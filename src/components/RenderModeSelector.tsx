@@ -442,7 +442,7 @@ const DuoIcon: React.FC = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
     <circle cx="12" cy="12" r="10" />
     <path d="M12 2a10 10 0 0110 10" strokeDasharray="4 2" />
-    <circle cx="12" cy="4" r="4" />
+    <circle cx="12" cy="12" r="4" />
     <path d="M12 8v8M8 12h8" />
   </svg>
 );
