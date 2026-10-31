@@ -45,6 +45,8 @@
     "crfHint": "CRF控制恒定速率因子编码的质量。较低的值意味着更高的质量和更大的文件（例如，18-20非常高），较高的值意味着更高的压缩率（例如，28-35有明显损失，但一般特征，例如Fortnite游戏画面，会保留）。",
     "preset": "预设",
     "presetHint": "预设以编码速度换取压缩效率（越慢=压缩越好）。",
+    "presetHintMac": "VideoToolbox硬件编码器由质量和码率控制；预设适用于CPU模式。",
+    "presetHintNvenc": "预设以编码速度换取压缩效率（在GPU上映射为NVENC配置p1–p7）。",
     "speed": "播放速度",
     "speedLabel": {
       "normal": "正常",
@@ -110,6 +112,9 @@
     "gifDitherNone": "无抖动",
     "modeDuoDesc": "并行渲染：任务在CPU (libx264) 和GPU (NVENC) 之间分配。",
     "modeGpuDesc": "基于NVIDIA NVENC的硬件加速编码。渲染速度快。",
+    "modeGpuDescMac": "基于Apple Silicon (VideoToolbox) 的硬件加速编码。高速度与高能效。",
+    "modeHardware": "硬件模式",
+    "modeSoftware": "软件模式",
     "modeCpuDesc": "软件编码 (libx264/libx265)。极致压缩率。",
     "validationNotice": "优化建议：",
     "contentProfile": "内容优化配置",
@@ -133,6 +138,7 @@
     "bFrames": "B帧 (双向预测)",
     "hwaccelOptions": {
       "auto": "自动 (推荐)",
+      "videotoolbox": "Apple VideoToolbox",
       "cuda": "NVIDIA CUDA (NVDEC)",
       "d3d11va": "Direct3D 11 (D3D11VA)",
       "dxva2": "DirectX Video Accel (DXVA2)",

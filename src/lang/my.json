@@ -45,6 +45,8 @@
     "crfHint": "CRF kontroluje kvalitu za postojannoje koděranje. Nižše vrednosti - vyšša kvalita i větše fajly (napr. 18-20 jako dobro), vyšše vrednosti - větše stiskanje (napr. 28-35 viděna izguba, no obče čerty, napr. Fortnite igranje, ostanut).",
     "preset": "Prednastavenje",
     "presetHint": "Prednastavenja menjajut brzinu koděranja za efektivnost stiskanja (pomalše = lěpše stiskanje).",
+    "presetHintMac": "Aparatny koder VideoToolbox upravljaje se črěz kvalitu i bitrejt; prednastavenja se priměnjajut v reżimu CPU.",
+    "presetHintNvenc": "Prednastavenja menjajut brzinu koděranja za efektivnost stiskanja (na GPU se preslikavaju v NVENC profile p1–p7).",
     "speed": "Brzina přehrávky",
     "speedLabel": {
       "normal": "Normalno",
@@ -110,6 +112,9 @@
     "gifDitherNone": "Bez ditheringa",
     "modeDuoDesc": "Paralelno renderovanje: raboty se razdělajut medju CPU (libx264) i GPU (NVENC).",
     "modeGpuDesc": "Aparatno koděranje črěz NVIDIA NVENC. Velika brzina.",
+    "modeGpuDescMac": "Aparatno koděranje črěz Apple Silicon (VideoToolbox). Velika brzina i energetska efektivnost.",
+    "modeHardware": "Hardware Mode",
+    "modeSoftware": "Software Mode",
     "modeCpuDesc": "Programno koděranje (libx264/libx265). Maksimalno stiskanje.",
     "validationNotice": "Preporučanje za optimizaciju:",
     "contentProfile": "Profil optimizacije sodržaja",
@@ -133,6 +138,7 @@
     "bFrames": "B-kadry (Dvonapravjene)",
     "hwaccelOptions": {
       "auto": "Avtomatično (Rekomendovano)",
+      "videotoolbox": "Apple VideoToolbox",
       "cuda": "NVIDIA CUDA (NVDEC)",
       "d3d11va": "Direct3D 11 (D3D11VA)",
       "dxva2": "DirectX Video Accel (DXVA2)",

@@ -11,6 +11,7 @@ import { APP_VERSION } from '../version';
 import { UpdateService, UpdateState } from '../services/UpdateService';
 import { AlertTriangle, FolderOpen, Plus, Minus } from 'lucide-react';
 import useRenderQueue from '../hooks/useRenderQueue';
+import { isMacOS } from '../utils/platform';
 import '../styles/SettingsWindow.css';
 
 interface GeneralSettingsProps {
@@ -22,6 +23,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
   const { theme } = useTheme();
   const { settings, updateSettings, flushSettings } = useSettings();
   const { gpuAvailable, renderMode, setRenderMode, setGpuAvailability } = useRenderQueue();
+  const isMac = isMacOS();
 
   const [showFfmpegManager, setShowFfmpegManager] = useState(false);
   const [showLogsWarning, setShowLogsWarning] = useState(false);
@@ -31,7 +33,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
     enabled: boolean;
     exe_valid: boolean;
     loading: boolean;
-  }>({ enabled: false, exe_valid: false, loading: true });
+  }>({ enabled: false, exe_valid: false, loading: !isMac });
 
   // Update state
   const [updateState, setUpdateState] = useState<UpdateState>(UpdateService.getState());
@@ -39,7 +41,9 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
 
   useEffect(() => {
     loadLogsPath();
-    checkContextMenuStatus();
+    if (!isMac) {
+      checkContextMenuStatus();
+    }
 
     // Subscribe to update state changes
     const unsubscribe = UpdateService.subscribe(setUpdateState);
@@ -68,6 +72,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
   };
 
   const checkContextMenuStatus = async () => {
+    if (isMac) return;
     try {
       const status = await invoke<{
         enabled: boolean;
@@ -85,6 +90,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
   };
 
   const handleAddContextMenu = async () => {
+    if (isMac) return;
     try {
       await invoke('add_context_menu');
       await checkContextMenuStatus();
@@ -101,6 +107,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
   };
 
   const handleRemoveContextMenu = async () => {
+    if (isMac) return;
     try {
       await invoke('remove_context_menu');
       await checkContextMenuStatus();
@@ -495,93 +502,95 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
           </div>
         </div>
 
-        {/* Context Menu Section */}
-        <div className="setting-group">
-          <label>{t('contextMenu.title')}</label>
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 12,
-              padding: 12,
-              borderRadius: 8,
-            }}
-            className="glass-card"
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: theme.colors.textSecondary }}>{t('contextMenu.status')}</span>
-              {contextMenuStatus.loading ? (
-                <span style={{ color: theme.colors.textSecondary }}>...</span>
-              ) : (
-                <span
+        {/* Context Menu Section (Windows only) */}
+        {!isMac && (
+          <div className="setting-group">
+            <label>{t('contextMenu.title')}</label>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12,
+                padding: 12,
+                borderRadius: 8,
+              }}
+              className="glass-card"
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: theme.colors.textSecondary }}>{t('contextMenu.status')}</span>
+                {contextMenuStatus.loading ? (
+                  <span style={{ color: theme.colors.textSecondary }}>...</span>
+                ) : (
+                  <span
+                    style={{
+                      color:
+                        contextMenuStatus.enabled && contextMenuStatus.exe_valid
+                          ? theme.colors.success
+                          : contextMenuStatus.enabled && !contextMenuStatus.exe_valid
+                          ? theme.colors.warning || '#f59e0b'
+                          : theme.colors.error,
+                    }}
+                  >
+                    {contextMenuStatus.enabled && contextMenuStatus.exe_valid
+                      ? t('contextMenu.statusAdded')
+                      : contextMenuStatus.enabled && !contextMenuStatus.exe_valid
+                      ? t('contextMenu.statusInvalid')
+                      : t('contextMenu.statusNotAdded')}
+                  </span>
+                )}
+              </div>
+
+              {contextMenuStatus.enabled && !contextMenuStatus.exe_valid && (
+                <div
                   style={{
-                    color:
-                      contextMenuStatus.enabled && contextMenuStatus.exe_valid
-                        ? theme.colors.success
-                        : contextMenuStatus.enabled && !contextMenuStatus.exe_valid
-                        ? theme.colors.warning || '#f59e0b'
-                        : theme.colors.error,
+                    padding: 8,
+                    background: (theme.colors.warning || '#f59e0b') + '20',
+                    borderRadius: 4,
+                    fontSize: 13,
+                    color: theme.colors.text,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
                   }}
                 >
-                  {contextMenuStatus.enabled && contextMenuStatus.exe_valid
-                    ? t('contextMenu.statusAdded')
-                    : contextMenuStatus.enabled && !contextMenuStatus.exe_valid
-                    ? t('contextMenu.statusInvalid')
-                    : t('contextMenu.statusNotAdded')}
-                </span>
+                  <AlertTriangle size={16} strokeWidth={2} /> {t('contextMenu.exeMovedWarning')}
+                </div>
               )}
-            </div>
 
-            {contextMenuStatus.enabled && !contextMenuStatus.exe_valid && (
-              <div
+              <button
+                onClick={contextMenuStatus.enabled ? handleRemoveContextMenu : handleAddContextMenu}
+                disabled={contextMenuStatus.loading}
                 style={{
-                  padding: 8,
-                  background: (theme.colors.warning || '#f59e0b') + '20',
-                  borderRadius: 4,
-                  fontSize: 13,
-                  color: theme.colors.text,
+                  background: contextMenuStatus.enabled ? theme.colors.error : theme.colors.primary,
+                  color: '#fff',
+                  padding: '10px 14px',
+                  border: 'none',
+                  borderRadius: 6,
+                  cursor: contextMenuStatus.loading ? 'not-allowed' : 'pointer',
+                  opacity: contextMenuStatus.loading ? 0.7 : 1,
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '8px',
+                  justifyContent: 'center',
+                  gap: '6px',
                 }}
               >
-                <AlertTriangle size={16} strokeWidth={2} /> {t('contextMenu.exeMovedWarning')}
+                {contextMenuStatus.enabled ? (
+                  <>
+                    <Minus size={16} strokeWidth={1.5} /> {t('contextMenu.remove')}
+                  </>
+                ) : (
+                  <>
+                    <Plus size={16} strokeWidth={1.5} /> {t('contextMenu.add')}
+                  </>
+                )}
+              </button>
+
+              <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
+                {t('contextMenu.description')}
               </div>
-            )}
-
-            <button
-              onClick={contextMenuStatus.enabled ? handleRemoveContextMenu : handleAddContextMenu}
-              disabled={contextMenuStatus.loading}
-              style={{
-                background: contextMenuStatus.enabled ? theme.colors.error : theme.colors.primary,
-                color: '#fff',
-                padding: '10px 14px',
-                border: 'none',
-                borderRadius: 6,
-                cursor: contextMenuStatus.loading ? 'not-allowed' : 'pointer',
-                opacity: contextMenuStatus.loading ? 0.7 : 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-              }}
-            >
-              {contextMenuStatus.enabled ? (
-                <>
-                  <Minus size={16} strokeWidth={1.5} /> {t('contextMenu.remove')}
-                </>
-              ) : (
-                <>
-                  <Plus size={16} strokeWidth={1.5} /> {t('contextMenu.add')}
-                </>
-              )}
-            </button>
-
-            <div style={{ fontSize: 12, color: theme.colors.textSecondary }}>
-              {t('contextMenu.description')}
             </div>
           </div>
-        </div>
+        )}
 
         <VideoGuide title={t('videoGuide.title')} />
 

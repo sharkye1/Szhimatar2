@@ -45,6 +45,8 @@
     "crfHint": "",
     "preset": "",
     "presetHint": "",
+    "presetHintMac": "",
+    "presetHintNvenc": "",
     "speed": "",
     "speedLabel": {
       "normal": "",
@@ -110,6 +112,9 @@
     "gifDitherNone": "",
     "modeDuoDesc": "",
     "modeGpuDesc": "",
+    "modeGpuDescMac": "",
+    "modeHardware": "",
+    "modeSoftware": "",
     "modeCpuDesc": "",
     "validationNotice": "",
     "contentProfile": "",
@@ -133,6 +138,7 @@
     "bFrames": "",
     "hwaccelOptions": {
       "auto": "",
+      "videotoolbox": "",
       "cuda": "",
       "d3d11va": "",
       "dxva2": "",

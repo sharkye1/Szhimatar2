@@ -6,6 +6,7 @@
  */
 
 import type { VideoSettings } from '../types';
+import { isMacOS } from './platform';
 
 export interface VideoValidationResult {
   valid: boolean;
@@ -111,6 +112,16 @@ export function validateVideoSettings(
   // 7. HW Decoding normalization
   if (!normalized.hwaccel) {
     normalized.hwaccel = 'auto';
+  } else {
+    const isMac = isMacOS();
+    const supportedHwaccels = isMac
+      ? ['auto', 'videotoolbox', 'disabled']
+      : ['auto', 'cuda', 'd3d11va', 'dxva2', 'qsv', 'disabled'];
+
+    if (!supportedHwaccels.includes(normalized.hwaccel)) {
+      warnings.push(`Hardware decoder '${normalized.hwaccel}' is not supported on this platform. Reset to 'auto'.`);
+      normalized.hwaccel = 'auto';
+    }
   }
 
   return {

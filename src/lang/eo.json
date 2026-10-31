@@ -45,6 +45,8 @@
     "crfHint": "CRF regas kvaliton por konstanta faktora kodigo. Malaltaj valoroj signifas pli bonan kvaliton kaj pli grandajn dosierojn (ekz., 18-20 tre alta), altaj valoroj signifas pli da kunpremo (ekz., 28-35 rimarkinda perdo, tamen ĝeneralaj trajtoj, ekz., Fortnite-ludado, konserviĝas).",
     "preset": "Antaŭagordo",
     "presetHint": "Antaŭagordoj interŝanĝas kodadan rapidon kun kunprema efikeco (malpli rapida = pli bona kunpremo).",
+    "presetHintMac": "VideoToolbox-aparata kodilo estas regata per kvalito kaj bitrapido; antaŭagordoj validas en CPU-reĝimo.",
+    "presetHintNvenc": "Antaŭagordoj interŝanĝas kodadan rapidon kun kunprema efikeco (mapitaj al NVENC-profiloj p1–p7 en GPU).",
     "speed": "Ludrapido",
     "speedLabel": {
       "normal": "Normala",
@@ -110,6 +112,9 @@
     "gifDitherNone": "Neniu",
     "modeDuoDesc": "Paralela renderado: taskoj estas dividitaj inter CPU (libx264) kaj GPU (NVENC).",
     "modeGpuDesc": "Aparatara kodado per NVIDIA NVENC. Alta rapideco.",
+    "modeGpuDescMac": "Aparatara kodado per Apple Silicon (VideoToolbox). Alta rapideco kaj energia efikeco.",
+    "modeHardware": "Aparatara reĝimo",
+    "modeSoftware": "Programa reĝimo",
     "modeCpuDesc": "Programa kodado (libx264/libx265). Maksimuma kunpremo.",
     "validationNotice": "Optimumiga rekomendo:",
     "contentProfile": "Enhava optimumiga profilo",
@@ -133,6 +138,7 @@
     "bFrames": "B-kadroj (Dudirektaj)",
     "hwaccelOptions": {
       "auto": "Aŭtomate (Rekomendata)",
+      "videotoolbox": "Apple VideoToolbox",
       "cuda": "NVIDIA CUDA (NVDEC)",
       "d3d11va": "Direct3D 11 (D3D11VA)",
       "dxva2": "DirectX Video Accel (DXVA2)",

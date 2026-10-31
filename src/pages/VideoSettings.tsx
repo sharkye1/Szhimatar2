@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { open } from '@tauri-apps/api/dialog';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -6,6 +6,7 @@ import { VideoSettings as VideoSettingsType, WatermarkSettings as WatermarkSetti
 import PreviewPanel from '../components/PreviewPanel';
 import { useFirstJobInputPath } from '../hooks/useRenderQueue';
 import { validateVideoSettings } from '../utils/videoValidation';
+import { isMacOS } from '../utils/platform';
 import { 
   Info, 
   AlertTriangle, 
@@ -50,10 +51,37 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showAdvancedHelp, setShowAdvancedHelp] = useState(false);
 
+  const isMac = isMacOS();
   const isGifMode = settings.targetFormat === 'gif';
   const currentGifSettings = settings.gifSettings || DEFAULT_GIF_SETTINGS;
 
-  const preferGpuForValidation = renderMode === 'gpu' || (renderMode === 'duo' && gpuAvailable);
+  // On macOS coerce duo to gpu (if available) or cpu; on Windows keep duo
+  const effectiveRenderMode = isMac
+    ? (renderMode === 'duo' ? (gpuAvailable ? 'gpu' : 'cpu') : renderMode)
+    : renderMode;
+
+  const preferGpu = effectiveRenderMode === 'gpu' || (!isMac && effectiveRenderMode === 'duo' && gpuAvailable);
+  const preferGpuForValidation = !isMac && preferGpu;
+
+  // Platform-aware hwaccel options
+  const hwaccelOptions = useMemo(() => {
+    return isMac
+      ? ['auto', 'videotoolbox', 'disabled']
+      : ['auto', 'cuda', 'd3d11va', 'dxva2', 'qsv', 'disabled'];
+  }, [isMac]);
+
+  const effectiveHwaccel = useMemo(() => {
+    const current = settings.hwaccel || 'auto';
+    return hwaccelOptions.includes(current) ? current : 'auto';
+  }, [settings.hwaccel, hwaccelOptions]);
+
+  // Sanitize incompatible hwaccel values across platforms
+  useEffect(() => {
+    if (settings.hwaccel && !hwaccelOptions.includes(settings.hwaccel)) {
+      setSettings(prev => ({ ...prev, hwaccel: 'auto' }));
+    }
+  }, [settings.hwaccel, hwaccelOptions, setSettings]);
+
   const validation = useMemo(() => {
     return validateVideoSettings(settings, preferGpuForValidation);
   }, [settings, preferGpuForValidation]);
@@ -309,7 +337,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
           
             {/* Active Render Mode Banner */}
             <div className="mode-info-card">
-              {renderMode === 'duo' && (
+              {!isMac && effectiveRenderMode === 'duo' && (
                 <>
                   <div className="mode-info-badge duo">
                     <Zap size={14} />
@@ -320,22 +348,24 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                   </div>
                 </>
               )}
-              {renderMode === 'gpu' && (
+              {effectiveRenderMode === 'gpu' && (
                 <>
-                  <div className="mode-info-badge gpu">
+                  <div className={`mode-info-badge ${isMac ? 'hardware' : 'gpu'}`}>
                     <Zap size={14} />
-                    <span>GPU Mode</span>
+                    <span>{isMac ? (t('videoSettings.modeHardware') || 'Hardware Mode') : 'GPU Mode'}</span>
                   </div>
                   <div className="mode-info-desc">
-                    {t('videoSettings.modeGpuDesc') || 'Аппаратное кодирование через NVIDIA NVENC. Высокая скорость.'}
+                    {isMac
+                      ? (t('videoSettings.modeGpuDescMac') || 'Аппаратное кодирование Apple Silicon (VideoToolbox). Высокая скорость и энергоэффективность.')
+                      : (t('videoSettings.modeGpuDesc') || 'Аппаратное кодирование через NVIDIA NVENC. Высокая скорость.')}
                   </div>
                 </>
               )}
-              {renderMode === 'cpu' && (
+              {effectiveRenderMode === 'cpu' && (
                 <>
                   <div className="mode-info-badge cpu">
                     <Cpu size={14} />
-                    <span>CPU Mode</span>
+                    <span>{isMac ? (t('videoSettings.modeSoftware') || 'Software Mode') : 'CPU Mode'}</span>
                   </div>
                   <div className="mode-info-desc">
                     {t('videoSettings.modeCpuDesc') || 'Программное кодирование (libx264/libx265). Максимальная эффективность сжатия.'}
@@ -758,7 +788,13 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                         <option key={key} value={key}>{t(`ffmpegPresets.${key}`)}</option>
                       ))}
                     </select>
-                    <div className="preset-description">{t('videoSettings.presetHint')}</div>
+                    <div className="preset-description">
+                      {effectiveRenderMode === 'gpu'
+                        ? (isMac
+                            ? (t('videoSettings.presetHintMac') || 'Аппаратный энкодер VideoToolbox управляется качеством и битрейтом; пресеты применяются в режиме CPU.')
+                            : (t('videoSettings.presetHintNvenc') || 'Пресеты обменивают скорость кодирования на эффективность сжатия (на GPU транслируются в профили NVENC p1–p7).'))
+                        : (t('videoSettings.presetHint') || 'Пресеты обменивают скорость кодирования на эффективность сжатия.')}
+                    </div>
                   </div>
                 </div>
 
@@ -984,15 +1020,25 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                         <div className="advanced-field flex-1">
                           <label>{t('videoSettings.hwaccel') || 'Аппаратное декодирование (HW Decoding)'}</label>
                           <select
-                            value={settings.hwaccel || 'auto'}
+                            value={effectiveHwaccel}
                             onChange={(e) => setSettings(prev => ({ ...prev, hwaccel: e.target.value as any }))}
                           >
-                            <option value="auto">Авто (Рекомендуется)</option>
-                            <option value="cuda">NVIDIA CUDA (NVDEC)</option>
-                            <option value="d3d11va">Direct3D 11 (D3D11VA)</option>
-                            <option value="dxva2">DirectX VA 2.0 (DXVA2)</option>
-                            <option value="qsv">Intel Quick Sync (QSV)</option>
-                            <option value="disabled">Отключено (Только CPU)</option>
+                            {isMac ? (
+                              <>
+                                <option value="auto">{t('videoSettings.hwaccelOptions.auto') || 'Авто (Рекомендуется)'}</option>
+                                <option value="videotoolbox">{t('videoSettings.hwaccelOptions.videotoolbox') || 'Apple VideoToolbox'}</option>
+                                <option value="disabled">{t('videoSettings.hwaccelOptions.disabled') || 'Отключено (Только CPU)'}</option>
+                              </>
+                            ) : (
+                              <>
+                                <option value="auto">{t('videoSettings.hwaccelOptions.auto') || 'Авто (Рекомендуется)'}</option>
+                                <option value="cuda">{t('videoSettings.hwaccelOptions.cuda') || 'NVIDIA CUDA (NVDEC)'}</option>
+                                <option value="d3d11va">{t('videoSettings.hwaccelOptions.d3d11va') || 'Direct3D 11 (D3D11VA)'}</option>
+                                <option value="dxva2">{t('videoSettings.hwaccelOptions.dxva2') || 'DirectX VA 2.0 (DXVA2)'}</option>
+                                <option value="qsv">{t('videoSettings.hwaccelOptions.qsv') || 'Intel Quick Sync (QSV)'}</option>
+                                <option value="disabled">{t('videoSettings.hwaccelOptions.disabled') || 'Отключено (Только CPU)'}</option>
+                              </>
+                            )}
                           </select>
                         </div>
 
@@ -1160,7 +1206,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                 rateControlMode: settings.rateControlMode,
                 tune: settings.tune,
               }}
-              preferGpu={preferGpuForValidation}
+              preferGpu={preferGpu}
               isVisible={showPreview}
               onToggle={() => setShowPreview(!showPreview)}
               embedded={true}
