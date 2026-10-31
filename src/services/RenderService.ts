@@ -29,7 +29,8 @@ import type {
   MainScreenSettings,
 } from '../types';
 import StatisticsService from './StatisticsService';
-import RenderScheduler, { RenderMode, RenderSlot } from './RenderScheduler';
+import RenderScheduler, { RenderMode, RenderSlot, sanitizeRenderMode } from './RenderScheduler';
+import { isMacOS } from '../utils/platform';
 
 // ============================================================================
 // Types
@@ -830,7 +831,7 @@ class RenderServiceImpl {
   private isProcessing: boolean = false;
   private isPaused: boolean = false;
   private currentJobId: string | null = null;
-  private scheduler: RenderScheduler = new RenderScheduler();
+  private scheduler: RenderScheduler = new RenderScheduler(isMacOS());
   private renderMode: RenderMode = 'cpu';
   private gpuAvailable: boolean = false;
   private activeJobs: Set<string> = new Set();
@@ -964,9 +965,8 @@ class RenderServiceImpl {
    * Atomically updates state, scheduler, persists to settings, and notifies UI.
    */
   public setRenderMode(mode: RenderMode): void {
-    // If GPU requested but unavailable, fallback to CPU
-    const wantsGpu = mode !== 'cpu';
-    const effectiveMode: RenderMode = wantsGpu && !this.gpuAvailable ? 'cpu' : mode;
+    // Sanitize mode according to active platform and GPU availability
+    const effectiveMode = sanitizeRenderMode(mode, isMacOS(), this.gpuAvailable);
     
     // Only update if actually changed
     if (this.renderMode === effectiveMode) return;
@@ -999,11 +999,12 @@ class RenderServiceImpl {
     
     console.log('[RenderService] GPU availability set to:', available);
     
-    // If GPU just became unavailable and we're in GPU/duo mode, force CPU
-    if (!available && this.renderMode !== 'cpu') {
-      this.renderMode = 'cpu';
-      this.scheduler.setMode('cpu');
-      console.log('[RenderService] GPU unavailable, forced CPU mode');
+    // Re-evaluate mode under new GPU availability
+    const nextMode = sanitizeRenderMode(this.renderMode, isMacOS(), available);
+    if (this.renderMode !== nextMode) {
+      this.renderMode = nextMode;
+      this.scheduler.setMode(nextMode);
+      console.log('[RenderService] Render mode updated to:', nextMode, 'due to GPU availability change');
     }
     
     // Notify UI subscribers immediately

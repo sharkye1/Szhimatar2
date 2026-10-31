@@ -2,10 +2,11 @@
  * RenderModeSelector - Advanced UI component for CPU/GPU/Duo mode selection
  * 
  * Features:
- * - Auto-detection of hardware vendors (Intel/AMD CPU, NVIDIA/AMD GPU)
+ * - Auto-detection of hardware vendors (Apple Silicon, Intel, AMD, NVIDIA)
+ * - Platform-specific conditional modes (Software/Hardware on macOS, CPU/GPU/DUO on Windows)
  * - Dynamic gradient colors based on hardware
- * - Animated energy effects for Duo Mode
- * - Pulsating glow and plasma bridge effects
+ * - Animated energy effects for Duo Mode (Windows only)
+ * - Pulsating glow and plasma bridge effects (Windows only)
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
@@ -13,6 +14,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { isMacOS } from '../utils/platform';
 import DuoEasterEggOverlay from './DuoEasterEggOverlay';
 import './RenderModeSelector.css';
 
@@ -25,6 +27,7 @@ export type RenderMode = 'cpu' | 'gpu' | 'duo';
 interface HardwareInfo {
   cpu_vendor: string;
   gpu_vendor: string;
+  cpu_brand?: string;
 }
 
 interface RenderModeSelectorProps {
@@ -55,6 +58,11 @@ const CPU_GRADIENTS: Record<string, GradientConfig> = {
     secondary: '#ff6b35',
     glow: 'rgba(237, 28, 36, 0.6)',
   },
+  apple: {
+    primary: '#0071e3',
+    secondary: '#5ac8fa',
+    glow: 'rgba(0, 113, 227, 0.6)',
+  },
   unknown: {
     primary: '#6366f1',
     secondary: '#a78bfa',
@@ -78,6 +86,16 @@ const GPU_GRADIENTS: Record<string, GradientConfig> = {
     secondary: '#00bcd4',
     glow: 'rgba(0, 113, 197, 0.6)',
   },
+  apple: {
+    primary: '#0071e3',
+    secondary: '#5ac8fa',
+    glow: 'rgba(0, 113, 227, 0.6)',
+  },
+  videotoolbox: {
+    primary: '#0071e3',
+    secondary: '#5ac8fa',
+    glow: 'rgba(0, 113, 227, 0.6)',
+  },
   unknown: {
     primary: '#8b5cf6',
     secondary: '#c4b5fd',
@@ -95,13 +113,17 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
   gpuAvailable,
   isRendering = false,
 }) => {
-  const { t } = useLanguage();  const { theme, modifiedTheme } = useTheme();  const [hardwareInfo, setHardwareInfo] = useState<HardwareInfo>({
+  const { t } = useLanguage();
+  const { theme, modifiedTheme } = useTheme();
+  const isMac = isMacOS();
+
+  const [hardwareInfo, setHardwareInfo] = useState<HardwareInfo>({
     cpu_vendor: 'unknown',
     gpu_vendor: 'unknown',
   });
   const [isHovered, setIsHovered] = useState<'cpu' | 'gpu' | 'duo' | null>(null);
 
-  // Easter Egg: Click counter state
+  // Easter Egg: Click counter state (active on Windows DUO button only)
   const [duoClickCount, setDuoClickCount] = useState(0);
   const [lastDuoClickTime, setLastDuoClickTime] = useState(0);
   const [easterEggActive, setEasterEggActive] = useState(false);
@@ -122,6 +144,13 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
     detectHardware();
   }, []);
 
+  // Coerce invalid DUO mode on macOS to GPU (or CPU fallback)
+  useEffect(() => {
+    if (isMac && mode === 'duo') {
+      onModeChange(gpuAvailable ? 'gpu' : 'cpu');
+    }
+  }, [isMac, mode, gpuAvailable, onModeChange]);
+
   // Get gradient configs based on hardware
   const cpuGradient = useMemo(() => {
     if (modifiedTheme) {
@@ -131,7 +160,8 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
         glow: `rgba(var(--primary-rgb), 0.6)`,
       };
     }
-    return CPU_GRADIENTS[hardwareInfo.cpu_vendor] || CPU_GRADIENTS.unknown;
+    const vendorKey = (hardwareInfo.cpu_vendor || '').toLowerCase();
+    return CPU_GRADIENTS[vendorKey] || CPU_GRADIENTS.unknown;
   }, [hardwareInfo.cpu_vendor, modifiedTheme, theme.colors]);
 
   const gpuGradient = useMemo(() => {
@@ -142,13 +172,79 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
         glow: `rgba(var(--primary-rgb), 0.6)`,
       };
     }
-    return GPU_GRADIENTS[hardwareInfo.gpu_vendor] || GPU_GRADIENTS.unknown;
+    const vendorKey = (hardwareInfo.gpu_vendor || '').toLowerCase();
+    return GPU_GRADIENTS[vendorKey] || GPU_GRADIENTS.unknown;
   }, [hardwareInfo.gpu_vendor, modifiedTheme, theme.colors]);
-  // State calculations
-  const isCpuActive = mode === 'cpu' || mode === 'duo';
-  const isGpuActive = mode === 'gpu' || mode === 'duo';
-  const isDuoActive = mode === 'duo';
+
+  // State calculations (DUO is disallowed on macOS)
+  const isDuoActive = !isMac && mode === 'duo';
+  const isCpuActive = mode === 'cpu' || (!isMac && mode === 'duo');
+  const isGpuActive = mode === 'gpu' || (!isMac && mode === 'duo');
   const duoDisabled = !gpuAvailable;
+
+  // Button labels: Software/Hardware on macOS, CPU/GPU on Windows
+  const cpuLabel = useMemo(() => {
+    if (isMac) {
+      const val = t('renderMode.software');
+      return val && val !== 'renderMode.software' ? val : 'Software';
+    }
+    const val = t('renderMode.cpu');
+    return val && val !== 'renderMode.cpu' ? val : 'CPU';
+  }, [isMac, t]);
+
+  const gpuLabel = useMemo(() => {
+    if (isMac) {
+      const val = t('renderMode.hardware');
+      return val && val !== 'renderMode.hardware' ? val : 'Hardware';
+    }
+    const val = t('renderMode.gpu');
+    return val && val !== 'renderMode.gpu' ? val : 'GPU';
+  }, [isMac, t]);
+
+  // Tooltips
+  const cpuTooltip = useMemo(() => {
+    if (isMac) {
+      const val = t('renderMode.softwareTooltip');
+      return val && val !== 'renderMode.softwareTooltip'
+        ? val
+        : 'Render using CPU Software encoding (libx264/libx265)';
+    }
+    const val = t('renderMode.cpuTooltip');
+    return val && val !== 'renderMode.cpuTooltip' ? val : 'Render using CPU only';
+  }, [isMac, t]);
+
+  const gpuTooltip = useMemo(() => {
+    if (!gpuAvailable) {
+      const val = t('gpu.notAvailableTooltip');
+      return val && val !== 'gpu.notAvailableTooltip' ? val : 'GPU not available';
+    }
+    if (isMac) {
+      const val = t('renderMode.hardwareTooltip');
+      return val && val !== 'renderMode.hardwareTooltip'
+        ? val
+        : 'Render using Apple Silicon VideoToolbox hardware acceleration';
+    }
+    const val = t('renderMode.gpuTooltip');
+    return val && val !== 'renderMode.gpuTooltip' ? val : 'Render using GPU (NVENC)';
+  }, [gpuAvailable, isMac, t]);
+
+  // Vendor Badges
+  const cpuVendorBadge = useMemo(() => {
+    const vendor = (hardwareInfo.cpu_vendor || '').trim();
+    if (!vendor) return 'UNKNOWN';
+    return vendor.toUpperCase();
+  }, [hardwareInfo.cpu_vendor]);
+
+  const gpuVendorBadge = useMemo(() => {
+    if (!gpuAvailable) return 'N/A';
+    const vendor = (hardwareInfo.gpu_vendor || '').trim();
+    if (!vendor || vendor.toLowerCase() === 'unknown') {
+      return isMac ? 'VIDEOTOOLBOX' : 'UNKNOWN';
+    }
+    if (vendor.toLowerCase() === 'videotoolbox') return 'VIDEOTOOLBOX';
+    if (vendor.toLowerCase() === 'apple') return 'APPLE';
+    return vendor.toUpperCase();
+  }, [gpuAvailable, hardwareInfo.gpu_vendor, isMac]);
 
   // Click handlers
   const handleCpuClick = useCallback(() => {
@@ -162,58 +258,40 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
   }, [gpuAvailable, onModeChange]);
 
   const handleDuoClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
-    // Normal mode change (always execute first)
+    if (isMac) return; // Guard against execution on macOS
+
     if (gpuAvailable) {
       onModeChange('duo');
     }
 
     // Easter Egg: Track rapid clicks on DUO button
     const now = Date.now();
-    
-    // CRITICAL FIX: Event Pooling - React 17+ doesn't pool events, but we copy anyway for safety
-    // Extract button center BEFORE any setState calls to avoid stale closure issues
     const button = event.currentTarget;
     const buttonRect = button.getBoundingClientRect();
-    // Copy into plain object to avoid event target becoming stale
     const originPosition = {
       x: buttonRect.left + buttonRect.width / 2,
       y: buttonRect.top + buttonRect.height / 2,
     };
 
-    // Use functional updates to avoid stale closure issues
     setLastDuoClickTime((prevTime) => {
       const timeSinceLastClick = now - prevTime;
-
-      // Reset counter if more than 2 seconds passed
       if (timeSinceLastClick > 2000) {
         setDuoClickCount(1);
         return now;
       }
-
-      // Increment counter using functional update
       setDuoClickCount((prevCount) => {
         const newCount = prevCount + 1;
-
-        // Trigger easter egg on 15th click
         if (newCount >= 15) {
           console.log('EASTER EGG TRIGGERED');
-
-          // Set origin position (already calculated from event above - safe from pooling)
           setEasterEggOrigin(originPosition);
-          
-          // Then activate easter egg
           setEasterEggActive(true);
-          
-          // Reset counter to prevent repeated triggers
           return 0;
         }
-
         return newCount;
       });
-
       return now;
     });
-  }, [gpuAvailable, onModeChange]);
+  }, [isMac, gpuAvailable, onModeChange]);
 
   // Animation intensity based on rendering state
   const pulseIntensity = isRendering ? 1.2 : 1;
@@ -233,9 +311,9 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
         '--glow-intensity': glowIntensity,
       } as React.CSSProperties}
     >
-      {/* Outer glow for Duo Mode */}
+      {/* Outer glow for Duo Mode (Windows only) */}
       <AnimatePresence>
-        {isDuoActive && (
+        {!isMac && isDuoActive && (
           <motion.div 
             className="duo-outer-glow"
             initial={{ opacity: 0 }}
@@ -246,9 +324,9 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Energy bridge between CPU and GPU */}
+      {/* Energy bridge between CPU and GPU (Windows only) */}
       <AnimatePresence>
-        {isDuoActive && (
+        {!isMac && isDuoActive && (
           <motion.div 
             className="energy-bridge"
             initial={{ opacity: 0, scaleX: 0 }}
@@ -261,12 +339,13 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
         )}
       </AnimatePresence>
 
-      {/* CPU Button */}
+      {/* CPU / Software Button */}
       <motion.button
         className={`mode-button cpu-button ${isCpuActive ? 'active' : ''} ${isHovered === 'cpu' ? 'hovered' : ''}`}
         onClick={handleCpuClick}
         onMouseEnter={() => setIsHovered('cpu')}
         onMouseLeave={() => setIsHovered(null)}
+        title={cpuTooltip}
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
       >
@@ -274,43 +353,44 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
           <div className="button-icon">
             <CpuIcon />
           </div>
-          <span className="button-label">CPU</span>
-          <span className="vendor-badge">{hardwareInfo.cpu_vendor.toUpperCase()}</span>
+          <span className="button-label">{cpuLabel}</span>
+          <span className="vendor-badge">{cpuVendorBadge}</span>
         </div>
         {isCpuActive && <div className="active-indicator" />}
       </motion.button>
 
-      {/* Duo Button (Center) */}
-      <motion.button
-        ref={duoButtonRef}
-        className={`mode-button duo-button ${isDuoActive ? 'active' : ''} ${isHovered === 'duo' ? 'hovered' : ''}`}
-        onClick={handleDuoClick}
-        
-        onMouseEnter={() => setIsHovered('duo')}
-        onMouseLeave={() => setIsHovered(null)}
-        disabled={duoDisabled}
-        title={duoDisabled ? (t('renderMode.duoDisabledTooltip') || 'GPU not available') : (t('renderMode.duoTooltip') || 'Parallel CPU + GPU rendering')}
-        whileHover={!duoDisabled ? { scale: 1.05 } : {}}
-        whileTap={!duoDisabled ? { scale: 0.95 } : {}}
-      >
-        <div className="button-content">
-          {isDuoActive && <div className="energy-core" />}
-          <div className="button-icon duo-icon">
-            <DuoIcon />
+      {/* Duo Button (Center, Windows only) */}
+      {!isMac && (
+        <motion.button
+          ref={duoButtonRef}
+          className={`mode-button duo-button ${isDuoActive ? 'active' : ''} ${isHovered === 'duo' ? 'hovered' : ''}`}
+          onClick={handleDuoClick}
+          onMouseEnter={() => setIsHovered('duo')}
+          onMouseLeave={() => setIsHovered(null)}
+          disabled={duoDisabled}
+          title={duoDisabled ? (t('renderMode.duoDisabledTooltip') || 'GPU not available') : (t('renderMode.duoTooltip') || 'Parallel CPU + GPU rendering')}
+          whileHover={!duoDisabled ? { scale: 1.05 } : {}}
+          whileTap={!duoDisabled ? { scale: 0.95 } : {}}
+        >
+          <div className="button-content">
+            {isDuoActive && <div className="energy-core" />}
+            <div className="button-icon duo-icon">
+              <DuoIcon />
+            </div>
+            <span className="button-label">DUO</span>
           </div>
-          <span className="button-label">DUO</span>
-        </div>
-        {isDuoActive && <div className="active-indicator duo-indicator" />}
-      </motion.button>
+          {isDuoActive && <div className="active-indicator duo-indicator" />}
+        </motion.button>
+      )}
 
-      {/* GPU Button */}
+      {/* GPU / Hardware Button */}
       <motion.button
         className={`mode-button gpu-button ${isGpuActive ? 'active' : ''} ${isHovered === 'gpu' ? 'hovered' : ''} ${!gpuAvailable ? 'disabled' : ''}`}
         onClick={handleGpuClick}
         onMouseEnter={() => setIsHovered('gpu')}
         onMouseLeave={() => setIsHovered(null)}
         disabled={!gpuAvailable}
-        title={!gpuAvailable ? (t('gpu.notAvailableTooltip') || 'GPU not available') : ''}
+        title={gpuTooltip}
         whileHover={gpuAvailable ? { scale: 1.02 } : {}}
         whileTap={gpuAvailable ? { scale: 0.98 } : {}}
       >
@@ -318,18 +398,20 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
           <div className="button-icon">
             <GpuIcon />
           </div>
-          <span className="button-label">GPU</span>
-          <span className="vendor-badge">{gpuAvailable ? hardwareInfo.gpu_vendor.toUpperCase() : 'N/A'}</span>
+          <span className="button-label">{gpuLabel}</span>
+          <span className="vendor-badge">{gpuVendorBadge}</span>
         </div>
         {isGpuActive && <div className="active-indicator" />}
       </motion.button>
 
-      {/* Easter Egg: DUO Power Unleashed overlay */}
-      <DuoEasterEggOverlay
-        active={easterEggActive}
-        originPosition={easterEggOrigin}
-        onComplete={() => setEasterEggActive(false)}
-      />
+      {/* Easter Egg: DUO Power Unleashed overlay (Windows only) */}
+      {!isMac && (
+        <DuoEasterEggOverlay
+          active={easterEggActive}
+          originPosition={easterEggOrigin}
+          onComplete={() => setEasterEggActive(false)}
+        />
+      )}
     </div>
   );
 };
@@ -360,7 +442,7 @@ const DuoIcon: React.FC = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
     <circle cx="12" cy="12" r="10" />
     <path d="M12 2a10 10 0 0110 10" strokeDasharray="4 2" />
-    <circle cx="12" cy="12" r="4" />
+    <circle cx="12" cy="4" r="4" />
     <path d="M12 8v8M8 12h8" />
   </svg>
 );

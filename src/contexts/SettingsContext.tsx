@@ -1,5 +1,7 @@
-﻿import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
+import { isMacOS } from '../utils/platform';
+import { sanitizeRenderMode } from '../services/RenderScheduler';
 
 export type ScreenAnimationType = 'default' | 'soft-blur' | 'physics' | 'scale-fade' | 'none';
 
@@ -94,6 +96,10 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
     const loadSettings = async () => {
       try {
         const raw = await invoke<any>('load_settings');
+        const rawGpuAvailable = !!raw.gpuAvailable;
+        const rawRenderMode = raw.renderMode || DEFAULT_APP_SETTINGS.renderMode;
+        const sanitizedRenderMode = sanitizeRenderMode(rawRenderMode, isMacOS(), rawGpuAvailable);
+
         const normalized: AppSettings = {
           theme: raw.theme || DEFAULT_APP_SETTINGS.theme,
           modifiedTheme: raw.modifiedTheme ?? raw.modified_theme ?? DEFAULT_APP_SETTINGS.modifiedTheme,
@@ -107,8 +113,8 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
           glassBlur: raw.glassBlur ?? raw.glass_blur ?? DEFAULT_APP_SETTINGS.glassBlur,
           default_video_codec: raw.default_video_codec || DEFAULT_APP_SETTINGS.default_video_codec,
           default_audio_codec: raw.default_audio_codec || DEFAULT_APP_SETTINGS.default_audio_codec,
-          gpuAvailable: !!raw.gpuAvailable,
-          renderMode: raw.renderMode || DEFAULT_APP_SETTINGS.renderMode,
+          gpuAvailable: rawGpuAvailable,
+          renderMode: sanitizedRenderMode,
           screenAnimation: (raw.screenAnimation || raw.screen_animation || DEFAULT_APP_SETTINGS.screenAnimation) as ScreenAnimationType,
         };
         settingsRef.current = normalized;
@@ -147,6 +153,9 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
   const updateSettings = useCallback(
     (partial: Partial<AppSettings>, immediate: boolean = false) => {
       const next = { ...settingsRef.current, ...partial };
+      if (partial.renderMode !== undefined) {
+        next.renderMode = sanitizeRenderMode(partial.renderMode, isMacOS(), next.gpuAvailable);
+      }
       settingsRef.current = next;
       setSettings(next);
 

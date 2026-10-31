@@ -10,6 +10,8 @@ import RenderService from './services/RenderService';
 import MotionScreen from './components/MotionScreen';
 import CursorGlow from './components/CursorGlow';
 import DragDropOverlay from './components/DragDropOverlay';
+import { isMacOS } from './utils/platform';
+import { sanitizeRenderMode } from './services/RenderScheduler';
 
 const VideoSettings = lazy(() => import('./pages/VideoSettings'));
 const AudioSettings = lazy(() => import('./pages/AudioSettings'));
@@ -65,15 +67,18 @@ function AppContent() {
     const loadGpuSettings = async () => {
       try {
         const settings = await invoke<any>('load_settings');
+        let gpuAvailable = false;
         
         // Set GPU availability in RenderService
         if (settings.gpuAvailable !== undefined) {
-          RenderService.setGpuAvailability(!!settings.gpuAvailable);
+          gpuAvailable = !!settings.gpuAvailable;
+          RenderService.setGpuAvailability(gpuAvailable);
         } else {
           // First run: check GPU compatibility
           try {
             const available = await invoke<boolean>('check_gpu_compatibility');
-            RenderService.setGpuAvailability(!!available);
+            gpuAvailable = !!available;
+            RenderService.setGpuAvailability(gpuAvailable);
           } catch (e) {
             console.warn('GPU check failed:', e);
             RenderService.setGpuAvailability(false);
@@ -82,7 +87,8 @@ function AppContent() {
         
         // Set render mode in RenderService
         if (settings.renderMode) {
-          RenderService.setRenderMode(settings.renderMode as 'cpu' | 'gpu' | 'duo');
+          const sanitized = sanitizeRenderMode(settings.renderMode, isMacOS(), gpuAvailable);
+          RenderService.setRenderMode(sanitized);
         }
       } catch (error) {
         console.error('Failed to load GPU settings:', error);
