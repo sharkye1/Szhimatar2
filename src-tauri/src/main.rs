@@ -29,6 +29,7 @@ mod job_object {
     type DWORD = u32;
 
     const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: DWORD = 0x00002000;
+    const JOB_OBJECT_LIMIT_BREAKAWAY_OK: DWORD = 0x00000800;
     const JOB_OBJECT_EXTENDED_LIMIT_INFORMATION: u32 = 9;
 
     #[repr(C)]
@@ -83,7 +84,7 @@ mod job_object {
                 return;
             }
             let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
-            info.basic_limit_information.limit_flags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            info.basic_limit_information.limit_flags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_BREAKAWAY_OK;
 
             let res = SetInformationJobObject(
                 job,
@@ -2605,23 +2606,30 @@ fn extract_update_zip(zip_path: &PathBuf) -> Result<(), String> {
     Ok(())
 }
 
-/// Apply downloaded update - creates a batch script and restarts
+/// Apply downloaded update - replaces current executable and restarts
 #[tauri::command]
 fn apply_update() -> Result<serde_json::Value, String> {
     let updates_dir = get_updates_dir();
 
-    // Find the new exe
-    let new_exe = std::fs::read_dir(&updates_dir)
+    // Find the latest exe in updates directory by modified time
+    let mut exe_files: Vec<_> = std::fs::read_dir(&updates_dir)
         .map_err(|e| format!("Failed to read updates dir: {}", e))?
         .filter_map(|e| e.ok())
-        .find(|e| {
+        .filter(|e| {
             e.path()
                 .extension()
-                .map(|ext| ext == "exe")
+                .map(|ext| ext.eq_ignore_ascii_case("exe"))
                 .unwrap_or(false)
         })
-        .ok_or("No update executable found")?;
+        .collect();
 
+    exe_files.sort_by_key(|e| {
+        e.metadata()
+            .and_then(|m| m.modified())
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+    });
+
+    let new_exe = exe_files.last().ok_or("No update executable found")?;
     let new_exe_path = new_exe.path();
 
     // Get current exe path
@@ -2631,31 +2639,65 @@ fn apply_update() -> Result<serde_json::Value, String> {
     // Create and run update script, then exit
     #[cfg(target_os = "windows")]
     {
-        let batch_path = updates_dir.join("update.bat");
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+        use std::os::windows::process::CommandExt;
 
-        // Clean paths to support Cyrillic: remove UNC prefix
+        const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x01000000;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+        let current_pid = std::process::id();
         let src = new_exe_path.to_string_lossy().replace("\\\\?\\", "");
         let dst = current_exe.to_string_lossy().replace("\\\\?\\", "");
 
-        // Minimal batch script, CRLF line endings, no leading spaces
-        let batch_content = format!(
-            "@echo off\r\n\
-chcp 65001 > nul\r\n\
-timeout /t 3 /nobreak > nul\r\n\
-taskkill /F /IM Szhimatar.exe /T > nul 2>&1\r\n\
-copy /y \"{}\" \"{}\"\r\n\
-start \"\" \"{}\"\r\n\
-del \"%~f0\"",
-            src, dst, dst
+        let ps_script = format!(
+            "$pidToWait = {pid};\r\n\
+            $src = '{src}';\r\n\
+            $dst = '{dst}';\r\n\
+            $proc = Get-Process -Id $pidToWait -ErrorAction SilentlyContinue;\r\n\
+            if ($proc) {{\r\n\
+                $proc.WaitForExit(15000);\r\n\
+            }}\r\n\
+            Start-Sleep -Milliseconds 500;\r\n\
+            $deadline = (Get-Date).AddSeconds(15);\r\n\
+            $copied = $false;\r\n\
+            while ((Get-Date) -lt $deadline) {{\r\n\
+                try {{\r\n\
+                    Copy-Item -LiteralPath $src -Destination $dst -Force -ErrorAction Stop;\r\n\
+                    $copied = $true;\r\n\
+                    break;\r\n\
+                }} catch {{\r\n\
+                    Start-Sleep -Milliseconds 400;\r\n\
+                }}\r\n\
+            }}\r\n\
+            if ($copied) {{\r\n\
+                Start-Process -FilePath $dst;\r\n\
+            }}",
+            pid = current_pid,
+            src = src.replace(''', "''"),
+            dst = dst.replace(''', "''")
         );
 
-        std::fs::write(&batch_path, batch_content.as_bytes())
-            .map_err(|e| format!("Failed to create update script: {}", e))?;
+        let utf16_units: Vec<u16> = ps_script.encode_utf16().collect();
+        let mut bytes = Vec::with_capacity(utf16_units.len() * 2);
+        for unit in utf16_units {
+            bytes.extend_from_slice(&unit.to_le_bytes());
+        }
+        let encoded_cmd = STANDARD.encode(&bytes);
 
-        std::process::Command::new("cmd")
-            .args(["/C", &batch_path.to_string_lossy()])
+        std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-WindowStyle",
+                "Hidden",
+                "-EncodedCommand",
+                &encoded_cmd,
+            ])
+            .creation_flags(CREATE_BREAKAWAY_FROM_JOB | CREATE_NO_WINDOW)
             .spawn()
-            .map_err(|e| format!("Failed to start update script: {}", e))?;
+            .map_err(|e| format!("Failed to spawn updater process: {}", e))?;
 
         std::process::exit(0);
     }
