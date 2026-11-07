@@ -513,6 +513,16 @@ export const DownloadJobItem: React.FC<DownloadJobItemProps> = React.memo(({
       )}
     </div>
   );
+}, (prevProps, nextProps) => {
+  if (prevProps.item !== nextProps.item) return false;
+  if (prevProps.item.status !== nextProps.item.status) return false;
+  if (prevProps.item.progress !== nextProps.item.progress) return false;
+  if (prevProps.item.filePath !== nextProps.item.filePath) return false;
+  if (prevProps.item.fileSize !== nextProps.item.fileSize) return false;
+  if (prevProps.item.error !== nextProps.item.error) return false;
+  if (prevProps.item.title !== nextProps.item.title) return false;
+  if (prevProps.theme !== nextProps.theme) return false;
+  return true;
 });
 
 DownloadJobItem.displayName = 'DownloadJobItem';

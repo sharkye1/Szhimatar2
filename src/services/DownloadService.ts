@@ -82,16 +82,19 @@ class DownloadServiceImpl {
   private unlistenError: UnlistenFn | null = null;
   private unlistenStopped: UnlistenFn | null = null;
 
+  private readonly ready: Promise<void>;
+
   constructor() {
-    this.setupEventListeners();
+    this.ready = this.setupEventListeners();
   }
 
   private async setupEventListeners(): Promise<void> {
     try {
       this.unlistenStarted = await listen<DownloadStartedEvent>('download-started', (event) => {
         const payload = event.payload;
-        const item = this.queue.get(payload.job_id);
-        if (item) {
+        const current = this.queue.get(payload.job_id);
+        if (current && (current.status === 'pending' || current.status === 'downloading')) {
+          const item = { ...current };
           item.status = 'downloading';
           if (payload.title && !item.title) {
             item.title = payload.title;
@@ -99,14 +102,16 @@ class DownloadServiceImpl {
           if (payload.save_path) {
             item.savePath = payload.save_path;
           }
+          this.queue.set(payload.job_id, item);
           this.notifyListeners();
         }
       });
 
       this.unlistenProgress = await listen<DownloadProgressEvent>('download-progress', (event) => {
         const payload = event.payload;
-        const item = this.queue.get(payload.job_id);
-        if (item) {
+        const current = this.queue.get(payload.job_id);
+        if (current && (current.status === 'pending' || current.status === 'downloading')) {
+          const item = { ...current };
           item.status = 'downloading';
           item.progress = payload.progress_percent === 0 ? 0 : Math.max(item.progress, payload.progress_percent);
           if (payload.line && payload.progress_percent === 0) {
@@ -127,62 +132,83 @@ class DownloadServiceImpl {
           if (payload.title && (!item.title || item.title === item.url)) {
             item.title = payload.title;
           }
+          this.queue.set(payload.job_id, item);
           this.notifyListeners();
         }
       });
 
       this.unlistenComplete = await listen<DownloadCompleteEvent>('download-complete', (event) => {
         const payload = event.payload;
-        const item = this.queue.get(payload.job_id);
-        if (item) {
-          item.status = 'completed';
-          item.progress = 100;
-          item.eta = null;
-          item.speed = null;
-          item.title = payload.title || item.title;
-          item.filePath = payload.file_path;
-          item.fileSize = payload.file_size;
-          item.fileSizeBytes = payload.file_size_bytes;
-          item.durationSeconds = payload.duration_seconds;
-          item.durationFormatted = payload.duration_formatted;
-          item.savePath = payload.save_path || item.savePath;
-
+        const current = this.queue.get(payload.job_id);
+        if (current && (current.status === 'pending' || current.status === 'downloading')) {
+          const item = { ...current };
+          let updatedFileName = item.fileName;
+          let updatedFormat = item.format;
           if (payload.file_path) {
             const parts = payload.file_path.replace(/\\/g, '/').split('/');
-            item.fileName = parts[parts.length - 1];
-            const extMatch = item.fileName.match(/\.([a-zA-Z0-9]+)$/);
+            updatedFileName = parts[parts.length - 1];
+            const extMatch = updatedFileName.match(/\.([a-zA-Z0-9]+)$/);
             if (extMatch) {
-              item.format = extMatch[1].toLowerCase();
+              updatedFormat = extMatch[1].toLowerCase();
             }
           }
 
+          const updatedItem: DownloadQueueItem = {
+            ...item,
+            status: 'completed',
+            progress: 100,
+            eta: null,
+            speed: null,
+            title: payload.title || item.title,
+            filePath: payload.file_path,
+            fileSize: payload.file_size,
+            fileSizeBytes: payload.file_size_bytes,
+            durationSeconds: payload.duration_seconds,
+            durationFormatted: payload.duration_formatted,
+            savePath: payload.save_path || item.savePath,
+            fileName: updatedFileName,
+            format: updatedFormat,
+          };
+
+          this.queue.set(payload.job_id, updatedItem);
           this.notifyListeners();
         }
       });
 
       this.unlistenError = await listen<DownloadErrorEvent>('download-error', (event) => {
         const payload = event.payload;
-        const item = this.queue.get(payload.job_id);
-        if (item) {
-          item.status = 'error';
-          item.error = payload.error;
-          item.technicalDetails = payload.details || parseTechnicalDetails(payload.error, item.url);
-          item.message = payload.error;
+        const current = this.queue.get(payload.job_id);
+        if (current && (current.status === 'pending' || current.status === 'downloading')) {
+          const item = { ...current };
+          const updatedItem: DownloadQueueItem = {
+            ...item,
+            status: 'error',
+            error: payload.error,
+            technicalDetails: payload.details || parseTechnicalDetails(payload.error, item.url),
+            message: payload.error,
+          };
+          this.queue.set(payload.job_id, updatedItem);
           this.notifyListeners();
         }
       });
 
       this.unlistenStopped = await listen<DownloadStoppedEvent>('download-stopped', (event) => {
         const payload = event.payload;
-        const item = this.queue.get(payload.job_id);
-        if (item) {
-          item.status = 'stopped';
-          item.message = 'Stopped by user';
+        const current = this.queue.get(payload.job_id);
+        if (current && (current.status === 'pending' || current.status === 'downloading')) {
+          const item = { ...current };
+          const updatedItem: DownloadQueueItem = {
+            ...item,
+            status: 'stopped',
+            message: 'Stopped by user',
+          };
+          this.queue.set(payload.job_id, updatedItem);
           this.notifyListeners();
         }
       });
     } catch (error) {
       console.error('[DownloadService] Failed to setup event listeners:', error);
+      throw error;
     }
   }
 
@@ -221,6 +247,7 @@ class DownloadServiceImpl {
     savePath: string,
     initialTitle?: string
   ): Promise<string> {
+    await this.ready;
     const jobId = this.createDownloadJobId();
     const item: DownloadQueueItem = {
       id: jobId,
@@ -240,7 +267,10 @@ class DownloadServiceImpl {
     this.notifyListeners();
 
     try {
-      item.status = 'downloading';
+      this.queue.set(jobId, {
+        ...item,
+        status: 'downloading',
+      });
       this.notifyListeners();
 
       await invoke<string>('download_media_link', {
@@ -253,10 +283,15 @@ class DownloadServiceImpl {
       });
     } catch (error) {
       console.error('[DownloadService] Download failed:', error);
-      item.status = 'error';
-      item.error = String(error);
-      item.technicalDetails = parseTechnicalDetails(error, item.url);
-      item.message = String(error);
+      const current = this.queue.get(jobId);
+      if (!current || !['pending', 'downloading'].includes(current.status)) return jobId;
+      this.queue.set(jobId, {
+        ...current,
+        status: 'error',
+        error: String(error),
+        technicalDetails: parseTechnicalDetails(error, current.url),
+        message: String(error),
+      });
       this.notifyListeners();
     }
 
@@ -265,14 +300,8 @@ class DownloadServiceImpl {
 
   public async stopDownload(jobId: string): Promise<boolean> {
     try {
-      await invoke('stop_media_download', { jobId });
-      const item = this.queue.get(jobId);
-      if (item && item.status === 'downloading') {
-        item.status = 'stopped';
-        item.message = 'Stopped by user';
-        this.notifyListeners();
-      }
-      return true;
+      // The backend stopped event confirms completion of cancellation.
+      return await invoke<boolean>('stop_media_download', { jobId });
     } catch (error) {
       console.error('[DownloadService] Failed to stop download:', error);
       return false;

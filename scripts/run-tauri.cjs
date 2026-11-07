@@ -2,9 +2,13 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-function hasLinker() {
+function hasCompleteMsvcEnv() {
+  if (!process.env.INCLUDE || !process.env.LIB) {
+    return false;
+  }
   try {
     execSync('where link.exe', { stdio: 'ignore' });
+    execSync('where cl.exe', { stdio: 'ignore' });
     return true;
   } catch {
     return false;
@@ -12,7 +16,7 @@ function hasLinker() {
 }
 
 function loadMsvcEnv() {
-  if (hasLinker()) {
+  if (hasCompleteMsvcEnv()) {
     return;
   }
 

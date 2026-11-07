@@ -1004,10 +1004,13 @@ class RenderServiceImpl {
           const sourceExtension = lastDot > 0 ? job.fileName.substring(lastDot + 1).toLowerCase() : 'mp4';
           const isGif = videoSettings.targetFormat === 'gif' || nextOutputPath.toLowerCase().endsWith('.gif');
           const targetExtension = isGif ? 'gif' : (nextOutputPath.split('.').pop()?.toLowerCase() || 'mp4');
-          job.outputPath = nextOutputPath;
-          job.targetFormat = isGif ? 'gif' : 'video';
-          job.sourceExtension = sourceExtension;
-          job.targetExtension = targetExtension;
+          this.jobs.set(id, {
+            ...job,
+            outputPath: nextOutputPath,
+            targetFormat: isGif ? 'gif' : 'video',
+            sourceExtension,
+            targetExtension,
+          });
         }
       }
       this.notifyListeners();
@@ -1178,7 +1181,7 @@ class RenderServiceImpl {
    * Notify all queue listeners
    */
   private notifyListeners(): void {
-    const jobs = Array.from(this.jobs.values());
+    const jobs = this.getJobs();
     this.listeners.forEach(callback => callback(jobs));
   }
 
@@ -1363,8 +1366,11 @@ class RenderServiceImpl {
       return false;
     }
 
-    job.trimStartSec = normalized.start;
-    job.trimEndSec = normalized.end;
+    this.jobs.set(jobId, {
+      ...job,
+      trimStartSec: normalized.start,
+      trimEndSec: normalized.end,
+    });
     this.notifyListeners();
     return true;
   }
@@ -1464,21 +1470,25 @@ class RenderServiceImpl {
     if (!job) return;
 
     // Update job status
-    job.status = 'processing';
-    job.startTime = Date.now();
-    job.assignedSlot = slot; // Save which slot is used
+    const updatedJob: RenderJob = {
+      ...job,
+      status: 'processing',
+      startTime: Date.now(),
+      assignedSlot: slot, // Save which slot is used
+    };
+    this.jobs.set(jobId, updatedJob);
     this.currentJobId = jobId;
     this.activeJobs.add(jobId);
     this.notifyListeners();
 
-    const trim = this.normalizeTrimRange(job.durationSeconds, job.trimStartSec, job.trimEndSec);
+    const trim = this.normalizeTrimRange(updatedJob.durationSeconds, updatedJob.trimStartSec, updatedJob.trimEndSec);
     const shouldTrim =
-      job.durationSeconds > 0 &&
-      (trim.start > 0.0001 || trim.end < (job.durationSeconds - 0.0001)) &&
+      updatedJob.durationSeconds > 0 &&
+      (trim.start > 0.0001 || trim.end < (updatedJob.durationSeconds - 0.0001)) &&
       (trim.end - trim.start) >= RenderServiceImpl.MIN_TRIM_DURATION_SEC;
     const effectiveDurationSeconds = shouldTrim
       ? (trim.end - trim.start)
-      : Math.max(0, job.durationSeconds);
+      : Math.max(0, updatedJob.durationSeconds);
 
     // Add to statistics tracking
     try {
@@ -1746,15 +1756,19 @@ function splitFfmpegArgs(args: string[]): { inputArgs: string[]; outputArgs: str
    */
   private flushProgressUpdates(): void {
     this.pendingJobProgress.forEach((data, jobId) => {
-      const listeners = this.jobProgressListeners.get(jobId);
-      if (listeners) {
-        listeners.forEach((callback) => {
-          try {
-            callback(data);
-          } catch (e) {
-            console.error('[RenderService] Error in job progress listener:', e);
-          }
-        });
+      const job = this.jobs.get(jobId);
+      // Only emit progress if job is still active, to prevent stale ticks from overwriting terminal states
+      if (job && (job.status === 'processing' || job.status === 'paused')) {
+        const listeners = this.jobProgressListeners.get(jobId);
+        if (listeners) {
+          listeners.forEach((callback) => {
+            try {
+              callback(data);
+            } catch (e) {
+              console.error('[RenderService] Error in job progress listener:', e);
+            }
+          });
+        }
       }
     });
     this.pendingJobProgress.clear();
@@ -1809,12 +1823,19 @@ function splitFfmpegArgs(args: string[]): { inputArgs: string[]; outputArgs: str
     const job = this.jobs.get(jobId);
     if (!job) return;
 
+    // Clear throttled progress timer/data for this job so it cannot overwrite completion
+    this.pendingJobProgress.delete(jobId);
+
     const slot = job.assignedSlot || 'unknown';
-    job.status = 'completed';
-    job.progress = 100;
-    job.eta = 0;
-    job.etaFormatted = '00:00:00';
-    job.endTime = Date.now();
+    const updatedJob: RenderJob = {
+      ...job,
+      status: 'completed',
+      progress: 100,
+      eta: 0,
+      etaFormatted: '00:00:00',
+      endTime: Date.now(),
+    };
+    this.jobs.set(jobId, updatedJob);
     this.activeJobs.delete(jobId);
     this.scheduler.release(jobId);
 
@@ -1824,93 +1845,204 @@ function splitFfmpegArgs(args: string[]): { inputArgs: string[]; outputArgs: str
 
     console.log(`[RenderService] Job completed on ${slot.toUpperCase()} slot:`, jobId);
 
+    // Notify job progress listeners of final 100% completion
+    const progressListeners = this.jobProgressListeners.get(jobId);
+    if (progressListeners) {
+      const finalProgress: JobProgressData = {
+        jobId: updatedJob.id,
+        progress: 100,
+        fps: 0,
+        speed: 0,
+        bitrate: updatedJob.bitrate,
+        eta: 0,
+        etaFormatted: '00:00:00',
+        currentTime: updatedJob.currentTime,
+        frame: updatedJob.frame,
+        outputSize: updatedJob.outputSize || '0 MB',
+        estimatedFinalSize: updatedJob.outputSize,
+      };
+      progressListeners.forEach((callback) => {
+        try {
+          callback(finalProgress);
+        } catch (e) {
+          console.error('[RenderService] Error in job progress listener:', e);
+        }
+      });
+    }
+
+    // Update statistics
+    StatisticsService.markRenderComplete(jobId);
+
     // Log completion with slot info
-    invoke('write_render_log', {
-      jobId,
-      message: `Render completed on ${slot.toUpperCase()} slot. Duration: ${((job.endTime! - job.startTime!) / 1000).toFixed(1)}s`
-    });
+    if (typeof window !== 'undefined') {
+      invoke('write_render_log', {
+        jobId,
+        message: `Render completed on ${slot.toUpperCase()} slot. Duration: ${((updatedJob.endTime! - updatedJob.startTime!) / 1000).toFixed(1)}s`
+      }).catch(() => {});
+    }
     this.notifyListeners();
-    
+
+    // Query exact output file size from disk to ensure 100% accurate displayed size
+    if (typeof window !== 'undefined') {
+      invoke<number>('get_file_size_bytes', { inputPath: updatedJob.outputPath })
+        .then((bytes) => {
+          if (bytes && bytes > 0) {
+            const currentJob = this.jobs.get(jobId);
+            if (currentJob && currentJob.status === 'completed') {
+              const mb = bytes / (1024 * 1024);
+              const formatted = mb >= 1000 ? `${(mb / 1024).toFixed(2)} GB` : `${mb.toFixed(1)} MB`;
+              this.jobs.set(jobId, {
+                ...currentJob,
+                outputSizeBytes: bytes,
+                outputSize: formatted,
+              });
+              this.notifyListeners();
+            }
+          }
+        })
+        .catch(() => {});
+    }
 
     // Process next job(s) - Duo mode can continue parallel rendering
     if (this.isProcessing && !this.isPaused) {
       console.log(`[RenderService] Dispatching next job after ${slot.toUpperCase()} completion. Active jobs: ${this.activeJobs.size}`);
       this.dispatch();
     }
-    }
-    
-    /**
-     * Handle job stopped by user
-     */
-    private handleJobStopped(jobId: string, stoppedBy: string): void {
-      const job = this.jobs.get(jobId);
-      if (!job) return;
+  }
 
-      // Only update if still processing
-      if (job.status === 'processing') {
-        job.status = 'stopped';
-        job.endTime = Date.now();
-        this.activeJobs.delete(jobId);
-        this.scheduler.release(jobId);
-        this.currentJobId = null;
-        this.setProcessing(false); // stop queue advancement
+  /**
+   * Handle job stopped by user
+   */
+  private handleJobStopped(jobId: string, stoppedBy: string): void {
+    const job = this.jobs.get(jobId);
+    if (!job) return;
 
-        console.log('[RenderService] Job stopped:', jobId, `by ${stoppedBy}`);
+    // Only update if still processing
+    if (job.status === 'processing') {
+      this.pendingJobProgress.delete(jobId);
+      const updatedJob: RenderJob = {
+        ...job,
+        status: 'stopped',
+        endTime: Date.now(),
+      };
+      this.jobs.set(jobId, updatedJob);
+      this.activeJobs.delete(jobId);
+      this.scheduler.release(jobId);
+      this.currentJobId = null;
+      this.setProcessing(false); // stop queue advancement
 
-        // Log stop
+      console.log('[RenderService] Job stopped:', jobId, `by ${stoppedBy}`);
+
+      const progressListeners = this.jobProgressListeners.get(jobId);
+      if (progressListeners) {
+        const stoppedProgress: JobProgressData = {
+          jobId: updatedJob.id,
+          progress: updatedJob.progress,
+          fps: 0,
+          speed: 0,
+          bitrate: updatedJob.bitrate,
+          eta: 0,
+          etaFormatted: '00:00:00',
+          currentTime: updatedJob.currentTime,
+          frame: updatedJob.frame,
+          outputSize: updatedJob.outputSize || '0 MB',
+          estimatedFinalSize: updatedJob.estimatedFinalSize,
+        };
+        progressListeners.forEach((callback) => {
+          try {
+            callback(stoppedProgress);
+          } catch (e) {
+            console.error('[RenderService] Error in job progress listener:', e);
+          }
+        });
+      }
+
+      // Log stop
+      if (typeof window !== 'undefined') {
         invoke('write_render_log', {
           jobId,
-          message: `Render stopped by ${stoppedBy}. Duration: ${((job.endTime! - job.startTime!) / 1000).toFixed(1)}s`
-        });
-
-        // Update statistics - mark as stopped, NOT as error
-        StatisticsService.markRenderStopped(jobId);
-
-        this.notifyListeners();
-
-        // DO NOT continue queue - wait for manual start
-        console.log('[RenderService] Queue paused after stop');
+          message: `Render stopped by ${stoppedBy}. Duration: ${((updatedJob.endTime! - updatedJob.startTime!) / 1000).toFixed(1)}s`
+        }).catch(() => {});
       }
+
+      // Update statistics - mark as stopped, NOT as error
+      StatisticsService.markRenderStopped(jobId);
+
+      this.notifyListeners();
+
+      // DO NOT continue queue - wait for manual start
+      console.log('[RenderService] Queue paused after stop');
     }
-  
+  }
 
   /**
    * Handle job error
    */
-    private handleJobError(jobId: string, error: string): void {
-        const job = this.jobs.get(jobId);
-        if (!job) return;
+  private handleJobError(jobId: string, error: string): void {
+    const job = this.jobs.get(jobId);
+    if (!job) return;
 
-        const slot = job.assignedSlot || 'unknown';
-        job.status = 'error';
-        job.error = error;
-        job.endTime = Date.now();
-        this.activeJobs.delete(jobId);
-        this.scheduler.release(jobId);
+    this.pendingJobProgress.delete(jobId);
+    const slot = job.assignedSlot || 'unknown';
+    const updatedJob: RenderJob = {
+      ...job,
+      status: 'error',
+      error,
+      endTime: Date.now(),
+    };
+    this.jobs.set(jobId, updatedJob);
+    this.activeJobs.delete(jobId);
+    this.scheduler.release(jobId);
 
-        if (this.activeJobs.size === 0) {
-          this.currentJobId = null;
+    if (this.activeJobs.size === 0) {
+      this.currentJobId = null;
+    }
+
+    console.error(`[RenderService] Job failed on ${slot.toUpperCase()} slot:`, jobId, error);
+
+    const progressListeners = this.jobProgressListeners.get(jobId);
+    if (progressListeners) {
+      const errorProgress: JobProgressData = {
+        jobId: updatedJob.id,
+        progress: updatedJob.progress,
+        fps: 0,
+        speed: 0,
+        bitrate: updatedJob.bitrate,
+        eta: 0,
+        etaFormatted: '00:00:00',
+        currentTime: updatedJob.currentTime,
+        frame: updatedJob.frame,
+        outputSize: updatedJob.outputSize || '0 MB',
+        estimatedFinalSize: updatedJob.estimatedFinalSize,
+      };
+      progressListeners.forEach((callback) => {
+        try {
+          callback(errorProgress);
+        } catch (e) {
+          console.error('[RenderService] Error in job progress listener:', e);
         }
+      });
+    }
 
-        console.error(`[RenderService] Job failed on ${slot.toUpperCase()} slot:`, jobId, error);
+    // Update statistics
+    StatisticsService.markRenderError(jobId, error);
 
-        // Update statistics
-        StatisticsService.markRenderError(jobId, error);
+    // Log error with slot info
+    if (typeof window !== 'undefined') {
+      invoke('write_render_log', {
+        jobId,
+        message: `Render failed on ${slot.toUpperCase()} slot: ${error}`
+      }).catch(() => {});
+    }
 
-        // Log error with slot info
-        invoke('write_render_log', {
-          jobId,
-          message: `Render failed on ${slot.toUpperCase()} slot: ${error}`
-        });
-    
     this.notifyListeners();
-    
+
     // Continue with next job - other slot's renders are unaffected
     if (this.isProcessing && !this.isPaused) {
       console.log(`[RenderService] Dispatching next job after ${slot.toUpperCase()} error. Active jobs: ${this.activeJobs.size}`);
       this.dispatch();
     }
-    }
+  }
 
   /**
    * Format FFmpeg error messages for user display
@@ -2002,11 +2134,11 @@ function splitFfmpegArgs(args: string[]): { inputArgs: string[]; outputArgs: str
   public pause(): void {
     this.isPaused = true;
     
-    // Mark current job as paused
-    if (this.currentJobId) {
-      const job = this.jobs.get(this.currentJobId);
+    // Mark active jobs as paused
+    for (const jobId of this.activeJobs) {
+      const job = this.jobs.get(jobId);
       if (job && job.status === 'processing') {
-        job.status = 'paused';
+        this.jobs.set(jobId, { ...job, status: 'paused' });
       }
     }
 
@@ -2022,11 +2154,11 @@ function splitFfmpegArgs(args: string[]): { inputArgs: string[]; outputArgs: str
 
     this.isPaused = false;
 
-    // Resume current job or start next
-    if (this.currentJobId) {
-      const job = this.jobs.get(this.currentJobId);
+    // Resume active jobs
+    for (const jobId of this.activeJobs) {
+      const job = this.jobs.get(jobId);
       if (job && job.status === 'paused') {
-        job.status = 'processing';
+        this.jobs.set(jobId, { ...job, status: 'processing' });
       }
     }
 
@@ -2056,7 +2188,8 @@ function splitFfmpegArgs(args: string[]): { inputArgs: string[]; outputArgs: str
     this.activeJobs.forEach(jobId => {
       const job = this.jobs.get(jobId);
       if (job) {
-        job.status = 'stopped';
+        this.pendingJobProgress.delete(jobId);
+        this.jobs.set(jobId, { ...job, status: 'stopped', endTime: Date.now() });
       }
     });
     this.activeJobs.clear();
@@ -2078,7 +2211,9 @@ function splitFfmpegArgs(args: string[]): { inputArgs: string[]; outputArgs: str
         await invoke('stop_ffmpeg_render', { jobId });
 
         // Local state updates; render-stopped event will also adjust
-        job.status = 'stopped';
+        const currentJob = this.jobs.get(jobId) || job;
+        this.pendingJobProgress.delete(jobId);
+        this.jobs.set(jobId, { ...currentJob, status: 'stopped', endTime: Date.now() });
         this.activeJobs.delete(jobId);
         this.scheduler.release(jobId);
         this.currentJobId = null;

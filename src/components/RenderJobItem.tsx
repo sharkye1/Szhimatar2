@@ -80,12 +80,17 @@ export const RenderJobItem: React.FC<RenderJobItemProps> = React.memo(({
     }
   };
 
-  const progress = liveProgress ? liveProgress.progress : job.progress;
-  const fps = liveProgress ? liveProgress.fps : job.fps;
-  const speed = liveProgress ? liveProgress.speed : job.speed;
-  const etaFormatted = liveProgress ? liveProgress.etaFormatted : job.etaFormatted;
-  const outputSize = liveProgress ? liveProgress.outputSize : job.outputSize;
-  const estimatedFinalSize = liveProgress ? liveProgress.estimatedFinalSize : job.estimatedFinalSize;
+  const isFinished = job.status === 'completed' || job.status === 'error' || job.status === 'stopped';
+  const isCompleted = job.status === 'completed';
+
+  const progress = isCompleted ? 100 : (liveProgress ? liveProgress.progress : job.progress);
+  const fps = isFinished ? 0 : (liveProgress ? liveProgress.fps : job.fps);
+  const speed = isFinished ? 0 : (liveProgress ? liveProgress.speed : job.speed);
+  const etaFormatted = isCompleted ? '00:00:00' : (liveProgress ? liveProgress.etaFormatted : job.etaFormatted);
+  const outputSize = (isCompleted && job.outputSize && job.outputSize !== '—')
+    ? job.outputSize
+    : (liveProgress ? liveProgress.outputSize : job.outputSize);
+  const estimatedFinalSize = isCompleted ? outputSize : (liveProgress ? liveProgress.estimatedFinalSize : job.estimatedFinalSize);
 
   return (
     <div className="queue-item" style={{ borderColor: theme.colors.border }}>
@@ -660,6 +665,21 @@ export const RenderJobItem: React.FC<RenderJobItemProps> = React.memo(({
       )}
     </div>
   );
+}, (prevProps, nextProps) => {
+  if (prevProps.job !== nextProps.job) return false;
+  if (prevProps.job.status !== nextProps.job.status) return false;
+  if (prevProps.job.progress !== nextProps.job.progress) return false;
+  if (prevProps.job.outputPath !== nextProps.job.outputPath) return false;
+  if (prevProps.job.outputSize !== nextProps.job.outputSize) return false;
+  if (prevProps.job.outputSizeBytes !== nextProps.job.outputSizeBytes) return false;
+  if (prevProps.job.trimStartSec !== nextProps.job.trimStartSec) return false;
+  if (prevProps.job.trimEndSec !== nextProps.job.trimEndSec) return false;
+  if (prevProps.job.error !== nextProps.job.error) return false;
+  if (prevProps.job.assignedSlot !== nextProps.job.assignedSlot) return false;
+  if (prevProps.theme !== nextProps.theme) return false;
+  if (prevProps.trimFramePreview !== nextProps.trimFramePreview) return false;
+  if (prevProps.getStatusDisplay !== nextProps.getStatusDisplay) return false;
+  return true;
 });
 
 RenderJobItem.displayName = 'RenderJobItem';

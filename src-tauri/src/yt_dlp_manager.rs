@@ -675,6 +675,8 @@ pub fn build_technical_details(
 }
 
 pub async fn ensure_yt_dlp_installed(app_handle: &AppHandle) -> Result<PathBuf, String> {
+    static INSTALL_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+    let _install_lock = INSTALL_LOCK.lock().await;
     let yt_dlp_path = yt_dlp_path()?;
 
     if yt_dlp_path.exists() {
@@ -706,8 +708,10 @@ pub async fn ensure_yt_dlp_installed(app_handle: &AppHandle) -> Result<PathBuf, 
     }
 
     let bytes = response.bytes().await.map_err(|e| e.to_string())?;
-    tokio::fs::write(&yt_dlp_path, bytes).await.map_err(|e| e.to_string())?;
-    install_permissions(&yt_dlp_path)?;
+    let temporary = yt_dlp_path.with_extension("installing");
+    tokio::fs::write(&temporary, bytes).await.map_err(|e| e.to_string())?;
+    install_permissions(&temporary)?;
+    tokio::fs::rename(&temporary, &yt_dlp_path).await.map_err(|e| e.to_string())?;
 
     let _ = app_handle.emit_all(
         "download-manager-log",
@@ -1216,12 +1220,47 @@ fn parse_progress_meta(line: &str) -> (Option<String>, Option<f64>) {
     (None, None)
 }
 
+// A separate name per request also isolates concurrent downloads and qualities.
+fn download_output_template() -> String {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let sequence = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!("%(title).100s [%(id).40s]-{}-{}-{}.%(ext)s",
+        std::process::id(), chrono::Utc::now().timestamp_micros(), sequence)
+}
+
+struct DownloadRegistration(String);
+
+impl DownloadRegistration {
+    fn new(job_id: &str, token: &tokio_util::sync::CancellationToken) -> Result<Self, String> {
+        let mut manager = crate::process_manager::PROCESS_MANAGER.lock().map_err(|e| e.to_string())?;
+        if manager.has_process(job_id) { return Err("Download job already exists".to_string()); }
+        if manager.take_stopped(job_id) { token.cancel(); }
+        manager.register(job_id.to_string(), crate::process_manager::TaskType::Download, None, token.clone());
+        Ok(Self(job_id.to_string()))
+    }
+}
+
+impl Drop for DownloadRegistration {
+    fn drop(&mut self) {
+        if let Ok(mut manager) = crate::process_manager::PROCESS_MANAGER.lock() {
+            manager.unregister(&self.0);
+        }
+    }
+}
+
+fn emit_download_stopped(app: &AppHandle, job_id: &str) {
+    let _ = app.emit_all("download-stopped", serde_json::json!({
+        "job_id": job_id, "stopped_by": "user"
+    }));
+}
+
 fn build_download_command_args(
     normalized_save_path_str: &str,
     format: &str,
     quality: &str,
     url: &str,
     proxy: Option<&str>,
+    output_template: &str,
 ) -> Vec<String> {
     let mut command_args: Vec<String> = vec![
         "--encoding".to_string(),
@@ -1246,7 +1285,11 @@ fn build_download_command_args(
         "-P".to_string(),
         normalized_save_path_str.to_string(),
         "-o".to_string(),
-        "%(title).150s.%(ext)s".to_string(),
+        output_template.to_string(),
+        "--no-simulate".to_string(),
+        "--no-quiet".to_string(),
+        "--print".to_string(),
+        "after_move:SZ_FILEPATH:%(filepath)j".to_string(),
         "--progress".to_string(),
         "--progress-template".to_string(),
         "download:SZ_PROGRESS:%(progress._percent_str)s|%(progress._eta_str)s|%(progress._speed_str)s|%(progress._total_bytes_str,progress._total_bytes_estimate_str,progress._downloaded_bytes_str)s|%(info.title)s|%(info.duration)s".to_string(),
@@ -1270,13 +1313,27 @@ fn build_download_command_args(
         command_args.push("--audio-format".to_string());
         command_args.push("mp3".to_string());
     } else {
+        let container = format.to_lowercase();
         if !quality.trim().is_empty() {
+            let selector = match container.as_str() {
+                "mp4" | "webm" => {
+                    let audio_ext = if container == "mp4" { "m4a" } else { "webm" };
+                    quality.replace("bestvideo", &format!("bestvideo[ext={}]", container))
+                        .replace("bestaudio", &format!("bestaudio[ext={}]", audio_ext))
+                        .replace("/best", &format!("/best[ext={}]", container))
+                }
+                _ => quality.to_string(),
+            };
             command_args.push("-f".to_string());
-            command_args.push(quality.to_string());
+            command_args.push(selector);
         }
-
-        command_args.push("--merge-output-format".to_string());
-        command_args.push("mp4".to_string());
+        if container != "best" {
+            command_args.push("--merge-output-format".to_string());
+            command_args.push(container.clone());
+            // Merging alone does not enforce the container for single-stream files.
+            command_args.push("--remux-video".to_string());
+            command_args.push(container);
+        }
     }
 
     command_args.push(url.to_string());
@@ -1294,9 +1351,23 @@ pub async fn download_media_link(
     initial_title: Option<String>,
 ) -> Result<String, String> {
     let clean_url = sanitize_url_input(&url);
-    let yt_dlp_path = ensure_yt_dlp_installed(&app_handle).await?;
     let job_id =
         job_id.unwrap_or_else(|| format!("download-{}", chrono::Utc::now().timestamp_millis()));
+    let cancel_token = tokio_util::sync::CancellationToken::new();
+    let registration = DownloadRegistration::new(&job_id, &cancel_token)?;
+    // Installation may be shared by other requests; cancelling this request must
+    // not interrupt a write of the executable used by those requests.
+    let install_app = app_handle.clone();
+    let install = tauri::async_runtime::spawn(async move { ensure_yt_dlp_installed(&install_app).await });
+    let yt_dlp_path = tokio::select! {
+        biased;
+        _ = cancel_token.cancelled() => {
+            emit_download_stopped(&app_handle, &job_id);
+            return Ok(job_id);
+        }
+        result = install => result.map_err(|e| e.to_string())??,
+    };
+
     
     let clean_path_str = save_path.trim().trim_matches('"').trim_matches('\'').trim();
     let is_placeholder = clean_path_str.is_empty() 
@@ -1316,8 +1387,8 @@ pub async fn download_media_link(
 
     let normalized_save_path_str = resolved_save_path.to_string_lossy().replace('\\', "/");
     let job_id_clone = job_id.clone();
-    let cancel_token = tokio_util::sync::CancellationToken::new();
     let cancel_token_clone = cancel_token.clone();
+    let output_template = download_output_template();
 
     let _ = app_handle.emit_all(
         "download-started",
@@ -1331,6 +1402,7 @@ pub async fn download_media_link(
 
     let clean_url_task = clean_url.clone();
     tauri::async_runtime::spawn(async move {
+        let _registration = registration;
         let url = clean_url_task;
         let settings = crate::load_settings().unwrap_or_default();
         let proxy_mode = settings.proxy_mode;
@@ -1351,9 +1423,14 @@ pub async fn download_media_link(
         let discovered_title: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(initial_title.clone()));
         let discovered_duration: Arc<Mutex<Option<f64>>> = Arc::new(Mutex::new(None));
         let discovered_filepath: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+        let final_output: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
 
         let mut attempt = 0;
         while attempt < 2 {
+            if cancel_token_clone.is_cancelled() {
+                emit_download_stopped(&app_handle, &job_id_clone);
+                break;
+            }
             attempt += 1;
 
             let command_args = build_download_command_args(
@@ -1362,6 +1439,7 @@ pub async fn download_media_link(
                 &quality,
                 &url,
                 current_proxy.as_deref(),
+                &output_template,
             );
 
             let mut command = tokio::process::Command::new(&yt_dlp_path);
@@ -1370,7 +1448,13 @@ pub async fn download_media_link(
                 const CREATE_NO_WINDOW: u32 = 0x08000000;
                 command.creation_flags(CREATE_NO_WINDOW);
             }
+            #[cfg(unix)]
+            {
+                use std::os::unix::process::CommandExt;
+                command.as_std_mut().process_group(0);
+            }
             command
+                .kill_on_drop(true)
                 .env("PYTHONIOENCODING", "utf-8")
                 .env("PYTHONUTF8", "1")
                 .env("PYTHONLEGACYWINDOWSSTDIO", "utf-8")
@@ -1425,8 +1509,9 @@ pub async fn download_media_link(
             let title_for_stdout = Arc::clone(&discovered_title);
             let duration_for_stdout = Arc::clone(&discovered_duration);
             let filepath_for_stdout = Arc::clone(&discovered_filepath);
+            let final_output_stdout = Arc::clone(&final_output);
 
-            let stdout_handle = tokio::spawn(async move {
+            let mut stdout_handle = tokio::spawn(async move {
                 let mut captured_lines: Vec<String> = Vec::new();
                 let mut last_emit = Instant::now() - Duration::from_millis(200);
                 let mut has_multiple_streams = false;
@@ -1540,9 +1625,8 @@ pub async fn download_media_link(
                                 }
                             }
                         } else if let Some(pos) = trimmed.find("SZ_FILEPATH:") {
-                            let path = trimmed[pos + "SZ_FILEPATH:".len()..].trim().trim_matches('"').to_string();
-                            if !path.is_empty() {
-                                if let Ok(mut lock) = filepath_for_stdout.lock() {
+                            if let Ok(path) = serde_json::from_str::<String>(&trimmed[pos + "SZ_FILEPATH:".len()..]) {
+                                if let Ok(mut lock) = final_output_stdout.lock() {
                                     *lock = Some(path);
                                 }
                             }
@@ -1642,7 +1726,7 @@ pub async fn download_media_link(
                 captured_lines.join("\n")
             });
 
-            let stderr_handle = tokio::spawn(async move {
+            let mut stderr_handle = tokio::spawn(async move {
                 let mut err_lines = Vec::new();
                 if let Some(stderr) = stderr {
                     use tokio::io::AsyncBufReadExt;
@@ -1663,8 +1747,8 @@ pub async fn download_media_link(
 
             tokio::select! {
                 res = child.wait() => {
-                    let last_stdout: String = stdout_handle.await.unwrap_or_default();
-                    let stderr_output: String = stderr_handle.await.unwrap_or_default();
+                    let last_stdout: String = (&mut stdout_handle).await.unwrap_or_default();
+                    let stderr_output: String = (&mut stderr_handle).await.unwrap_or_default();
 
                     let status = match res {
                         Ok(s) => s,
@@ -1723,57 +1807,17 @@ pub async fn download_media_link(
                                 "Downloaded Media".to_string()
                             });
 
-                        let explicit_filepath = discovered_filepath.lock().ok().and_then(|f| f.clone());
-                        let final_filepath = {
-                            let mut resolved: Option<PathBuf> = None;
-                            if let Some(p) = explicit_filepath {
-                                let path = PathBuf::from(&p);
-                                let abs_path = if path.is_absolute() {
-                                    path
-                                } else {
-                                    resolved_save_path.join(path)
-                                };
-
-                                if abs_path.is_file() {
-                                    resolved = Some(abs_path);
-                                } else {
-                                    let expected_ext = if format.eq_ignore_ascii_case("mp3") { "mp3" } else { "mp4" };
-                                    let target_ext_path = abs_path.with_extension(expected_ext);
-                                    if target_ext_path.is_file() {
-                                        resolved = Some(target_ext_path);
-                                    } else if let Some(stem) = abs_path.file_stem() {
-                                        if let Ok(entries) = fs::read_dir(&resolved_save_path) {
-                                            for entry in entries.flatten() {
-                                                let ep = entry.path();
-                                                if ep.is_file() && ep.file_stem() == Some(stem) {
-                                                    resolved = Some(ep);
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                        let final_filepath = final_output.lock().ok().and_then(|f| f.clone())
+                            .map(PathBuf::from).filter(|p| p.is_file());
+                        let final_filepath = match final_filepath {
+                            Some(path) => path,
+                            None => {
+                                let _ = app_handle.emit_all("download-error", DownloadErrorPayload {
+                                    job_id: job_id_clone.clone(), url: url.clone(),
+                                    error: "yt-dlp did not report an existing final output file".to_string(), details: None,
+                                });
+                                break;
                             }
-
-                            // Fallback: newest matching file in resolved_save_path
-                            resolved.unwrap_or_else(|| {
-                                let mut newest_file: Option<(PathBuf, std::time::SystemTime)> = None;
-                                if let Ok(entries) = fs::read_dir(&resolved_save_path) {
-                                    for entry in entries.flatten() {
-                                        let path = entry.path();
-                                        if path.is_file() {
-                                            if let Ok(meta) = path.metadata() {
-                                                if let Ok(modified) = meta.modified() {
-                                                    if newest_file.as_ref().map(|(_, t)| modified > *t).unwrap_or(true) {
-                                                        newest_file = Some((path, modified));
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                newest_file.map(|(p, _)| p).unwrap_or_else(|| resolved_save_path.clone())
-                            })
                         };
 
                         let file_size_bytes = if final_filepath.is_file() {
@@ -1920,7 +1964,23 @@ pub async fn download_media_link(
                 }
                 _ = cancel_token_clone.cancelled() => {
                     eprintln!("🛑 [yt-dlp] Download {} cancelled by user", job_id_clone);
+                    #[cfg(windows)]
+                    if let Some(pid) = child.id() {
+                        let mut kill = tokio::process::Command::new("taskkill");
+                        kill.args(["/PID", &pid.to_string(), "/T", "/F"]);
+                        kill.creation_flags(0x08000000);
+                        let _ = kill.output().await;
+                    }
+                    #[cfg(unix)]
+                    if let Some(pid) = child.id() {
+                        let _ = tokio::process::Command::new("/bin/kill")
+                            .args(["-KILL", "--", &format!("-{}", pid)]).status().await;
+                    }
                     let _ = child.kill().await;
+                    stdout_handle.abort();
+                    stderr_handle.abort();
+                    let _ = stdout_handle.await;
+                    let _ = stderr_handle.await;
                     let _ = app_handle.emit_all(
                         "download-stopped",
                         serde_json::json!({
@@ -1933,10 +1993,6 @@ pub async fn download_media_link(
             }
         }
 
-        // Clean up task from manager
-        if let Ok(mut manager) = crate::process_manager::PROCESS_MANAGER.lock() {
-            manager.unregister(&job_id_clone);
-        }
     });
 
     Ok(job_id)
@@ -1953,6 +2009,63 @@ pub fn stop_media_download(job_id: String) -> Result<bool, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preparation_cancellation_survives_pid_registration_and_cleans_up() {
+        let id = "test-download-preparation-cancel";
+        let token = tokio_util::sync::CancellationToken::new();
+        let registration = DownloadRegistration::new(id, &token).unwrap();
+        {
+            let mut manager = crate::process_manager::PROCESS_MANAGER.lock().unwrap();
+            assert!(manager.cancel_task(id));
+            assert!(token.is_cancelled());
+            manager.register(id.to_string(), crate::process_manager::TaskType::Download, Some(123), token.clone());
+            assert!(token.is_cancelled());
+        }
+        drop(registration);
+        let manager = crate::process_manager::PROCESS_MANAGER.lock().unwrap();
+        assert!(!manager.has_process(id));
+        assert!(!manager.is_stopped(id));
+    }
+
+    #[test]
+    fn cancellation_received_before_command_registration_is_honored() {
+        let id = "test-download-early-cancel";
+        crate::process_manager::PROCESS_MANAGER.lock().unwrap().cancel_task(id);
+        let token = tokio_util::sync::CancellationToken::new();
+        let _registration = DownloadRegistration::new(id, &token).unwrap();
+        assert!(token.is_cancelled());
+    }
+
+    #[test]
+    fn output_names_isolate_requests_and_keep_media_identity() {
+        let a = download_output_template();
+        let b = download_output_template();
+        assert_ne!(a, b);
+        assert!(a.contains("%(id).40s"));
+        assert!(a.ends_with(".%(ext)s"));
+    }
+
+    #[test]
+    fn requested_container_controls_selection_merge_and_remux() {
+        for container in ["mp4", "webm"] {
+            let args = build_download_command_args("/tmp", container,
+                "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
+                "https://example.com/video", None, "%(id)s.%(ext)s");
+            for option in ["--merge-output-format", "--remux-video"] {
+                let index = args.iter().position(|a| a == option).unwrap();
+                assert_eq!(args[index + 1], container);
+            }
+            let index = args.iter().position(|a| a == "-f").unwrap();
+            assert!(args[index + 1].contains(&format!("bestvideo[ext={}][height<=720]", container)));
+            assert!(args[index + 1].ends_with(&format!("/best[ext={}]", container)));
+            assert!(args.contains(&"after_move:SZ_FILEPATH:%(filepath)j".to_string()));
+        }
+        let original = build_download_command_args("/tmp", "best", "bestaudio/best",
+            "https://example.com/audio", None, "%(id)s.%(ext)s");
+        assert!(!original.contains(&"--remux-video".to_string()));
+        assert!(!original.contains(&"--merge-output-format".to_string()));
+    }
 
     #[test]
     fn test_parse_progress_custom_marker() {
@@ -2239,6 +2352,7 @@ mod tests {
             "bestvideo+bestaudio",
             "https://youtube.com/watch?v=123",
             None,
+            "%(id)s.%(ext)s",
         );
         assert!(!args_direct.contains(&"--proxy".to_string()));
         assert!(args_direct.contains(&"-P".to_string()));
@@ -2250,6 +2364,7 @@ mod tests {
             "",
             "https://soundcloud.com/artist/song",
             Some("http://127.0.0.1:7890"),
+            "%(id)s.%(ext)s",
         );
         assert!(args_proxy.contains(&"--proxy".to_string()));
         assert!(args_proxy.contains(&"http://127.0.0.1:7890".to_string()));
