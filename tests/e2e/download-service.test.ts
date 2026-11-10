@@ -27,6 +27,17 @@ async function start() {
 }
 
 describe('DownloadService lifecycle', () => {
+  it('passes a range to the backend and preserves it through queue updates for retry', async () => {
+    const service = (await import('../../src/services/DownloadService')).default;
+    const range = { startSeconds: 90, endSeconds: 120 };
+    const id = await service.startDownload('https://youtube.com/watch?v=test', 'best', 'mp4', 'MP4', '', undefined, range);
+    expect(transport.invoke).toHaveBeenCalledWith('download_media_link', expect.objectContaining({ timeRange: range }));
+    range.startSeconds = 0;
+    emit('download-progress', { job_id: id, progress_percent: 50 });
+    emit('download-error', { job_id: id, error: 'retry me' });
+    expect(service.getQueue()[0].timeRange).toEqual({ startSeconds: 90, endSeconds: 120 });
+  });
+
   it('publishes immutable updates without changing other jobs', async () => {
     const { service, id } = await start();
     await service.startDownload('https://example.com/second', 'best', 'mp4', 'MP4', 'C:/Downloads');

@@ -533,6 +533,13 @@
     "videoLoadError": "Failed to load video preview. Try refreshing."
   },
   "download": {
+    "rangeToggle": "Download a time range",
+    "rangeStart": "From",
+    "rangeEnd": "To",
+    "rangeToEnd": "End of video",
+    "rangeHint": "Seconds, MM:SS or HH:MM:SS. Only the selected section is requested. The section is re-encoded for accurate cuts. Requires FFmpeg.",
+    "rangeError": "Enter a valid range: the end must be after the start. Leave the end empty to download to the end.",
+
     "downloadButton": "Download",
     "urlPlaceholder": "Paste TikTok / Reels / YouTube link...",
     "defaultDownloadsFolder": "Downloads folder",

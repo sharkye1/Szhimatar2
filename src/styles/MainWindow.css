@@ -1577,3 +1577,10 @@
   box-shadow: none !important;
 }
 
+
+.download-range { width: 100%; padding: 8px 4px; font-size: 12px; text-align: left; }
+.download-range-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.download-range-fields { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0; }
+.download-range-fields label { display: flex; align-items: center; gap: 8px; }
+.download-range-fields input { width: 120px; padding: 6px 8px; border: 1px solid; border-radius: 6px; font: inherit; }
+.download-range small { display: block; line-height: 1.5; }
