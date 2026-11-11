@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import TimeRangeEditor from './TimeRangeEditor';
 import { Trash2, Folder, Square, Copy, Check, GripVertical } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { RenderJob } from '../services/RenderService';
@@ -31,8 +32,6 @@ export interface RenderJobItemProps {
   getStatusDisplay: (job: RenderJob) => { text: string; color: string; icon: React.ReactNode };
 }
 
-const trimStepSec = 0.5;
-const minTrimDurationSec = 1;
 
 export const RenderJobItem: React.FC<RenderJobItemProps> = React.memo(({
   job,
@@ -444,120 +443,16 @@ export const RenderJobItem: React.FC<RenderJobItemProps> = React.memo(({
         const duration = job.durationSeconds;
         const trimStart = Math.max(0, Math.min(duration, job.trimStartSec ?? 0));
         const trimEnd = Math.max(trimStart, Math.min(duration, job.trimEndSec ?? duration));
-        const editable = job.status === 'pending';
-        const startPercent = duration > 0 ? (trimStart / duration) * 100 : 0;
-        const endPercent = duration > 0 ? (trimEnd / duration) * 100 : 0;
-        const selectedPercent = duration > 0 ? ((trimEnd - trimStart) / duration) * 100 : 0;
-
         return (
-          <div
-            className={`trim-control ${editable ? 'is-editable' : 'is-readonly'}`}
-            style={{
-              ['--trim-accent' as string]: theme.colors.primary,
-              borderColor: theme.colors.border,
-              background: 'rgba(var(--theme-bg-rgb), 0.12)',
-              marginTop: '8px',
-              width: '100%',
-            }}
-          >
-            <div className="trim-head" style={{ color: theme.colors.textSecondary }}>
-              <span>{t('queue.trim') || 'Trim'}</span>
-              <span>
-                {t('queue.trimRange') || 'Range'}: {formatTrimTime(trimStart)} - {formatTrimTime(trimEnd)}
-              </span>
-              <span>
-                {t('queue.trimDuration') || 'Length'}: {formatTrimTime(trimEnd - trimStart)}
-              </span>
-            </div>
-
-            <div className="trim-slider-wrap">
-              {trimFramePreview && trimFramePreview.jobId === job.id && (
-                <div
-                  className="trim-frame-preview"
-                  style={{ left: `${trimFramePreview.leftPercent}%` }}
-                >
-                  {trimFramePreview.imageDataUrl ? (
-                    <img
-                      src={trimFramePreview.imageDataUrl}
-                      alt={`${job.fileName} ${formatTrimTime(trimFramePreview.timeSec)}`}
-                      className="trim-frame-preview-image"
-                    />
-                  ) : (
-                    <div className="trim-frame-preview-skeleton" />
-                  )}
-                  <span className="trim-frame-preview-time">
-                    {trimFramePreview.loading ? '...' : formatTrimTime(trimFramePreview.timeSec)}
-                  </span>
-                </div>
-              )}
-
-              <div className="trim-slider-track" style={{ background: `${theme.colors.border}99` }} />
-              <div
-                className="trim-slider-selected"
-                style={{
-                  left: `${startPercent}%`,
-                  width: `${selectedPercent}%`,
-                  background: `${theme.colors.primary}66`,
-                }}
-              />
-
-              <input
-                type="range"
-                className="trim-range trim-range-start"
-                min={0}
-                max={duration}
-                step={trimStepSec}
-                value={trimStart}
-                disabled={!editable}
-                onMouseDown={() => {
-                  onRequestTrimFramePreview(job.id, job.inputPath, trimStart, startPercent, 'start');
-                }}
-                onTouchStart={() => {
-                  onRequestTrimFramePreview(job.id, job.inputPath, trimStart, startPercent, 'start');
-                }}
-                onChange={(e) => {
-                  const nextStart = Math.min(parseFloat(e.target.value), trimEnd - minTrimDurationSec);
-                  onUpdateJobTrim(job.id, nextStart, trimEnd);
-                  const nextStartPercent = duration > 0 ? (nextStart / duration) * 100 : 0;
-                  onRequestTrimFramePreview(job.id, job.inputPath, nextStart, nextStartPercent, 'start');
-                }}
-                onMouseUp={() => onHideTrimFramePreview()}
-                onTouchEnd={() => onHideTrimFramePreview()}
-                onBlur={() => onHideTrimFramePreview()}
-                aria-label={`${job.fileName} trim start`}
-              />
-              <input
-                type="range"
-                className="trim-range trim-range-end"
-                min={0}
-                max={duration}
-                step={trimStepSec}
-                value={trimEnd}
-                disabled={!editable}
-                onMouseDown={() => {
-                  onRequestTrimFramePreview(job.id, job.inputPath, trimEnd, endPercent, 'end');
-                }}
-                onTouchStart={() => {
-                  onRequestTrimFramePreview(job.id, job.inputPath, trimEnd, endPercent, 'end');
-                }}
-                onChange={(e) => {
-                  const nextEnd = Math.max(parseFloat(e.target.value), trimStart + minTrimDurationSec);
-                  onUpdateJobTrim(job.id, trimStart, nextEnd);
-                  const nextEndPercent = duration > 0 ? (nextEnd / duration) * 100 : 0;
-                  onRequestTrimFramePreview(job.id, job.inputPath, nextEnd, nextEndPercent, 'end');
-                }}
-                onMouseUp={() => onHideTrimFramePreview()}
-                onTouchEnd={() => onHideTrimFramePreview()}
-                onBlur={() => onHideTrimFramePreview()}
-                aria-label={`${job.fileName} trim end`}
-              />
-            </div>
-
-            {!editable && (
-              <div className="trim-readonly-note" style={{ color: theme.colors.textSecondary }}>
-                {t('queue.trimReadonly') || 'Trim can be edited only while item is pending'}
-              </div>
-            )}
+          <div className="trim-control" style={{ borderColor: theme.colors.border, background: 'rgba(var(--theme-bg-rgb), 0.12)', marginTop: '8px', width: '100%' }}>
+            <TimeRangeEditor minimumDuration={Math.min(1, duration)} duration={duration} start={trimStart} end={trimEnd} theme={theme}
+              startLabel={t('download.rangeStart')} endLabel={t('download.rangeEnd')}
+              onChange={(start, end) => onUpdateJobTrim(job.id, start, end)}
+              onPreview={(time, handle) => onRequestTrimFramePreview(job.id, job.inputPath, time, time / duration * 100, handle)}
+              onPreviewEnd={onHideTrimFramePreview}
+              preview={trimFramePreview && trimFramePreview.jobId === job.id ? <div className="trim-frame-preview" style={{ left: `${trimFramePreview.leftPercent}%` }}>
+                {trimFramePreview.imageDataUrl ? <img src={trimFramePreview.imageDataUrl} alt={`${job.fileName} ${formatTrimTime(trimFramePreview.timeSec)}`} className="trim-frame-preview-image" /> : <div className="trim-frame-preview-skeleton" />}
+              </div> : null} />
           </div>
         );
       })()}

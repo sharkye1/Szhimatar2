@@ -914,7 +914,7 @@
   position: absolute;
   bottom: calc(100% + 6px);
   transform: translateX(-50%);
-  width: 112px;
+  width: 192px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -923,10 +923,17 @@
   z-index: 4;
 }
 
+.trim-preview-portal {
+  position: fixed;
+  height: 0;
+  z-index: 10000;
+  pointer-events: none;
+}
+
 .trim-frame-preview-image,
 .trim-frame-preview-skeleton {
-  width: 112px;
-  height: 64px;
+  width: 192px;
+  height: 108px;
   object-fit: cover;
   border: none;
   outline: none;
@@ -959,10 +966,10 @@
 
 .trim-slider-track {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: 7px;
+  right: 7px;
   top: 50%;
-  height: 6px;
+  height: 4px;
   transform: translateY(-50%);
   border-radius: 999px;
 }
@@ -970,9 +977,30 @@
 .trim-slider-selected {
   position: absolute;
   top: 50%;
-  height: 6px;
+  height: 4px;
   transform: translateY(-50%);
   border-radius: 999px;
+}
+
+.trim-slider-duration {
+  position: absolute;
+  opacity: 1;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  padding: 2px 6px;
+  border: 1px solid;
+  border-radius: 5px;
+  font-size: 11px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.trim-slider-duration.is-above {
+  top: 0;
+  transform: translate(-50%, -100%);
 }
 
 .trim-range {
@@ -986,6 +1014,9 @@
   appearance: none;
   -webkit-appearance: none;
   background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: none;
   border: none;
   outline: none;
   box-shadow: none;
@@ -1578,9 +1609,22 @@
 }
 
 
-.download-range { width: 100%; padding: 8px 4px; font-size: 12px; text-align: left; }
-.download-range-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; }
-.download-range-fields { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0; }
-.download-range-fields label { display: flex; align-items: center; gap: 8px; }
-.download-range-fields input { width: 120px; padding: 6px 8px; border: 1px solid; border-radius: 6px; font: inherit; }
-.download-range small { display: block; line-height: 1.5; }
+.download-range { width: 100%; padding: 4px 2px 0; font-size: 12px; text-align: left; }
+.download-range-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 28px; cursor: pointer; font-weight: 500; }
+.download-range-toggle input { width: 15px; height: 15px; margin: 0; cursor: pointer; }
+.download-range-panel { margin-top: 6px; padding: 14px; border: 1px solid; border-radius: 12px; }
+.download-range-fields { display: flex; flex-wrap: wrap; gap: 12px; }
+.download-range-fields label { display: flex; flex: 1 1 120px; flex-direction: column; align-items: stretch; gap: 6px; font-weight: 500; }
+.download-range-fields input { box-sizing: border-box; width: 100%; min-width: 0; height: 36px; padding: 0 10px; border: 1px solid; border-radius: 8px; font: inherit; outline: none; }
+.download-range-fields input:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.download-range small { display: block; margin-top: 10px; line-height: 1.5; opacity: 0.8; }
+.download-range small.download-range-error { margin-top: 6px; opacity: 1; }
+
+.time-range-heading { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; font-size: 12px; }
+.time-range-editor { display: grid; grid-template-columns: 86px minmax(30px, 1fr) 86px; align-items: center; gap: 12px; }
+.time-range-value { box-sizing: border-box; width: 100%; height: 32px; border: 1px solid; border-radius: 7px; padding: 0 7px; text-align: center; font: inherit; font-size: 12px; font-variant-numeric: tabular-nums; }
+.time-range-value:focus-visible { outline: 2px solid var(--trim-accent); outline-offset: 2px; }
+.download-range.trim-control { margin-top: 6px; padding: 10px 12px; }
+@media (max-width: 420px) { .time-range-editor { grid-template-columns: 70px minmax(24px, 1fr) 70px; gap: 8px; } }
+.action-bar-input { text-overflow: ellipsis; }
+.has-raised-duration .trim-frame-preview { bottom: calc(100% + 28px); }
