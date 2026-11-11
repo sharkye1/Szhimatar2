@@ -533,6 +533,13 @@
     "re_render_new": "重新渲染为新版本"
   },
   "download": {
+    "rangeToggle": "下载指定时间段",
+    "rangeStart": "从",
+    "rangeEnd": "到",
+    "rangeToEnd": "视频结尾",
+    "rangeHint": "秒数、MM:SS 或 HH:MM:SS。仅请求所选片段。片段将重新编码以实现精准剪切。需要 FFmpeg。",
+    "rangeError": "请输入有效的时间范围：结束时间必须晚于起始时间。留空“到”则下载至视频结尾。",
+
     "downloadButton": "下载",
     "urlPlaceholder": "粘贴 TikTok / Reels / YouTube 链接...",
     "defaultDownloadsFolder": "下载文件夹",

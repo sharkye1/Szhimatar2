@@ -533,6 +533,13 @@
     "re_render_new": "Re-bildigi kiel nova versio"
   },
   "download": {
+    "rangeToggle": "Elŝuti tempintervalon",
+    "rangeStart": "De",
+    "rangeEnd": "Ĝis",
+    "rangeToEnd": "Fino de video",
+    "rangeHint": "Sekundoj, MM:SS aŭ HH:MM:SS. Nur la elektita sekcio estas petata. La sekcio estas re-kodata por precizaj limoj. Bezonas FFmpeg.",
+    "rangeError": "Enigu validan intervalon: la fino devas esti post la komenco. Lasu la kampon «Ĝis» malplena por elŝuti ĝis la fino de la video.",
+
     "downloadButton": "Elŝuti",
     "urlPlaceholder": "Algluu ligilon de TikTok / Reels / YouTube...",
     "defaultDownloadsFolder": "Elŝuta dosierujo",

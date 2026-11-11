@@ -533,6 +533,13 @@
     "vpnProxyWarningMessage": "Detected an active proxy/VPN connection. It is recommended to disable it so the app works more reliably and avoids network-related errors."
   },
   "download": {
+    "rangeToggle": "Stęgnųti odrězok",
+    "rangeStart": "Od",
+    "rangeEnd": "Do",
+    "rangeToEnd": "Konec videa",
+    "rangeHint": "Sekundy, MM:SS ili ČČ:MM:SS. Zahtěva se samo izbrany odrězok. Odrězok se prěkodiruje dlja točnyh granic. Trěbuje FFmpeg.",
+    "rangeError": "Vpisati pravilny diapazon: konec musi byti poslě početka. Prazdno polje «Do» — do konca videa.",
+
     "downloadButton": "Stęgnųti",
     "urlPlaceholder": "Vložite link TikTok / Reels / YouTube...",
     "defaultDownloadsFolder": "Papkа stęganij",
