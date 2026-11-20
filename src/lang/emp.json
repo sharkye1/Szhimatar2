@@ -514,6 +514,11 @@
     "restartLater": ""
   },
   "preview": {
+    "fullscreen": "",
+    "exitFullscreen": "",
+    "encoderSlot": "",
+    "position": "",
+    "compare": "",
     "title": "",
     "show": "",
     "hide": "",

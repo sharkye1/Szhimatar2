@@ -517,6 +517,11 @@
     "restartLater": "Later"
   },
   "preview": {
+    "fullscreen": "Open fullscreen",
+    "exitFullscreen": "Exit fullscreen",
+    "encoderSlot": "Preview encoder",
+    "position": "Position in source video",
+    "compare": "Comparison divider",
     "title": "Live Preview",
     "show": "Show Preview",
     "hide": "Hide Preview",

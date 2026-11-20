@@ -83,6 +83,7 @@
                 "hide": true,
                 "show": true,
                 "maximize": true,
+                "setFullscreen": true,
                 "minimize": true,
                 "unmaximize": true,
                 "unminimize": true,

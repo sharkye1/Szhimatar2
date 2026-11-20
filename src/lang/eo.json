@@ -510,6 +510,11 @@
     "restartLater": "Poste"
   },
   "preview": {
+    "fullscreen": "Malfermi plenekrane",
+    "exitFullscreen": "Eliri plenekranan reĝimon",
+    "encoderSlot": "Kodilo por antaŭrigardo",
+    "position": "Pozicio en la fonta video",
+    "compare": "Kompara dividilo",
     "title": "Rekta Antaŭrigardo",
     "show": "Montri Antaŭrigardon",
     "hide": "Kaŝi Antaŭrigardon",

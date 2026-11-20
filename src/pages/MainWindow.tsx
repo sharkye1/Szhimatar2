@@ -265,7 +265,6 @@ const MainWindow: React.FC<MainWindowProps> = ({
   }, []);
 
   const [showPreview, setShowPreview] = useState(false);
-  const [selectedPreviewPath, setSelectedPreviewPath] = useState<string>('');
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [networkWarning, setNetworkWarning] = useState<string | null>(null);
   const [trimFramePreview, setTrimFramePreview] = useState<TrimFramePreviewState | null>(null);
@@ -480,12 +479,6 @@ const MainWindow: React.FC<MainWindowProps> = ({
 
     checkNetworkRisk();
   }, [t]);
-  useEffect(() => {
-    if (jobs.length > 0 && !selectedPreviewPath) {
-      setSelectedPreviewPath(jobs[0].inputPath);
-    }
-  }, [jobs, selectedPreviewPath]);
-
   const handleToggleSaveInSourceDirectory = useCallback(() => {
     setMainScreenSettings((prev) => ({
       ...prev,
@@ -1074,6 +1067,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
       clearTimeout(trimPreviewHideRef.current);
     }
     trimPreviewHideRef.current = setTimeout(() => {
+      ++trimPreviewRequestRef.current;
       setTrimFramePreview(null);
     }, delayMs);
   }, []);
@@ -1091,8 +1085,13 @@ const MainWindow: React.FC<MainWindowProps> = ({
       clearTimeout(trimPreviewHideRef.current);
     }
 
-    const roundedTimeSec = Math.max(0, Math.round(timeSec * 2) / 2);
-    const cacheKey = `${inputPath}|${roundedTimeSec.toFixed(1)}`;
+    if (trimPreviewDebounceRef.current) {
+      clearTimeout(trimPreviewDebounceRef.current);
+    }
+    const requestId = ++trimPreviewRequestRef.current;
+    const roundedTimeSec = Math.max(0, Math.floor(timeSec * 2) / 2);
+    const seekTime = leftPercent >= 100 ? Math.max(0, roundedTimeSec - 0.25) : roundedTimeSec;
+    const cacheKey = `${inputPath}|${seekTime.toFixed(2)}`;
     const cachedFrame = trimPreviewCacheRef.current.get(cacheKey) || null;
 
     setTrimFramePreview({
@@ -1108,26 +1107,11 @@ const MainWindow: React.FC<MainWindowProps> = ({
       return;
     }
 
-    if (trimPreviewDebounceRef.current) {
-      clearTimeout(trimPreviewDebounceRef.current);
-    }
-
     trimPreviewDebounceRef.current = setTimeout(async () => {
-      const requestId = ++trimPreviewRequestRef.current;
-
       try {
         const frame = await invoke<string>('get_preview_frame', {
           inputPath,
-          timeSeconds: roundedTimeSec,
-          settings: {
-            codec: '',
-            crf: '23',
-            fps: '',
-            resolution: '',
-            filters: [],
-            resampling_enabled: false,
-            resampling_intensity: 0,
-          },
+          timeSeconds: seekTime,
         });
 
         if (requestId !== trimPreviewRequestRef.current) {
@@ -1135,7 +1119,12 @@ const MainWindow: React.FC<MainWindowProps> = ({
         }
 
         const dataUrl = `data:image/jpeg;base64,${frame}`;
-        trimPreviewCacheRef.current.set(cacheKey, dataUrl);
+        const cache = trimPreviewCacheRef.current;
+        if (cache.size >= 32) {
+          const oldestKey = cache.keys().next().value;
+          if (oldestKey !== undefined) cache.delete(oldestKey);
+        }
+        cache.set(cacheKey, dataUrl);
 
         setTrimFramePreview((prev) => {
           if (!prev) return prev;
@@ -1167,6 +1156,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
 
   useEffect(() => {
     return () => {
+      ++trimPreviewRequestRef.current;
       if (trimPreviewDebounceRef.current) {
         clearTimeout(trimPreviewDebounceRef.current);
       }
@@ -1770,17 +1760,15 @@ const MainWindow: React.FC<MainWindowProps> = ({
 
       {/* Live Preview Panel */}
       <PreviewPanel
-        inputPath={selectedPreviewPath}
-        settings={{
-          codec: videoSettings.codec,
-          crf: videoSettings.crf,
-          fps: videoSettings.fps,
-          resolution: videoSettings.resolution,            aspectRatioAuto: videoSettings.aspectRatioAuto,          filters: videoSettings.filters.filter(f => f.enabled).map(f => f.name),
-          resampling_enabled: !!videoSettings.resamplingEnabled,
-          resampling_intensity: videoSettings.resamplingIntensity || 5,
-        }}
+        key={jobs[0]?.id}
+        job={jobs[0]}
+        videoSettings={videoSettings}
+        audioSettings={audioSettings}
+        watermarkSettings={watermarkSettings}
+        renderMode={renderMode}
+        gpuAvailable={gpuAvailable}
         isVisible={showPreview}
-        onToggleVisibility={() => setShowPreview(!showPreview)}
+        onToggle={() => setShowPreview(value => !value)}
       />
     </div>
   );

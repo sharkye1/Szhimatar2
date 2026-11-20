@@ -216,6 +216,7 @@ function AppContent() {
           <VideoSettings
             onBack={goBack}
             settings={videoSettings}
+            audioSettings={audioSettings}
             setSettings={setVideoSettings}
             watermarkSettings={watermarkSettings}
             setWatermarkSettings={setWatermarkSettings}

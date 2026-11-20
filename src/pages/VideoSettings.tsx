@@ -2,9 +2,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { open } from '@tauri-apps/api/dialog';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { VideoSettings as VideoSettingsType, WatermarkSettings as WatermarkSettingsType, DEFAULT_GIF_SETTINGS } from '../types/index';
+import { AudioSettings, VideoSettings as VideoSettingsType, WatermarkSettings as WatermarkSettingsType, DEFAULT_GIF_SETTINGS } from '../types/index';
 import PreviewPanel from '../components/PreviewPanel';
-import { useFirstJobInputPath } from '../hooks/useRenderQueue';
+import { useFirstPreviewJob } from '../hooks/useRenderQueue';
 import { validateVideoSettings } from '../utils/videoValidation';
 import { isMacOS } from '../utils/platform';
 import { 
@@ -28,6 +28,7 @@ import '../styles/SettingsWindow.css';
 interface VideoSettingsProps {
   onBack: () => void;
   settings: VideoSettingsType;
+  audioSettings: AudioSettings;
   setSettings: React.Dispatch<React.SetStateAction<VideoSettingsType>>;
   watermarkSettings: WatermarkSettingsType;
   setWatermarkSettings: React.Dispatch<React.SetStateAction<WatermarkSettingsType>>;
@@ -38,6 +39,7 @@ interface VideoSettingsProps {
 const VideoSettings: React.FC<VideoSettingsProps> = ({ 
   onBack, 
   settings, 
+  audioSettings,
   setSettings,
   watermarkSettings,
   setWatermarkSettings,
@@ -47,7 +49,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
   const { t } = useLanguage();
   const { theme } = useTheme();
   const [expandedSection, setExpandedSection] = useState<'crf' | null>(null);
-  const [showPreview, setShowPreview] = useState(true);
+  const [showPreview, setShowPreview] = useState(() => !window.matchMedia('(max-width: 900px)').matches);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showAdvancedHelp, setShowAdvancedHelp] = useState(false);
 
@@ -122,8 +124,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
     { label: t('videoSettings.gifDitherNone') || 'None', value: 'none' },
   ];
   
-  // Get first file from render queue for preview
-  const previewFilePath = useFirstJobInputPath();
+  const previewJob = useFirstPreviewJob();
 
   // Resolution presets
   const resolutions = [
@@ -1187,29 +1188,19 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
         </div>
 
         {/* Preview Panel - Right Side */}
-        {showPreview && previewFilePath && (
+        {showPreview && (
           <div className="video-settings-preview">
             <PreviewPanel
-              videoPath={previewFilePath} 
-              videoSettings={{
-                codec: isGifMode ? 'h264' : settings.codec,
-                crf: settings.crf,
-                fps: isGifMode ? (settings.gifSettings?.fps || '15') : settings.fps,
-                resolution: isGifMode && settings.gifSettings?.width && settings.gifSettings.width !== 'original'
-                  ? `${settings.gifSettings.width}x-2`
-                  : settings.resolution,
-                bitrate: settings.bitrate,
-                preset: settings.preset,
-                filters: isGifMode ? [] : settings.filters,
-                resamplingEnabled: isGifMode ? false : settings.resamplingEnabled,
-                resamplingIntensity: settings.resamplingIntensity,
-                rateControlMode: settings.rateControlMode,
-                tune: settings.tune,
-              }}
-              preferGpu={preferGpu}
+              key={previewJob?.id}
+              job={previewJob}
+              videoSettings={settings}
+              audioSettings={audioSettings}
+              watermarkSettings={watermarkSettings}
+              renderMode={effectiveRenderMode}
+              gpuAvailable={gpuAvailable}
               isVisible={showPreview}
-              onToggle={() => setShowPreview(!showPreview)}
-              embedded={true}
+              onToggle={() => setShowPreview(false)}
+              embedded
             />
           </div>
         )}

@@ -514,6 +514,11 @@
     "restartLater": "Pozdneje"
   },
   "preview": {
+    "fullscreen": "Otvoriti na cěly ekran",
+    "exitFullscreen": "Vyjti iz cělogo ekrana",
+    "encoderSlot": "Kodirovnik za predogled",
+    "position": "Pozicija v izhodnom videu",
+    "compare": "Granica sravnjenja",
     "title": "Živo Predogled",
     "show": "Pokazati Predogled",
     "hide": "Skryti Predogled",
