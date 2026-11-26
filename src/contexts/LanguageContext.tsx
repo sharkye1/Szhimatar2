@@ -9,17 +9,19 @@ import vzTranslations from '../lang/vz.json';
 import empTranslations from '../lang/emp.json';
 
 type Translations = typeof ruTranslations;
+type TranslationBundle = Omit<Translations, 'recentVideos'> & Partial<Pick<Translations, 'recentVideos'>>;
 
 interface LanguageContextType {
   language: string;
+  isEmp: boolean;
   translations: Translations;
   setLanguage: (lang: string) => void;
-  t: (path: string) => string;
+  t: (path: string, fallback?: string) => string;
 }
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
-const languages: Record<string, Translations> = {
+const languages: Record<string, TranslationBundle> = {
   ru: ruTranslations,
   en: enTranslations,
   ch: chTranslations,
@@ -32,7 +34,12 @@ const languages: Record<string, Translations> = {
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { settings, updateSettings } = useSettings();
   const language = settings.language || 'ru';
-  const translations = languages[language] || languages.ru;
+  const isEmp = language === 'emp';
+  const selected = languages[language] || ruTranslations;
+  const translations: Translations = {
+    ...selected,
+    recentVideos: selected.recentVideos ?? enTranslations.recentVideos,
+  };
 
   const setLanguage = (lang: string) => {
     if (languages[lang]) {
@@ -40,7 +47,10 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
   };
 
-  const t = (path: string): string => {
+  const t = (path: string, fallback?: string): string => {
+    if (isEmp) {
+      return '';
+    }
     const keys = path.split('.');
     let value: any = translations;
 
@@ -48,15 +58,18 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
       if (value && typeof value === 'object' && key in value) {
         value = value[key];
       } else {
-        return path;
+        return fallback !== undefined ? fallback : path;
       }
     }
 
-    return typeof value === 'string' ? value : path;
+    if (typeof value === 'string') {
+      return value;
+    }
+    return fallback !== undefined ? fallback : path;
   };
 
   return (
-    <LanguageContext.Provider value={{ language, translations, setLanguage, t }}>
+    <LanguageContext.Provider value={{ language, isEmp, translations, setLanguage, t }}>
       {children}
     </LanguageContext.Provider>
   );

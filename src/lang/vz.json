@@ -21,7 +21,8 @@
     "preview": "Предпросмотр взрыва"
   },
   "common": {
-    "or": "ИЛИ"
+    "or": "ИЛИ",
+    "cancel": "🚫ОТМЕНА💥"
   },
   "video": {
     "title": "Настройки взрыва",
@@ -327,7 +328,10 @@
     "ecoMode": "⚡Эко-турбо-режим💥",
     "ecoModeDescription": "Вырубает мыло и подсветку чтобы не взорвать пекарню",
     "ecoModeEnabled": "Врублен",
-    "ecoModeDisabled": "Вырублен"
+    "ecoModeDisabled": "Вырублен",
+    "modifiedTheme": "💥Однотонно🎨",
+    "randomTheme": "🎲Рандомно🌙",
+    "randomThemeDescription": "🎲Дикий рандом при каждом входе (после 17:00 строго тёмные!)🌙"
   },
   "watermark": {
     "title": "Настройки водяного знака",

@@ -113,7 +113,7 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
   gpuAvailable,
   isRendering = false,
 }) => {
-  const { t } = useLanguage();
+  const { t, isEmp } = useLanguage();
   const { theme, modifiedTheme } = useTheme();
   const isMac = isMacOS();
 
@@ -187,25 +187,34 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
 
   // Button labels: Software/Hardware on macOS, CPU/GPU on Windows
   const cpuLabel = useMemo(() => {
+    if (isEmp) return '';
     if (isMac) {
       const val = t('renderMode.software');
       return val && val !== 'renderMode.software' ? val : 'Software';
     }
     const val = t('renderMode.cpu');
     return val && val !== 'renderMode.cpu' ? val : 'CPU';
-  }, [isMac, t]);
+  }, [isEmp, isMac, t]);
 
   const gpuLabel = useMemo(() => {
+    if (isEmp) return '';
     if (isMac) {
       const val = t('renderMode.hardware');
       return val && val !== 'renderMode.hardware' ? val : 'Hardware';
     }
     const val = t('renderMode.gpu');
     return val && val !== 'renderMode.gpu' ? val : 'GPU';
-  }, [isMac, t]);
+  }, [isEmp, isMac, t]);
+
+  const duoLabel = useMemo(() => {
+    if (isEmp) return '';
+    const val = t('renderMode.duo');
+    return val && val !== 'renderMode.duo' ? val : 'DUO';
+  }, [isEmp, t]);
 
   // Tooltips
   const cpuTooltip = useMemo(() => {
+    if (isEmp) return '';
     if (isMac) {
       const val = t('renderMode.softwareTooltip');
       return val && val !== 'renderMode.softwareTooltip'
@@ -214,9 +223,10 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
     }
     const val = t('renderMode.cpuTooltip');
     return val && val !== 'renderMode.cpuTooltip' ? val : 'Render using CPU only';
-  }, [isMac, t]);
+  }, [isEmp, isMac, t]);
 
   const gpuTooltip = useMemo(() => {
+    if (isEmp) return '';
     if (!gpuAvailable) {
       const val = t('gpu.notAvailableTooltip');
       return val && val !== 'gpu.notAvailableTooltip' ? val : 'GPU not available';
@@ -229,16 +239,18 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
     }
     const val = t('renderMode.gpuTooltip');
     return val && val !== 'renderMode.gpuTooltip' ? val : 'Render using GPU (NVENC)';
-  }, [gpuAvailable, isMac, t]);
+  }, [isEmp, gpuAvailable, isMac, t]);
 
   // Vendor Badges
   const cpuVendorBadge = useMemo(() => {
+    if (isEmp) return '';
     const vendor = (hardwareInfo.cpu_vendor || '').trim();
     if (!vendor) return 'UNKNOWN';
     return vendor.toUpperCase();
-  }, [hardwareInfo.cpu_vendor]);
+  }, [isEmp, hardwareInfo.cpu_vendor]);
 
   const gpuVendorBadge = useMemo(() => {
+    if (isEmp) return '';
     if (!gpuAvailable) return 'N/A';
     const vendor = (hardwareInfo.gpu_vendor || '').trim();
     if (!vendor || vendor.toLowerCase() === 'unknown') {
@@ -247,7 +259,7 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
     if (vendor.toLowerCase() === 'videotoolbox') return 'VIDEOTOOLBOX';
     if (vendor.toLowerCase() === 'apple') return 'APPLE';
     return vendor.toUpperCase();
-  }, [gpuAvailable, hardwareInfo.gpu_vendor, isMac]);
+  }, [isEmp, gpuAvailable, hardwareInfo.gpu_vendor, isMac]);
 
   // Click handlers
   const handleCpuClick = useCallback(() => {
@@ -371,7 +383,7 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
           onMouseEnter={() => setIsHovered('duo')}
           onMouseLeave={() => setIsHovered(null)}
           disabled={duoDisabled}
-          title={duoDisabled ? (t('renderMode.duoDisabledTooltip') || 'GPU not available') : (t('renderMode.duoTooltip') || 'Parallel CPU + GPU rendering')}
+          title={isEmp ? '' : (duoDisabled ? (t('renderMode.duoDisabledTooltip') || 'GPU not available') : (t('renderMode.duoTooltip') || 'Parallel CPU + GPU rendering'))}
           whileHover={!duoDisabled ? { scale: 1.05 } : {}}
           whileTap={!duoDisabled ? { scale: 0.95 } : {}}
         >
@@ -380,7 +392,7 @@ const RenderModeSelector: React.FC<RenderModeSelectorProps> = ({
             <div className="button-icon duo-icon">
               <DuoIcon />
             </div>
-            <span className="button-label">DUO</span>
+            <span className="button-label">{duoLabel}</span>
           </div>
           {isDuoActive && <div className="active-indicator duo-indicator" />}
         </motion.button>

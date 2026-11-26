@@ -21,7 +21,8 @@
     "preview": ""
   },
   "common": {
-    "or": ""
+    "or": "",
+    "cancel": ""
   },
   "video": {
     "title": "",
@@ -322,12 +323,15 @@
     "checkUpdates": "",
     "save": "",
     "cancel": "",
-    "glassOpacity": "Image Dimming",
-    "glassBlur": "Image Blur",
+    "glassOpacity": "",
+    "glassBlur": "",
     "ecoMode": "",
     "ecoModeDescription": "",
     "ecoModeEnabled": "",
-    "ecoModeDisabled": ""
+    "ecoModeDisabled": "",
+    "modifiedTheme": "",
+    "randomTheme": "",
+    "randomThemeDescription": ""
   },
   "watermark": {
     "title": "",
@@ -381,7 +385,7 @@
       "completed": "",
       "error": "",
       "rendering": "",
-      "stopped": "Stopped manually"
+      "stopped": ""
     }
   },
   "queue": {
@@ -408,13 +412,13 @@
     "retry": "",
     "retryNewFile": "",
     "stopJob": "",
-    "copyToClipboard": "Copy file to clipboard",
-    "copiedToClipboard": "Copied to clipboard",
-    "dragHandleTooltip": "Hold and drag file to Telegram, Discord or folder",
-    "dragOverlayTitle": "Drop file into another program",
-    "dragForExample": "for example:",
-    "dragBadgeBrowser": "Browser",
-    "dragBadgeFolder": "Explorer"
+    "copyToClipboard": "",
+    "copiedToClipboard": "",
+    "dragHandleTooltip": "",
+    "dragOverlayTitle": "",
+    "dragForExample": "",
+    "dragBadgeBrowser": "",
+    "dragBadgeFolder": ""
   },
   "gpu": {
     "label": "",
@@ -445,7 +449,7 @@
     "duoDisabledTooltip": ""
   },
   "ffmpegPresets": {
-    "ultrafast": " ",
+    "ultrafast": "",
     "superfast": "",
     "veryfast": "",
     "faster": "",

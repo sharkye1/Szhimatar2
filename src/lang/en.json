@@ -21,7 +21,23 @@
     "preview": "Preview"
   },
   "common": {
-    "or": "OR"
+    "or": "OR",
+    "cancel": "Cancel"
+  },
+  "recentVideos": {
+    "title": "Recent videos",
+    "appeared": "Added {time}",
+    "modified": "Modified {time}",
+    "empty": "No recent videos",
+    "fileUnavailable": "The video was moved or is still being written",
+    "addFailed": "Couldn't add the video to the queue",
+    "enabled": "Show recent videos",
+    "downloads": "System Downloads folder",
+    "addFolder": "Add folder",
+    "removeFolder": "Remove folder",
+    "subfolders": "Include subfolders",
+    "automatic": "With no folders selected, Szhimatar checks the folders you compress videos from most often.",
+    "folderError": "Couldn't select a folder"
   },
   "video": {
     "title": "Video",
@@ -327,7 +343,10 @@
     "ecoMode": "Eco Mode (power saving)",
     "ecoModeDescription": "Disables blur effects and cursor glow to reduce CPU and GPU usage",
     "ecoModeEnabled": "Enabled",
-    "ecoModeDisabled": "Disabled"
+    "ecoModeDisabled": "Disabled",
+    "modifiedTheme": "Monotone",
+    "randomTheme": "Random",
+    "randomThemeDescription": "Random theme on every launch (after 17:00 only dark themes)"
   },
   "watermark": {
     "title": "Watermark Settings",

@@ -138,21 +138,21 @@ export const TechnicalDetailsViewer: React.FC<TechnicalDetailsViewerProps> = ({
   };
 
   const copyBtnLabel = copiedReport
-    ? (t('download.copiedDiagnostics') || 'Скопировано!')
-    : (t('download.copyDiagnostics') || 'Скопировать отчет');
+    ? t('download.copiedDiagnostics')
+    : t('download.copyDiagnostics');
 
   const availableTabs: { id: TechnicalDetailsTabKey; label: string; icon?: React.ReactNode; count?: string | number }[] = [
-    { id: 'summary', label: t('download.tabSummary') || 'Сводка' },
+    { id: 'summary', label: t('download.tabSummary') },
     {
       id: 'stderr',
-      label: t('download.tabStderr') || 'Лог (stderr)',
+      label: t('download.tabStderr'),
       count: details.stderr ? details.stderr.split('\n').filter(Boolean).length : undefined,
     },
-    ...(details.command ? [{ id: 'command' as TechnicalDetailsTabKey, label: t('download.tabCommand') || 'Команда' }] : []),
+    ...(details.command ? [{ id: 'command' as TechnicalDetailsTabKey, label: t('download.tabCommand') }] : []),
     ...(details.stdout && details.stdout.trim().length > 0
-      ? [{ id: 'stdout' as TechnicalDetailsTabKey, label: t('download.tabStdout') || 'Вывод (stdout)' }]
+      ? [{ id: 'stdout' as TechnicalDetailsTabKey, label: t('download.tabStdout') }]
       : []),
-    { id: 'all', label: t('download.tabAll') || 'Все разделы' },
+    { id: 'all', label: t('download.tabAll') },
   ];
 
   const renderClassification = () => {
@@ -170,7 +170,7 @@ export const TechnicalDetailsViewer: React.FC<TechnicalDetailsViewerProps> = ({
         }}
       >
         <div style={{ fontWeight: 600, color: theme.colors.warning || '#eab308', marginBottom: '2px' }}>
-          {t('download.classificationLabel') || 'Классификация ошибки'}:
+          {t('download.classificationLabel')}:
         </div>
         <div>{details.error_classification}</div>
       </div>
@@ -200,21 +200,21 @@ export const TechnicalDetailsViewer: React.FC<TechnicalDetailsViewerProps> = ({
       </div>
 
       <div style={{ color: theme.colors.textSecondary, fontWeight: 500 }}>
-        {t('download.timestampLabel') || 'Время'}:
+        {t('download.timestampLabel')}:
       </div>
       <div style={{ color: theme.colors.text, fontFamily: 'monospace', userSelect: 'text' }}>
         {details.timestamp}
       </div>
 
       <div style={{ color: theme.colors.textSecondary, fontWeight: 500 }}>
-        {t('download.platformLabel') || 'Платформа'}:
+        {t('download.platformLabel')}:
       </div>
       <div style={{ color: theme.colors.text, fontFamily: 'monospace', userSelect: 'text' }}>
         {details.os} ({details.arch})
       </div>
 
       <div style={{ color: theme.colors.textSecondary, fontWeight: 500 }}>
-        {t('download.statusLabel') || 'Статус'}:
+        {t('download.statusLabel')}:
       </div>
       <div style={{ color: theme.colors.text, fontFamily: 'monospace', userSelect: 'text' }}>
         {details.exit_code !== null && details.exit_code !== undefined
@@ -223,7 +223,7 @@ export const TechnicalDetailsViewer: React.FC<TechnicalDetailsViewerProps> = ({
       </div>
 
       <div style={{ color: theme.colors.textSecondary, fontWeight: 500 }}>
-        {t('download.executableLabel') || 'Исполняемый файл'}:
+        {t('download.executableLabel')}:
       </div>
       <div
         style={{
@@ -239,7 +239,7 @@ export const TechnicalDetailsViewer: React.FC<TechnicalDetailsViewerProps> = ({
       {details.environment && details.environment.length > 0 && (
         <>
           <div style={{ color: theme.colors.textSecondary, fontWeight: 500 }}>
-            {t('download.envLabel') || 'Сетевое окружение'}:
+            {t('download.envLabel')}:
           </div>
           <div
             style={{
@@ -294,7 +294,7 @@ export const TechnicalDetailsViewer: React.FC<TechnicalDetailsViewerProps> = ({
             justifyContent: 'space-between',
           }}
         >
-          <span>{t('download.command') || 'Выполненная команда'}:</span>
+          <span>{t('download.command')}:</span>
           <button
             type="button"
             onClick={handleCopyCmd}
@@ -354,7 +354,7 @@ export const TechnicalDetailsViewer: React.FC<TechnicalDetailsViewerProps> = ({
             justifyContent: 'space-between',
           }}
         >
-          <span>{t('download.stderrLabel') || 'Лог ошибок (stderr)'}:</span>
+          <span>{t('download.stderrLabel')}:</span>
           <button
             type="button"
             onClick={handleCopyStderr}
@@ -414,7 +414,7 @@ export const TechnicalDetailsViewer: React.FC<TechnicalDetailsViewerProps> = ({
             justifyContent: 'space-between',
           }}
         >
-          <span>{t('download.stdoutLabel') || 'Вывод команды (stdout)'}:</span>
+          <span>{t('download.stdoutLabel')}:</span>
           <button
             type="button"
             onClick={handleCopyStdout}
@@ -539,7 +539,7 @@ export const TechnicalDetailsViewer: React.FC<TechnicalDetailsViewerProps> = ({
             }}
           />
           <Terminal size={12} strokeWidth={2} style={{ flexShrink: 0 }} />
-          <span>{t('download.technicalDetails') || 'Технические подробности'}</span>
+          <span>{t('download.technicalDetails')}</span>
 
           {details.is_network_error && (
             <span
@@ -651,10 +651,10 @@ export const TechnicalDetailsViewer: React.FC<TechnicalDetailsViewerProps> = ({
                   whiteSpace: 'nowrap',
                   transition: 'all 0.15s ease',
                 }}
-                title={t('download.expandModal') || 'Развернуть в окне'}
+                title={t('download.expandModal')}
               >
                 <Maximize2 size={12} strokeWidth={2} />
-                <span>{t('download.expandModal') || 'В окне'}</span>
+                <span>{t('download.expandModal')}</span>
               </button>
 
               {/* Copy Report Button */}
@@ -678,7 +678,7 @@ export const TechnicalDetailsViewer: React.FC<TechnicalDetailsViewerProps> = ({
                   whiteSpace: 'nowrap',
                   transition: 'all 0.15s ease',
                 }}
-                title={t('download.copyDiagnosticsTooltip') || 'Скопировать полный отчет об ошибке в буфер обмена'}
+                title={t('download.copyDiagnosticsTooltip')}
               >
                 {copiedReport ? (
                   <CheckCircle2 size={12} strokeWidth={2.2} />
@@ -818,7 +818,7 @@ export const TechnicalDetailsViewer: React.FC<TechnicalDetailsViewerProps> = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
                   <Terminal size={16} strokeWidth={2} style={{ color: theme.colors.primary || '#3b82f6', flexShrink: 0 }} />
                   <span style={{ fontWeight: 600, fontSize: '0.88rem' }}>
-                    {t('download.technicalDetails') || 'Технические подробности'}
+                    {t('download.technicalDetails')}
                   </span>
                   {details.is_network_error && (
                     <span
@@ -890,7 +890,7 @@ export const TechnicalDetailsViewer: React.FC<TechnicalDetailsViewerProps> = ({
                       justifyContent: 'center',
                       cursor: 'pointer',
                     }}
-                    title={t('download.closeModal') || 'Закрыть'}
+                    title={t('download.closeModal')}
                   >
                     <X size={15} />
                   </button>
@@ -998,7 +998,7 @@ export const TechnicalDetailsViewer: React.FC<TechnicalDetailsViewerProps> = ({
                     cursor: 'pointer',
                   }}
                 >
-                  {t('download.closeModal') || 'Закрыть'}
+                  {t('download.closeModal')}
                 </button>
               </div>
             </div>

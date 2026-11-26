@@ -1,6 +1,7 @@
 export interface Settings {
   theme: string;
   modifiedTheme?: boolean;
+  randomTheme?: boolean;
   language: string;
   ffmpeg_path: string;
   ffprobe_path: string;

@@ -121,7 +121,7 @@ export const RenderJobItem: React.FC<RenderJobItemProps> = React.memo(({
             <div
               className="drag-handle-btn"
               onMouseDown={(e) => startFileDrag(job.outputPath, job.fileName, e)}
-              title={t('queue.dragHandleTooltip') || 'Зажмите и перетащите файл в Telegram, Discord или папку'}
+              title={t('queue.dragHandleTooltip')}
             >
               <GripVertical size={15} strokeWidth={2.4} />
             </div>
@@ -257,7 +257,7 @@ export const RenderJobItem: React.FC<RenderJobItemProps> = React.memo(({
                 e.currentTarget.style.background = `${theme.colors.warning}15`;
                 e.currentTarget.style.borderColor = `${theme.colors.warning}40`;
               }}
-              title={t('queue.stopJob') || 'Stop task'}
+              title={t('queue.stopJob')}
             >
               <Square size={13} fill="currentColor" />
             </button>
@@ -291,7 +291,7 @@ export const RenderJobItem: React.FC<RenderJobItemProps> = React.memo(({
                   e.currentTarget.style.background = `${theme.colors.success}15`;
                   e.currentTarget.style.borderColor = `${theme.colors.success}40`;
                 }}
-                title={t('queue.retry') || t('history.re_render_overwrite') || 'Re-render (overwrite)'}
+                title={t('queue.retry')}
               >
                 ↺
               </button>
@@ -327,7 +327,7 @@ export const RenderJobItem: React.FC<RenderJobItemProps> = React.memo(({
                   e.currentTarget.style.background = `${theme.colors.primary}15`;
                   e.currentTarget.style.borderColor = `${theme.colors.primary}40`;
                 }}
-                title={t('queue.retryNewFile') || t('history.re_render_new') || 'Re-render (new version)'}
+                title={t('queue.retryNewFile')}
               >
                 ↻2
               </button>
@@ -362,9 +362,9 @@ export const RenderJobItem: React.FC<RenderJobItemProps> = React.memo(({
                 e.currentTarget.style.background = `${theme.colors.success}15`;
                 e.currentTarget.style.borderColor = `${theme.colors.success}40`;
               }}
-              title={t('queue.showInExplorer') || 'Show in Explorer'}
+              title={t('queue.showInExplorer')}
             >
-              <Folder size={14} strokeWidth={1.5} /> {t('queue.show') || 'Show'}
+              <Folder size={14} strokeWidth={1.5} /> {t('queue.show')}
             </button>
             <button
               onClick={handleCopyFile}
@@ -394,7 +394,7 @@ export const RenderJobItem: React.FC<RenderJobItemProps> = React.memo(({
                 e.currentTarget.style.background = `${theme.colors.success}15`;
                 e.currentTarget.style.borderColor = `${theme.colors.success}40`;
               }}
-              title={copied ? (t('queue.copiedToClipboard') || 'Copied to clipboard') : (t('queue.copyToClipboard') || 'Copy file to clipboard')}
+              title={copied ? t('queue.copiedToClipboard') : t('queue.copyToClipboard')}
             >
               {copied ? <Check size={14} strokeWidth={2} /> : <Copy size={14} strokeWidth={1.5} />}
             </button>
@@ -461,12 +461,12 @@ export const RenderJobItem: React.FC<RenderJobItemProps> = React.memo(({
             }}
           >
             <div className="trim-head" style={{ color: theme.colors.textSecondary }}>
-              <span>{t('queue.trim') || 'Trim'}</span>
+              <span>{t('queue.trim')}</span>
               <span>
-                {t('queue.trimRange') || 'Range'}: {formatTrimTime(trimStart)} - {formatTrimTime(trimEnd)}
+                {t('queue.trimRange')}: {formatTrimTime(trimStart)} - {formatTrimTime(trimEnd)}
               </span>
               <span>
-                {t('queue.trimDuration') || 'Length'}: {formatTrimTime(trimEnd - trimStart)}
+                {t('queue.trimDuration')}: {formatTrimTime(trimEnd - trimStart)}
               </span>
             </div>
 
@@ -555,7 +555,7 @@ export const RenderJobItem: React.FC<RenderJobItemProps> = React.memo(({
 
             {!editable && (
               <div className="trim-readonly-note" style={{ color: theme.colors.textSecondary }}>
-                {t('queue.trimReadonly') || 'Trim can be edited only while item is pending'}
+                {t('queue.trimReadonly')}
               </div>
             )}
           </div>

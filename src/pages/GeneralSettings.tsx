@@ -11,6 +11,7 @@ import { APP_VERSION } from '../version';
 import { UpdateService, UpdateState } from '../services/UpdateService';
 import { AlertTriangle, FolderOpen, Plus, Minus } from 'lucide-react';
 import { NetworkProxySettings } from '../components/NetworkProxySettings';
+import { RecentVideoSettings } from '../components/RecentVideoSettings';
 import useRenderQueue from '../hooks/useRenderQueue';
 import { isMacOS } from '../utils/platform';
 import '../styles/SettingsWindow.css';
@@ -20,8 +21,8 @@ interface GeneralSettingsProps {
 }
 
 const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
-  const { t } = useLanguage();
-  const { theme } = useTheme();
+  const { t, isEmp } = useLanguage();
+  const { theme, setRandomTheme } = useTheme();
   const { settings, updateSettings, flushSettings } = useSettings();
   const { gpuAvailable, renderMode, setRenderMode, setGpuAvailability } = useRenderQueue();
   const isMac = isMacOS();
@@ -190,37 +191,76 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
               onChange={(e) => updateSettings({ theme: e.target.value }, true)}
               style={{ marginBottom: '8px' }}
             >
-              <option value="light">{t('settings.themeNames.light') || 'Cloud Day'}</option>
-              <option value="dark-red">{t('settings.themeNames.darkRed') || 'Crimson Cellar'}</option>
-              <option value="blue-ocean">{t('settings.themeNames.blueOcean') || 'Blue Ocean'}</option>
-              <option value="dark-blue">{t('settings.themeNames.darkBlue') || 'Midnight Harbor'}</option>
-              <option value="dark-gray">{t('settings.themeNames.darkGray') || 'Ash Fog'}</option>
-              <option value="dark-orange">{t('settings.themeNames.darkOrange') || 'Amber Forge'}</option>
-              <option value="dark-green">{t('settings.themeNames.darkGreen') || 'Pine Dusk'}</option>
-              <option value="purple-pink">{t('settings.themeNames.purplePink') || 'Plum Bloom'}</option>
-              <option value="pink">{t('settings.themeNames.pink') || 'Rose Candy'}</option>
-              <option value="sunny-yellow">{t('settings.themeNames.sunnyYellow') || 'Sunny Yellow'}</option>
-              <option value="mint-glass">{t('settings.themeNames.mintGlass') || 'Mint Glass'}</option>
-              <option value="paper-sepia">{t('settings.themeNames.paperSepia') || 'Paper Sepia'}</option>
-              <option value="nord-soft">{t('settings.themeNames.nordSoft') || 'Nord Soft'}</option>
-              <option value="graphite-light">{t('settings.themeNames.graphiteLight') || 'Graphite Light'}</option>
-              <option value="amoled-night">{t('settings.themeNames.amoledNight') || 'AMOLED Night'}</option>
-              <option value="catppuccin-mocha">{t('settings.themeNames.catppuccinMocha') || 'Cozy Mocha'}</option>
-              <option value="everforest">{t('settings.themeNames.everforest') || 'Forest Moss'}</option>
-              <option value="tokyo-night">{t('settings.themeNames.tokyoNight') || 'Tokyo Midnight'}</option>
-              <option value="warm-amber">{t('settings.themeNames.warmAmber') || 'Warm Amber'}</option>
+              <option value="light">{t('settings.themeNames.light')}</option>
+              <option value="dark-red">{t('settings.themeNames.darkRed')}</option>
+              <option value="blue-ocean">{t('settings.themeNames.blueOcean')}</option>
+              <option value="dark-blue">{t('settings.themeNames.darkBlue')}</option>
+              <option value="dark-gray">{t('settings.themeNames.darkGray')}</option>
+              <option value="dark-orange">{t('settings.themeNames.darkOrange')}</option>
+              <option value="dark-green">{t('settings.themeNames.darkGreen')}</option>
+              <option value="purple-pink">{t('settings.themeNames.purplePink')}</option>
+              <option value="pink">{t('settings.themeNames.pink')}</option>
+              <option value="sunny-yellow">{t('settings.themeNames.sunnyYellow')}</option>
+              <option value="mint-glass">{t('settings.themeNames.mintGlass')}</option>
+              <option value="paper-sepia">{t('settings.themeNames.paperSepia')}</option>
+              <option value="nord-soft">{t('settings.themeNames.nordSoft')}</option>
+              <option value="graphite-light">{t('settings.themeNames.graphiteLight')}</option>
+              <option value="amoled-night">{t('settings.themeNames.amoledNight')}</option>
+              <option value="catppuccin-mocha">{t('settings.themeNames.catppuccinMocha')}</option>
+              <option value="everforest">{t('settings.themeNames.everforest')}</option>
+              <option value="tokyo-night">{t('settings.themeNames.tokyoNight')}</option>
+              <option value="warm-amber">{t('settings.themeNames.warmAmber')}</option>
             </select>
-            <label
-              className="checkbox-label"
-              style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '14px',
+                marginTop: '4px',
+                flexWrap: 'wrap',
+              }}
             >
-              <input
-                type="checkbox"
-                checked={settings.modifiedTheme}
-                onChange={(e) => updateSettings({ modifiedTheme: e.target.checked }, true)}
-              />
-              Modified Theme
-            </label>
+              <label
+                className="checkbox-label"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  fontSize: '13px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={settings.modifiedTheme}
+                  onChange={(e) => updateSettings({ modifiedTheme: e.target.checked }, true)}
+                />
+                {t('settings.modifiedTheme')}
+              </label>
+
+              <label
+                className="checkbox-label"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  fontSize: '13px',
+                  whiteSpace: 'nowrap',
+                }}
+                title={t('settings.randomThemeDescription')}
+              >
+                <input
+                  type="checkbox"
+                  checked={settings.randomTheme}
+                  onChange={(e) => setRandomTheme(e.target.checked)}
+                />
+                {t('settings.randomTheme')}
+              </label>
+            </div>
           </div>
 
           <div className="setting-group" style={{ flex: '1 1 200px', minWidth: '200px' }}>
@@ -253,6 +293,8 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
             </select>
           </div>
         </div>
+
+        <RecentVideoSettings />
 
         {/* Eco Mode toggle */}
         <div
@@ -429,10 +471,10 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
 
           <div className="setting-group" style={{ flex: '1 1 200px' }}>
             <label style={{ display: 'block', marginBottom: '8px' }}>
-              {t('settings.glassOpacity')} ({settings.glassOpacity}%)
+              {t('settings.glassOpacity')}{isEmp ? '' : ` (${settings.glassOpacity}%)`}
             </label>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ fontSize: 12, opacity: 0.7 }}>0%</span>
+              <span style={{ fontSize: 12, opacity: 0.7 }}>{isEmp ? '' : '0%'}</span>
               <input
                 type="range"
                 min="0"
@@ -441,16 +483,16 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
                 onChange={(e) => updateSettings({ glassOpacity: Number(e.target.value) })}
                 style={{ flex: 1, accentColor: theme.colors.primary }}
               />
-              <span style={{ fontSize: 12, opacity: 0.7 }}>100%</span>
+              <span style={{ fontSize: 12, opacity: 0.7 }}>{isEmp ? '' : '100%'}</span>
             </div>
           </div>
 
           <div className="setting-group" style={{ flex: '1 1 200px' }}>
             <label style={{ display: 'block', marginBottom: '8px' }}>
-              {t('settings.glassBlur')} ({settings.glassBlur}px)
+              {t('settings.glassBlur')}{isEmp ? '' : ` (${settings.glassBlur}px)`}
             </label>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={{ fontSize: 12, opacity: 0.7 }}>0px</span>
+              <span style={{ fontSize: 12, opacity: 0.7 }}>{isEmp ? '' : '0px'}</span>
               <input
                 type="range"
                 min="0"
@@ -459,7 +501,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
                 onChange={(e) => updateSettings({ glassBlur: Number(e.target.value) })}
                 style={{ flex: 1, accentColor: theme.colors.primary }}
               />
-              <span style={{ fontSize: 12, opacity: 0.7 }}>40px</span>
+              <span style={{ fontSize: 12, opacity: 0.7 }}>{isEmp ? '' : '40px'}</span>
             </div>
           </div>
         </div>
@@ -470,7 +512,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
             type="text"
             value={settings.output_suffix}
             onChange={(e) => updateSettings({ output_suffix: e.target.value })}
-            placeholder="_szhatoe"
+            placeholder={isEmp ? '' : '_szhatoe'}
           />
         </div>
 
@@ -498,7 +540,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
         )}
 
         <div className="setting-group">
-          <label>{(isMac ? (t('gpu.labelMac') || 'Аппаратное ускорение (Apple VideoToolbox)') : t('gpu.label'))} / {t('settings.rendering')}</label>
+          <label>{[isMac ? t('gpu.labelMac') : t('gpu.label'), t('settings.rendering')].filter(Boolean).join(' / ')}</label>
           <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
             {/* GPU Check section */}
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -525,10 +567,10 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
                     alert(
                       available
                         ? (isMac 
-                            ? (t('gpu.compatibleFoundMac') || 'Аппаратное ускорение совместимо (VideoToolbox найден). Для применения перезапустите приложение.') 
+                            ? t('gpu.compatibleFoundMac') 
                             : t('gpu.compatibleFound'))
                         : (isMac 
-                            ? (t('gpu.notFoundOrUnavailableMac') || 'Аппаратное ускорение недоступно или VideoToolbox не найден') 
+                            ? t('gpu.notFoundOrUnavailableMac') 
                             : t('gpu.notFoundOrUnavailable'))
                     );
                   } catch (e) {
@@ -550,12 +592,12 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({ onBack }) => {
                   transition: 'all 0.2s ease',
                 }}
               >
-                {isMac ? (t('gpu.checkCompatibilityMac') || 'Проверить Apple VideoToolbox') : t('gpu.checkCompatibility')}
+                {isMac ? t('gpu.checkCompatibilityMac') : t('gpu.checkCompatibility')}
               </button>
               <span style={{ color: gpuAvailable ? theme.colors.success : theme.colors.error, fontWeight: 500 }}>
                 {gpuAvailable 
-                  ? (isMac ? (t('gpu.availableMac') || 'Доступен (VideoToolbox)') : t('gpu.available')) 
-                  : (isMac ? (t('gpu.unavailableMac') || 'Недоступен') : t('gpu.unavailable'))}
+                  ? (isMac ? t('gpu.availableMac') : t('gpu.available')) 
+                  : (isMac ? t('gpu.unavailableMac') : t('gpu.unavailable'))}
               </span>
             </div>
 

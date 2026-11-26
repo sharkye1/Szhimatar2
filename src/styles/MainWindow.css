@@ -1230,6 +1230,7 @@
     0 0 20px rgba(var(--primary-rgb), 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
+.empty-state.has-recent-videos { padding-top: 174px; }
 /* Drag-over highlight */
 .empty-state.drag-over {
   border-color: var(--color-primary, rgba(var(--primary-rgb), 1));

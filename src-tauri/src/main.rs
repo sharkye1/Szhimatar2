@@ -20,6 +20,7 @@ use process_manager::PROCESS_MANAGER;
 mod yt_dlp_manager;
 mod proxy_manager;
 mod preview;
+mod recent_videos;
 
 #[cfg(windows)]
 mod job_object {
@@ -106,6 +107,8 @@ pub(crate) struct Settings {
     pub theme: String,
     #[serde(default, rename = "modifiedTheme")]
     pub modified_theme: bool,
+    #[serde(default, rename = "randomTheme")]
+    pub random_theme: bool,
     pub language: String,
     pub ffmpeg_path: String,
     pub ffprobe_path: String,
@@ -132,6 +135,8 @@ pub(crate) struct Settings {
     pub proxy_mode: String,
     #[serde(rename = "proxyUrl", default)]
     pub proxy_url: String,
+    #[serde(default, rename = "recentVideos")]
+    pub recent_videos: recent_videos::RecentVideoSettings,
 }
 
 fn default_proxy_mode() -> String {
@@ -155,6 +160,7 @@ impl Default for Settings {
         Self {
             theme: "light".to_string(),
             modified_theme: false,
+            random_theme: false,
             language: "ru".to_string(),
             ffmpeg_path: "ffmpeg".to_string(),
             ffprobe_path: "ffprobe".to_string(),
@@ -171,6 +177,7 @@ impl Default for Settings {
             eco_mode: false,
             proxy_mode: "auto".to_string(),
             proxy_url: "".to_string(),
+            recent_videos: recent_videos::RecentVideoSettings::default(),
         }
     }
 }
@@ -3145,6 +3152,7 @@ fn main() {
                 }
             }
         })
+        .manage(recent_videos::VideoWatch::default())
         .invoke_handler(tauri::generate_handler![
             copy_file_to_clipboard,
             start_drag_file,
@@ -3198,6 +3206,10 @@ fn main() {
             restart_app,
             // Preview commands
             preview::get_preview_frame,
+            preview::get_recent_video_thumbnail,
+            recent_videos::watch_recent_video_folders,
+            recent_videos::list_recent_videos,
+            recent_videos::recent_video_still_ready,
             preview::render_preview,
             preview::release_preview,
             get_video_frame_rates,

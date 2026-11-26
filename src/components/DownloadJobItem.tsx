@@ -30,32 +30,32 @@ export const DownloadJobItem: React.FC<DownloadJobItemProps> = React.memo(({
     switch (item.status) {
       case 'downloading':
         return {
-          text: t('download.status.downloading') || 'Скачивание',
+          text: t('download.status.downloading'),
           color: theme.colors.primary,
           icon: <RefreshCw size={13} strokeWidth={2} className="download-spin" />,
         };
       case 'completed':
         return {
-          text: t('download.status.completed') || 'Готово',
+          text: t('download.status.completed'),
           color: theme.colors.success,
           icon: <Check size={13} strokeWidth={2} />,
         };
       case 'error':
         return {
-          text: t('download.status.error') || 'Ошибка',
+          text: t('download.status.error'),
           color: theme.colors.error,
           icon: <X size={13} strokeWidth={2} />,
         };
       case 'stopped':
         return {
-          text: t('download.status.stopped') || 'Остановлено',
+          text: t('download.status.stopped'),
           color: theme.colors.warning,
           icon: <Square size={13} strokeWidth={2} />,
         };
       case 'pending':
       default:
         return {
-          text: t('download.status.pending') || 'В очереди',
+          text: t('download.status.pending'),
           color: theme.colors.textSecondary,
           icon: <Clock size={13} strokeWidth={2} />,
         };
@@ -95,8 +95,8 @@ export const DownloadJobItem: React.FC<DownloadJobItemProps> = React.memo(({
 
   const displayName = item.title
     || item.fileName
-    || (item.status === 'downloading' ? (t('download.downloadingMedia') || 'Скачивание медиа...') : null)
-    || (item.status === 'pending' ? (t('download.waitingToStart') || 'Ожидание запуска') : null)
+    || (item.status === 'downloading' ? t('download.downloadingMedia') : null)
+    || (item.status === 'pending' ? t('download.waitingToStart') : null)
     || item.label
     || item.url;
 
@@ -129,7 +129,7 @@ export const DownloadJobItem: React.FC<DownloadJobItemProps> = React.memo(({
             <div
               className="drag-handle-btn"
               onMouseDown={(e) => startFileDrag(finalPath, displayName || undefined, e)}
-              title={t('queue.dragHandleTooltip') || 'Зажмите и перетащите файл в Telegram, Discord или папку'}
+              title={t('queue.dragHandleTooltip')}
             >
               <GripVertical size={15} strokeWidth={2.4} />
             </div>
@@ -250,7 +250,7 @@ export const DownloadJobItem: React.FC<DownloadJobItemProps> = React.memo(({
                 e.currentTarget.style.background = `${theme.colors.warning}15`;
                 e.currentTarget.style.borderColor = `${theme.colors.warning}40`;
               }}
-              title={t('download.stopDownload') || 'Stop download'}
+              title={t('download.stopDownload')}
             >
               <Square size={13} fill="currentColor" />
             </button>
@@ -284,9 +284,9 @@ export const DownloadJobItem: React.FC<DownloadJobItemProps> = React.memo(({
                 e.currentTarget.style.background = `${theme.colors.success}15`;
                 e.currentTarget.style.borderColor = `${theme.colors.success}40`;
               }}
-              title={t('queue.showInExplorer') || 'Show in Explorer'}
+              title={t('queue.showInExplorer')}
             >
-              <Folder size={14} strokeWidth={1.5} /> {t('queue.show') || 'Показать'}
+              <Folder size={14} strokeWidth={1.5} /> {t('queue.show')}
             </button>
             <button
               onClick={handleCopyFile}
@@ -316,7 +316,7 @@ export const DownloadJobItem: React.FC<DownloadJobItemProps> = React.memo(({
                 e.currentTarget.style.background = `${theme.colors.success}15`;
                 e.currentTarget.style.borderColor = `${theme.colors.success}40`;
               }}
-              title={copied ? (t('queue.copiedToClipboard') || 'Скопировано в буфер') : (t('queue.copyToClipboard') || 'Скопировать файл в буфер')}
+              title={copied ? t('queue.copiedToClipboard') : t('queue.copyToClipboard')}
             >
               {copied ? <Check size={14} strokeWidth={2} /> : <Copy size={14} strokeWidth={1.5} />}
             </button>
@@ -350,10 +350,10 @@ export const DownloadJobItem: React.FC<DownloadJobItemProps> = React.memo(({
                 e.currentTarget.style.background = `${theme.colors.primary}15`;
                 e.currentTarget.style.borderColor = `${theme.colors.primary}40`;
               }}
-              title={t('download.retryDownload') || 'Повторить загрузку'}
+              title={t('download.retryDownload')}
             >
               <RefreshCw size={13} strokeWidth={2} />
-              <span>{t('download.retry') || 'Повторить'}</span>
+              <span>{t('download.retry')}</span>
             </button>
           )}
 
@@ -421,7 +421,7 @@ export const DownloadJobItem: React.FC<DownloadJobItemProps> = React.memo(({
             {isNetworkErr && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: theme.colors.warning }}>
                 <span>⚠️</span>
-                <span>{t('download.networkErrorExplanation') || 'Сбой сети или таймаут подключения. Проверьте интернет или включите VPN/прокси.'}</span>
+                <span>{t('download.networkErrorExplanation')}</span>
               </div>
             )}
             <div style={{ fontSize: '0.76rem', opacity: 0.95, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'monospace' }}>
@@ -487,7 +487,7 @@ export const DownloadJobItem: React.FC<DownloadJobItemProps> = React.memo(({
             overflow: 'hidden',
           }}
         >
-          <span style={{ flexShrink: 0 }}>{t('queue.completedWithSize') || 'Готово'}</span>
+          <span style={{ flexShrink: 0 }}>{t('queue.completedWithSize')}</span>
           <span style={{ color: theme.colors.textSecondary, fontFamily: 'monospace', flexShrink: 0 }}>
             {(() => {
               const metaParts = [];

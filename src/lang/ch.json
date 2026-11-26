@@ -21,7 +21,8 @@
     "preview": "预览"
   },
   "common": {
-    "or": "或"
+    "or": "或",
+    "cancel": "取消"
   },
   "video": {
     "title": "视频设置",
@@ -327,7 +328,10 @@
     "ecoMode": "节能模式",
     "ecoModeDescription": "禁用模糊效果和光标光晕以降低 CPU 和 GPU 使用率",
     "ecoModeEnabled": "已启用",
-    "ecoModeDisabled": "已禁用"
+    "ecoModeDisabled": "已禁用",
+    "modifiedTheme": "单色",
+    "randomTheme": "随机",
+    "randomThemeDescription": "每次启动时随机选择主题（17:00后仅深色主题）"
   },
   "watermark": {
     "title": "水印设置",

@@ -66,27 +66,46 @@ async fn run_preview_command(mut command: Command) -> Result<Vec<u8>, String> {
     Ok(output.stdout)
 }
 
+enum PreviewFrame {
+    SourceJpeg,
+    CompactJpeg,
+    ComparisonPng,
+}
+
 async fn extract_frame(
     ffmpeg: &str,
     input: &Path,
     time: f64,
-    original_thumbnail: bool,
+    frame: PreviewFrame,
 ) -> Result<Vec<u8>, String> {
     let mut command = preview_command(ffmpeg);
     command
         .args(["-ss", &format!("{time:.3}"), "-i"])
         .arg(input)
         .args(["-map", "0:V:0", "-frames:v", "1", "-f", "image2pipe"]);
-    if original_thumbnail {
-        command.args(["-c:v", "mjpeg", "-q:v", "2"]);
-    } else {
-        // PNG has no display-aspect flag that WebViews consistently honor.
-        command.args([
-            "-vf",
-            "scale=w='max(1,round(iw*sar))':h=ih,setsar=1",
-            "-c:v",
-            "png",
-        ]);
+    match frame {
+        PreviewFrame::CompactJpeg => {
+            command.kill_on_drop(true).args([
+                "-vf",
+                "scale=320:180:force_original_aspect_ratio=decrease:force_divisible_by=2",
+                "-c:v",
+                "mjpeg",
+                "-q:v",
+                "5",
+            ]);
+        }
+        PreviewFrame::SourceJpeg => {
+            command.args(["-c:v", "mjpeg", "-q:v", "2"]);
+        }
+        PreviewFrame::ComparisonPng => {
+            // PNG has no display-aspect flag that WebViews consistently honor.
+            command.args([
+                "-vf",
+                "scale=w='max(1,round(iw*sar))':h=ih,setsar=1",
+                "-c:v",
+                "png",
+            ]);
+        }
     }
     command.arg("-");
     let frame = run_preview_command(command).await?;
@@ -104,9 +123,24 @@ pub async fn get_preview_frame(input_path: String, time_seconds: f64) -> Result<
         &config.ffmpeg_path,
         Path::new(&input_path),
         time_seconds,
-        true,
+        PreviewFrame::SourceJpeg,
     )
     .await?;
+    Ok(STANDARD.encode(frame))
+}
+
+#[tauri::command]
+pub async fn get_recent_video_thumbnail(path: PathBuf, version: String) -> Result<String, String> {
+    if !crate::recent_videos::is_ready_version(&path, &version) {
+        return Err("Video is no longer ready".to_string());
+    }
+    let config = load_ffmpeg_config();
+    let frame = tokio::time::timeout(
+        std::time::Duration::from_secs(8),
+        extract_frame(&config.ffmpeg_path, &path, 0.0, PreviewFrame::CompactJpeg),
+    )
+    .await
+    .map_err(|_| "Video thumbnail timed out".to_string())??;
     Ok(STANDARD.encode(frame))
 }
 
@@ -176,7 +210,8 @@ pub async fn render_preview(
     }
 
     if let Some(time) = frame_time {
-        let original = extract_frame(ffmpeg, source, source_time, false).await?;
+        let original =
+            extract_frame(ffmpeg, source, source_time, PreviewFrame::ComparisonPng).await?;
         let original_aspect = png_aspect(&original);
         if copy_video {
             let original = STANDARD.encode(original);
@@ -186,7 +221,7 @@ pub async fn render_preview(
                 shared_aspect: original_aspect,
             });
         }
-        let processed = extract_frame(ffmpeg, &sample, time, false).await?;
+        let processed = extract_frame(ffmpeg, &sample, time, PreviewFrame::ComparisonPng).await?;
         let shared_aspect = original_aspect
             .zip(png_aspect(&processed))
             .filter(|(before, after)| (before / after - 1.0).abs() < 0.01)

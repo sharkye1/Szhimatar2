@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, ReactNode } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/tauri';
 import { useSettings } from './SettingsContext';
+import { isLightTheme, getRandomThemeName } from '../utils/themeUtils';
+export { isLightTheme, getRandomThemeName };
 import lightTheme from '../themes/light.json';
 import darkRedTheme from '../themes/dark-red.json';
 import blueOceanTheme from '../themes/blue-ocean.json';
@@ -42,8 +44,10 @@ interface ThemeContextType {
   theme: Theme;
   themeName: string;
   modifiedTheme: boolean;
+  randomTheme: boolean;
   setTheme: (name: string) => void;
   setModifiedTheme: (value: boolean) => void;
+  setRandomTheme: (value: boolean) => void;
   useImageBackground: boolean;
   backgroundImagePath: string;
   glassOpacity: number;
@@ -110,15 +114,6 @@ const themeBackgrounds: Record<string, string> = {
   'warm-amber': 'linear-gradient(-45deg, #1a1715, #24201e, #2e2824, #28211d, #171412)',
 };
 
-// Check if theme is light
-const isLightTheme = (name: string): boolean => (
-  name === 'light'
-  || name === 'sunny-yellow'
-  || name === 'mint-glass'
-  || name === 'paper-sepia'
-  || name === 'graphite-light'
-);
-
 const canLoadImage = (url: string): Promise<boolean> => {
   return new Promise((resolve) => {
     const img = new Image();
@@ -157,6 +152,7 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const themeName = settings.theme || 'light';
   const baseTheme = themes[themeName] || themes.light;
   const modifiedTheme = settings.modifiedTheme;
+  const randomTheme = !!settings.randomTheme;
   const useImageBackground = settings.use_background_image;
   const backgroundImagePath = settings.background_image_path;
   const glassOpacity = settings.glassOpacity;
@@ -260,6 +256,15 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     updateSettings({ modifiedTheme: value }, true);
   };
 
+  const setRandomTheme = (value: boolean) => {
+    if (value) {
+      const nextTheme = getRandomThemeName(themeName);
+      updateSettings({ randomTheme: true, theme: nextTheme }, true);
+    } else {
+      updateSettings({ randomTheme: false }, true);
+    }
+  };
+
   const setUseImageBackground = (value: boolean) => {
     updateSettings({ use_background_image: value }, true);
   };
@@ -294,8 +299,10 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         theme: effectiveTheme,
         themeName,
         modifiedTheme,
+        randomTheme,
         setTheme,
         setModifiedTheme,
+        setRandomTheme,
         useImageBackground,
         backgroundImagePath,
         setUseImageBackground,

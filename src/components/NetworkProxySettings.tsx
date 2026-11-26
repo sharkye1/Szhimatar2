@@ -27,7 +27,7 @@ export interface ProxyDetectionResult {
 export const NetworkProxySettings: React.FC = () => {
   const { settings, updateSettings } = useSettings();
   const { theme } = useTheme();
-  const { t } = useLanguage();
+  const { t, isEmp } = useLanguage();
 
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [detectedProxy, setDetectedProxy] = useState<DetectedProxy | null>(null);
@@ -67,9 +67,7 @@ export const NetworkProxySettings: React.FC = () => {
     if (!urlToTest) {
       setTestResult({
         success: false,
-        message:
-          t('proxy.noProxyToTest') ||
-          'Нет адреса прокси для проверки. Укажите адрес вручную или запустите прокси.',
+        message: t('proxy.noProxyToTest'),
       });
       return;
     }
@@ -96,18 +94,26 @@ export const NetworkProxySettings: React.FC = () => {
   };
 
   const getSummary = () => {
+    if (isEmp) {
+      return {
+        isActive: false,
+        label: '',
+        hint: '',
+        type: 'disabled' as const,
+      };
+    }
     if (settings.proxyMode === 'disabled') {
       return {
         isActive: false,
-        label: t('proxy.modeDisabled') || 'Отключено (прямое)',
-        hint: t('proxy.directHint') || 'Используется только прямое подключение.',
+        label: t('proxy.modeDisabled'),
+        hint: t('proxy.directHint'),
         type: 'disabled' as const,
       };
     }
     if (settings.proxyUrl && settings.proxyUrl.trim()) {
       return {
         isActive: true,
-        label: `${t('proxy.summaryCustom') || 'Прокси'}: ${settings.proxyUrl.trim()}`,
+        label: `${t('proxy.summaryCustom')}: ${settings.proxyUrl.trim()}`,
         hint: settings.proxyUrl.trim(),
         type: 'custom' as const,
       };
@@ -124,14 +130,14 @@ export const NetworkProxySettings: React.FC = () => {
       return {
         isActive: true,
         label: `VPN: "${detectedVpn}"`,
-        hint: t('proxy.vpnHint') || 'Трафик направляется через системный VPN.',
+        hint: t('proxy.vpnHint'),
         type: 'vpn' as const,
       };
     }
     return {
       isActive: false,
-      label: t('proxy.summaryDirect') || 'Прямое подключение',
-      hint: t('proxy.notDetected') || 'Активный прокси или VPN не обнаружен.',
+      label: t('proxy.summaryDirect'),
+      hint: t('proxy.notDetected'),
       type: 'direct' as const,
     };
   };

@@ -38,7 +38,7 @@ export interface UseRenderQueueReturn {
   pendingJobs: number;
   
   // Actions
-  addFiles: (filePaths: string[]) => Promise<RenderJob[]>;
+  addFiles: (filePaths: string[], skipDuplicates?: boolean) => Promise<RenderJob[]>;
   addToQueue: (inputPath: string, outputPath: string, trimStartSec?: number, trimEndSec?: number) => Promise<RenderJob>;
   updateJobTrim: (jobId: string, trimStartSec: number, trimEndSec: number) => boolean;
   removeJob: (jobId: string) => boolean;
@@ -89,8 +89,8 @@ export function useRenderQueue(): UseRenderQueueReturn {
   const pendingJobs = state.jobs.filter(j => j.status === 'pending').length;
 
   // Actions
-  const addFiles = useCallback(async (filePaths: string[]): Promise<RenderJob[]> => {
-    return RenderService.addToQueue(filePaths);
+  const addFiles = useCallback(async (filePaths: string[], skipDuplicates?: boolean): Promise<RenderJob[]> => {
+    return RenderService.addToQueue(filePaths, skipDuplicates);
   }, []);
 
   const addToQueue = useCallback(async (

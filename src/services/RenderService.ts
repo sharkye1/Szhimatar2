@@ -31,6 +31,7 @@ import type {
 import StatisticsService from './StatisticsService';
 import RenderScheduler, { RenderMode, RenderSlot, sanitizeRenderMode } from './RenderScheduler';
 import { isMacOS } from '../utils/platform';
+import { videoPathKey } from '../utils/recentVideos';
 
 // ============================================================================
 // Types
@@ -1258,10 +1259,15 @@ class RenderServiceImpl {
   /**
    * Add files to render queue
    */
-  public async addToQueue(filePaths: string[]): Promise<RenderJob[]> {
+  public async addToQueue(filePaths: string[], skipDuplicates = false): Promise<RenderJob[]> {
     const newJobs: RenderJob[] = [];
 
     for (const inputPath of filePaths) {
+      const key = skipDuplicates ? videoPathKey(inputPath) : '';
+      const alreadyQueued = () => this.getJobs().some((job) =>
+        videoPathKey(job.inputPath) === key || videoPathKey(job.outputPath) === key
+      );
+      if (skipDuplicates && alreadyQueued()) continue;
       const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const fileName = inputPath.split(/[\\/]/).pop() || inputPath;
       const outputPath = this.generateOutputPath(inputPath);
@@ -1316,6 +1322,7 @@ class RenderServiceImpl {
         targetExtension,
       };
 
+      if (skipDuplicates && alreadyQueued()) continue;
       this.jobs.set(jobId, job);
       this.scheduler.enqueue(jobId);
       newJobs.push(job);
