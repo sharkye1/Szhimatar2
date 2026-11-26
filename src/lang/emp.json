@@ -542,6 +542,13 @@
     "vpnProxyWarningMessage": ""
   },
   "download": {
+    "rangeToggle": "",
+    "rangeStart": "",
+    "rangeEnd": "",
+    "rangeToEnd": "",
+    "rangeHint": "",
+    "rangeError": "",
+
     "downloadButton": "",
     "urlPlaceholder": "",
     "defaultDownloadsFolder": "",

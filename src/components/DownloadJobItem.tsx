@@ -3,7 +3,7 @@ import { Trash2, Folder, Square, RefreshCw, Check, X, Clock, Copy, GripVertical 
 import { invoke } from '@tauri-apps/api/tauri';
 import { DownloadQueueItem } from '../services/DownloadService';
 import { useFileDragOut } from '../hooks/useFileDragOut';
-import { isNetworkErrorText } from '../utils/downloadHelpers';
+import { formatDownloadTimestamp, isNetworkErrorText } from '../utils/downloadHelpers';
 import { TechnicalDetailsViewer } from './TechnicalDetailsViewer';
 import { parseTechnicalDetails } from '../utils/technicalDetails';
 
@@ -203,6 +203,10 @@ export const DownloadJobItem: React.FC<DownloadJobItemProps> = React.memo(({
             }}
           >
             {displayName}
+            {item.timeRange && <span style={{ marginLeft: 8, color: theme.colors.textSecondary }}>
+              [{formatDownloadTimestamp(item.timeRange.startSeconds)}–{item.timeRange.endSeconds !== undefined
+                ? formatDownloadTimestamp(item.timeRange.endSeconds) : t('download.rangeToEnd')}]
+            </span>}
           </span>
         </div>
 

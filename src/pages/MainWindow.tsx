@@ -10,6 +10,7 @@ import { Suspense, lazy } from 'react';
 import RenderJobItem from '../components/RenderJobItem';
 import DownloadJobItem from '../components/DownloadJobItem';
 import { RecentVideosPanel } from '../components/RecentVideosPanel';
+import TimeRangeEditor from '../components/TimeRangeEditor';
 import useRenderQueue from '../hooks/useRenderQueue';
 import useDownloadQueue from '../hooks/useDownloadQueue';
 import { useRecentVideos } from '../hooks/useRecentVideos';
@@ -24,6 +25,7 @@ import { UpdateService, UpdateState } from '../services/UpdateService';
 import { Film, Volume2, Settings, BarChart3, Folder, Play, Pause, Square, RefreshCw, Sparkles, HardDrive, Check, X, Clock, AlertTriangle, Trash2, Download, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   normalizeInputUrl,
+  parseDownloadTimeRange,
   isValidMediaUrl,
   formatDownloadBytes,
   formatDownloadHeight,
@@ -306,6 +308,13 @@ const MainWindow: React.FC<MainWindowProps> = ({
 
   type UrlCheckStage = 'idle' | 'checking' | 'success' | 'error';
   const [downloadUrl, setDownloadUrl] = useState('');
+  const [isEditingDownloadUrl, setIsEditingDownloadUrl] = useState(false);
+  const [downloadRangeEnabled, setDownloadRangeEnabled] = useState(false);
+  const [downloadDuration, setDownloadDuration] = useState(0);
+  const [downloadBounds, setDownloadBounds] = useState<[number, number]>([0, 0]);
+  const [downloadStart, setDownloadStart] = useState('');
+  const [downloadEnd, setDownloadEnd] = useState('');
+  const downloadTimeRange = parseDownloadTimeRange(downloadStart, downloadEnd);
   const [downloadFormats, setDownloadFormats] = useState<DownloadFormatOption[]>(DEFAULT_DOWNLOAD_FORMATS);
   const [selectedDownloadFormat, setSelectedDownloadFormat] = useState(DEFAULT_DOWNLOAD_FORMATS[0].label);
   const [parsedVideoTitle, setParsedVideoTitle] = useState<string>('');
@@ -392,6 +401,13 @@ const MainWindow: React.FC<MainWindowProps> = ({
 
   useEffect(() => {
     const trimmed = normalizeInputUrl(downloadUrl);
+    const requestId = ++downloadFormatsRequestRef.current;
+    setParsedVideoTitle('');
+    setDownloadDuration(0);
+    setDownloadBounds([0, 0]);
+    setDownloadRangeEnabled(false);
+    setDownloadStart('');
+    setDownloadEnd('');
 
     if (!trimmed) {
       setDownloadFormats(DEFAULT_DOWNLOAD_FORMATS);
@@ -415,7 +431,6 @@ const MainWindow: React.FC<MainWindowProps> = ({
       return;
     }
 
-    const requestId = ++downloadFormatsRequestRef.current;
     setIsLoadingDownloadFormats(true);
     setUrlCheckStage('checking');
     setUrlCheckError(null);
@@ -428,6 +443,10 @@ const MainWindow: React.FC<MainWindowProps> = ({
         if (requestId !== downloadFormatsRequestRef.current) {
           return;
         }
+
+        const duration = metadata.duration && Number.isFinite(metadata.duration) && metadata.duration > 0 ? metadata.duration : 0;
+        setDownloadDuration(duration);
+        setDownloadBounds([0, duration]);
 
         if (metadata.title) {
           setParsedVideoTitle(metadata.title);
@@ -771,6 +790,8 @@ const MainWindow: React.FC<MainWindowProps> = ({
       return;
     }
 
+    if (downloadRangeEnabled && !downloadTimeRange) return;
+
     const selectedFormat =
       downloadFormats.find((item) => item.label === selectedDownloadFormat) ||
       downloadFormats[0] ||
@@ -785,9 +806,13 @@ const MainWindow: React.FC<MainWindowProps> = ({
         selectedFormat.format,
         selectedFormat.label,
         savePath,
-        parsedVideoTitle || undefined
+        parsedVideoTitle || undefined,
+        downloadRangeEnabled ? downloadTimeRange! : undefined
       );
       setDownloadUrl('');
+      setDownloadRangeEnabled(false);
+      setDownloadStart('');
+      setDownloadEnd('');
       setParsedVideoTitle('');
       setUrlCheckStage('idle');
       setUrlCheckError(null);
@@ -811,9 +836,36 @@ const MainWindow: React.FC<MainWindowProps> = ({
       item.format,
       item.label,
       item.savePath,
-      item.title
+      item.title,
+      item.timeRange
     );
   }, [removeDownloadJob, startDownload]);
+
+  const renderDownloadRange = () => {
+    if (!downloadUrl.trim()) return null;
+    if (downloadDuration > 0) return <div className="download-range trim-control" style={{ borderColor: theme.colors.border, background: 'rgba(var(--theme-bg-rgb), 0.12)' }}>
+      <TimeRangeEditor duration={downloadDuration} start={downloadBounds[0]} end={downloadBounds[1]} theme={theme}
+        startLabel={t('download.rangeStart')} endLabel={t('download.rangeEnd')}
+        onChange={(start, end) => {
+          setDownloadBounds([start, end]);
+          const changed = start > 0 || end < downloadDuration;
+          setDownloadRangeEnabled(changed);
+          setDownloadStart(start.toFixed(3));
+          setDownloadEnd(end.toFixed(3));
+        }} />
+    </div>;
+    if (isLoadingDownloadFormats || urlCheckStage !== 'success') return null;
+    return <div className="download-range" style={{ color: theme.colors.textSecondary }}>
+      <label className="download-range-toggle"><input type="checkbox" checked={downloadRangeEnabled} style={{ accentColor: theme.colors.success }} onChange={e => setDownloadRangeEnabled(e.target.checked)} /><span>{t('download.rangeToggle')}</span></label>
+      {downloadRangeEnabled && <div className="download-range-panel" style={{ borderColor: theme.colors.border, background: theme.colors.surface }}>
+        <div className="download-range-fields">
+          <label><span>{t('download.rangeStart')}</span><input type="text" value={downloadStart} placeholder="00:00" onChange={e => setDownloadStart(e.target.value)} style={{ color: theme.colors.text, background: theme.colors.surface, borderColor: theme.colors.border }} /></label>
+          <label><span>{t('download.rangeEnd')}</span><input type="text" value={downloadEnd} placeholder={t('download.rangeToEnd')} onChange={e => setDownloadEnd(e.target.value)} style={{ color: theme.colors.text, background: theme.colors.surface, borderColor: theme.colors.border }} /></label>
+        </div><small>{t('download.rangeHint')}</small>
+        {!!(downloadStart || downloadEnd) && !downloadTimeRange && <small className="download-range-error" role="alert" style={{ color: theme.colors.error }}>{t('download.rangeError')}</small>}
+      </div>}
+    </div>;
+  };
 
   const renderUrlFeedbackHint = (isCompact = false) => {
     if (urlCheckStage === 'idle' && !isStartingDownload) {
@@ -878,44 +930,6 @@ const MainWindow: React.FC<MainWindowProps> = ({
             <Loader2 size={14} strokeWidth={2.4} className="download-spinner" style={{ flexShrink: 0 }} />
             <span style={{ flex: 1, lineHeight: 1.3 }}>
               {t('download.checkingUrl')}
-            </span>
-          </motion.div>
-        )}
-
-        {!isStartingDownload && urlCheckStage === 'success' && (
-          <motion.div
-            key="url-feedback-success"
-            initial={{ opacity: 0, height: 0, y: -4 }}
-            animate={{ opacity: 1, height: 'auto', y: 0 }}
-            exit={{ opacity: 0, height: 0, y: -4 }}
-            transition={{ duration: 0.18 }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              fontSize: isCompact ? '0.78rem' : '0.82rem',
-              color: theme.colors.success,
-              marginTop: '6px',
-              padding: '6px 12px',
-              borderRadius: '8px',
-              background: `${theme.colors.success}12`,
-              border: `1px solid ${theme.colors.success}28`,
-              width: '100%',
-              maxWidth: isCompact ? '100%' : '560px',
-              boxSizing: 'border-box',
-            }}
-          >
-            <Check size={14} strokeWidth={2.4} style={{ flexShrink: 0 }} />
-            <span style={{ flex: 1, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {parsedVideoTitle ? (
-                <>
-                  <strong style={{ fontWeight: 600 }}>{parsedVideoTitle}</strong>
-                  {' — '}
-                  <span>{t('download.readyToDownload')}</span>
-                </>
-              ) : (
-                <span>{t('download.formatsDiscovered')}</span>
-              )}
             </span>
           </motion.div>
         )}
@@ -1087,10 +1101,6 @@ const MainWindow: React.FC<MainWindowProps> = ({
       // Optionally show a notification to user
     }
   }, []);
-
-  const needsTopPreviewSpace = Boolean(
-    trimFramePreview && jobs.length > 0 && trimFramePreview.jobId === jobs[0].id,
-  );
 
   const hideTrimFramePreview = useCallback((delayMs: number = 450) => {
     if (trimPreviewHideRef.current) {
@@ -1486,7 +1496,9 @@ const MainWindow: React.FC<MainWindowProps> = ({
                 <input
                   className="action-bar-input"
                   type="text"
-                  value={downloadUrl}
+                  value={!isEditingDownloadUrl && urlCheckStage === 'success' && parsedVideoTitle ? parsedVideoTitle : downloadUrl}
+                  onFocus={(e) => { setIsEditingDownloadUrl(true); const input = e.currentTarget; requestAnimationFrame(() => input.select()); }}
+                  onBlur={() => setIsEditingDownloadUrl(false)}
                   onChange={(e) => setDownloadUrl(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter' && downloadUrl.trim()) handleDownloadMedia(); }}
                   placeholder={t('download.urlPlaceholder')}
@@ -1511,7 +1523,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
                 <button
                   className="action-bar-btn action-bar-btn--success"
                   onClick={handleDownloadMedia}
-                  disabled={!downloadUrl.trim() || isStartingDownload}
+                  disabled={!downloadUrl.trim() || isStartingDownload || (downloadRangeEnabled && !downloadTimeRange)}
                   style={{ background: theme.colors.success, color: '#fff', flexShrink: 0 }}
                 >
                   {isLoadingDownloadFormats || isStartingDownload
@@ -1520,6 +1532,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
                   <span>{isStartingDownload ? t('download.startingDownload') : t('download.downloadButton')}</span>
                 </button>
               </div>
+              {renderDownloadRange()}
               {renderUrlFeedbackHint(false)}
             </div>
           </div>
@@ -1592,7 +1605,9 @@ const MainWindow: React.FC<MainWindowProps> = ({
                     <input
                       className="action-bar-input"
                       type="text"
-                      value={downloadUrl}
+                      value={!isEditingDownloadUrl && urlCheckStage === 'success' && parsedVideoTitle ? parsedVideoTitle : downloadUrl}
+                  onFocus={(e) => { setIsEditingDownloadUrl(true); const input = e.currentTarget; requestAnimationFrame(() => input.select()); }}
+                  onBlur={() => setIsEditingDownloadUrl(false)}
                       onChange={(e) => setDownloadUrl(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter' && downloadUrl.trim()) { handleDownloadMedia(); } }}
                       placeholder={t('download.urlPlaceholder')}
@@ -1617,7 +1632,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
                     <button
                       className="action-bar-btn action-bar-btn--success"
                       onClick={() => { handleDownloadMedia(); }}
-                      disabled={!downloadUrl.trim() || isStartingDownload}
+                      disabled={!downloadUrl.trim() || isStartingDownload || (downloadRangeEnabled && !downloadTimeRange)}
                       style={{ background: theme.colors.success, color: '#fff', flexShrink: 0 }}
                     >
                       {isLoadingDownloadFormats || isStartingDownload
@@ -1626,6 +1641,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
                       <span>{isStartingDownload ? t('download.startingDownload') : t('download.downloadButton')}</span>
                     </button>
                   </div>
+                  {renderDownloadRange()}
                   {renderUrlFeedbackHint(true)}
                 </motion.div>
               )}
@@ -1633,7 +1649,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
 
             <div
               ref={queueListRef}
-              className={`queue-list ${needsTopPreviewSpace ? 'has-top-preview-room' : ''}${isDropError ? ' shake-error' : ''}${isDropSuccess ? ' drop-success' : ''}`}
+              className={`queue-list ${isDropError ? ' shake-error' : ''}${isDropSuccess ? ' drop-success' : ''}`}
               style={{ borderColor: theme.colors.border }}
             >
               {isDropSuccess && (

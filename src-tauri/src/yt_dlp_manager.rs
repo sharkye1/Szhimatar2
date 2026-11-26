@@ -1254,6 +1254,31 @@ fn emit_download_stopped(app: &AppHandle, job_id: &str) {
     }));
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DownloadTimeRange {
+    start_seconds: f64,
+    end_seconds: Option<f64>,
+}
+
+impl DownloadTimeRange {
+    fn validate(&self) -> Result<(), String> {
+        if !self.start_seconds.is_finite() || self.start_seconds < 0.0
+            || self.start_seconds > 9_007_199_254_740_991.0
+            || self.end_seconds.map_or(false, |end| !end.is_finite()
+                || end <= self.start_seconds || end > 9_007_199_254_740_991.0)
+            || (self.start_seconds == 0.0 && self.end_seconds.is_none()) {
+            return Err("Некорректный диапазон скачивания: конец должен быть позже начала".into());
+        }
+        Ok(())
+    }
+
+    fn section(&self) -> String {
+        format!("*{}-{}", self.start_seconds,
+            self.end_seconds.map(|end| end.to_string()).unwrap_or_else(|| "inf".into()))
+    }
+}
+
 fn build_download_command_args(
     normalized_save_path_str: &str,
     format: &str,
@@ -1261,6 +1286,7 @@ fn build_download_command_args(
     url: &str,
     proxy: Option<&str>,
     output_template: &str,
+    time_range: Option<&DownloadTimeRange>,
 ) -> Vec<String> {
     let mut command_args: Vec<String> = vec![
         "--encoding".to_string(),
@@ -1336,6 +1362,14 @@ fn build_download_command_args(
         }
     }
 
+    if let Some(range) = time_range {
+        // yt-dlp seeks the remote inputs with FFmpeg; never fall back to a full download.
+        command_args.extend([
+            "--download-sections".into(), range.section(),
+            "--downloader".into(), "ffmpeg".into(),
+            "--force-keyframes-at-cuts".into(),
+        ]);
+    }
     command_args.push(url.to_string());
     command_args
 }
@@ -1349,7 +1383,9 @@ pub async fn download_media_link(
     save_path: String,
     job_id: Option<String>,
     initial_title: Option<String>,
+    time_range: Option<DownloadTimeRange>,
 ) -> Result<String, String> {
+    if let Some(range) = &time_range { range.validate()?; }
     let clean_url = sanitize_url_input(&url);
     let job_id =
         job_id.unwrap_or_else(|| format!("download-{}", chrono::Utc::now().timestamp_millis()));
@@ -1440,6 +1476,7 @@ pub async fn download_media_link(
                 &url,
                 current_proxy.as_deref(),
                 &output_template,
+                time_range.as_ref(),
             );
 
             let mut command = tokio::process::Command::new(&yt_dlp_path);
@@ -1832,7 +1869,12 @@ pub async fn download_media_link(
                             "—".to_string()
                         };
 
-                        let final_duration = discovered_duration.lock().ok().and_then(|d| *d);
+                        let final_duration = if time_range.is_some() {
+                            // Source metadata describes the whole video, not the downloaded section.
+                            crate::get_video_duration(final_filepath.to_string_lossy().into_owned()).await.ok()
+                        } else {
+                            discovered_duration.lock().ok().and_then(|d| *d)
+                        };
                         let final_duration_str = final_duration.map(format_duration_compact);
 
                         let _ = app_handle.emit_all(
@@ -2051,7 +2093,7 @@ mod tests {
         for container in ["mp4", "webm"] {
             let args = build_download_command_args("/tmp", container,
                 "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
-                "https://example.com/video", None, "%(id)s.%(ext)s");
+                "https://example.com/video", None, "%(id)s.%(ext)s", None);
             for option in ["--merge-output-format", "--remux-video"] {
                 let index = args.iter().position(|a| a == option).unwrap();
                 assert_eq!(args[index + 1], container);
@@ -2062,7 +2104,7 @@ mod tests {
             assert!(args.contains(&"after_move:SZ_FILEPATH:%(filepath)j".to_string()));
         }
         let original = build_download_command_args("/tmp", "best", "bestaudio/best",
-            "https://example.com/audio", None, "%(id)s.%(ext)s");
+            "https://example.com/audio", None, "%(id)s.%(ext)s", None);
         assert!(!original.contains(&"--remux-video".to_string()));
         assert!(!original.contains(&"--merge-output-format".to_string()));
     }
@@ -2345,6 +2387,36 @@ mod tests {
     }
 
     #[test]
+    fn section_download_keeps_range_for_all_formats_and_proxy_attempts() {
+        let range = DownloadTimeRange { start_seconds: 90.5, end_seconds: Some(120.0) };
+        assert!(range.validate().is_ok());
+        for format in ["mp4", "webm", "mp3", "best"] {
+            for proxy in [None, Some("http://localhost:7890")] {
+                let args = build_download_command_args("/tmp", format, "bestvideo+bestaudio/best",
+                    "https://youtube.com/watch?v=test", proxy, "%(id)s.%(ext)s", Some(&range));
+                let index = args.iter().position(|arg| arg == "--download-sections").unwrap();
+                assert_eq!(args[index + 1], "*90.5-120");
+                let index = args.iter().position(|arg| arg == "--downloader").unwrap();
+                assert_eq!(args[index + 1], "ffmpeg");
+                assert!(args.iter().any(|arg| arg == "--force-keyframes-at-cuts"));
+            }
+        }
+        let open = DownloadTimeRange { start_seconds: 90.0, end_seconds: None };
+        assert_eq!(open.section(), "*90-inf");
+        let full = build_download_command_args("/tmp", "mp4", "best", "https://example.com", None,
+            "%(id)s.%(ext)s", None);
+        assert!(!full.iter().any(|arg| arg == "--download-sections"));
+    }
+
+    #[test]
+    fn rejects_invalid_download_ranges() {
+        for (start, end) in [(0.0, None), (-1.0, Some(2.0)), (2.0, Some(2.0)),
+            (3.0, Some(2.0)), (f64::NAN, Some(2.0)), (0.0, Some(f64::INFINITY))] {
+            assert!(DownloadTimeRange { start_seconds: start, end_seconds: end }.validate().is_err());
+        }
+    }
+
+    #[test]
     fn test_build_download_command_args_with_and_without_proxy() {
         let args_direct = build_download_command_args(
             "/tmp/downloads",
@@ -2353,6 +2425,7 @@ mod tests {
             "https://youtube.com/watch?v=123",
             None,
             "%(id)s.%(ext)s",
+            None,
         );
         assert!(!args_direct.contains(&"--proxy".to_string()));
         assert!(args_direct.contains(&"-P".to_string()));
@@ -2365,6 +2438,7 @@ mod tests {
             "https://soundcloud.com/artist/song",
             Some("http://127.0.0.1:7890"),
             "%(id)s.%(ext)s",
+            None,
         );
         assert!(args_proxy.contains(&"--proxy".to_string()));
         assert!(args_proxy.contains(&"http://127.0.0.1:7890".to_string()));

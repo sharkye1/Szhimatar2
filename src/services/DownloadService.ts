@@ -1,3 +1,4 @@
+import type { DownloadTimeRange } from '../utils/downloadHelpers';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { TechnicalDetails } from '../types/technicalDetails';
@@ -15,6 +16,7 @@ export interface DownloadQueueItem {
   quality: string;
   format: string;
   savePath: string;
+  timeRange?: DownloadTimeRange;
   status: DownloadStatus;
   progress: number;
   eta?: string | null;
@@ -245,7 +247,8 @@ class DownloadServiceImpl {
     format: string,
     label: string,
     savePath: string,
-    initialTitle?: string
+    initialTitle?: string,
+    timeRange?: DownloadTimeRange
   ): Promise<string> {
     await this.ready;
     const jobId = this.createDownloadJobId();
@@ -253,6 +256,7 @@ class DownloadServiceImpl {
       id: jobId,
       url,
       title: initialTitle,
+      timeRange: timeRange ? { ...timeRange } : undefined,
       label,
       quality,
       format,
@@ -280,6 +284,7 @@ class DownloadServiceImpl {
         savePath: item.savePath,
         jobId,
         initialTitle: initialTitle || null,
+        timeRange: item.timeRange || null,
       });
     } catch (error) {
       console.error('[DownloadService] Download failed:', error);

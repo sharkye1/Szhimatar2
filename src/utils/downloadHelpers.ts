@@ -118,3 +118,34 @@ export const normalizeProxyUrl = (raw: string): string => {
   return `http://${trimmed}`;
 };
 
+export interface DownloadTimeRange {
+  startSeconds: number;
+  endSeconds?: number;
+}
+
+// Accept seconds, MM:SS or HH:MM:SS, with optional fractional seconds.
+export function parseDownloadTimestamp(raw: string): number | null {
+  const value = raw.trim();
+  if (!/^\d+(?::\d{1,2}){0,2}(?:\.\d{1,3})?$/.test(value)) return null;
+  const parts = value.split(':').map(Number);
+  if (parts.slice(1).some(part => part >= 60)) return null;
+  const seconds = parts.reduce((total, part) => total * 60 + part, 0);
+  return Number.isFinite(seconds) && seconds <= Number.MAX_SAFE_INTEGER ? seconds : null;
+}
+
+export function parseDownloadTimeRange(start: string, end: string): DownloadTimeRange | null {
+  const startSeconds = start.trim() ? parseDownloadTimestamp(start) : 0;
+  const endSeconds = end.trim() ? parseDownloadTimestamp(end) : undefined;
+  if (startSeconds === null || endSeconds === null ||
+      (endSeconds !== undefined && endSeconds <= startSeconds) ||
+      (startSeconds === 0 && endSeconds === undefined)) return null;
+  return { startSeconds, ...(endSeconds !== undefined ? { endSeconds } : {}) };
+}
+
+export function formatDownloadTimestamp(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor(seconds / 60) % 60;
+  const [whole, fraction] = (seconds % 60).toFixed(3).split('.');
+  const rest = whole.padStart(2, '0') + (Number(fraction) ? `.${fraction.replace(/0+$/, '')}` : '');
+  return `${hours ? `${hours}:` : ''}${String(minutes).padStart(2, '0')}:${rest}`;
+}
