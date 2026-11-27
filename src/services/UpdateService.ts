@@ -1,8 +1,8 @@
 /**
- * UpdateService - Simple Update System (No Signing Required)
+ * UpdateService - signed Windows updates
  * 
  * Downloads updates directly from GitHub Releases.
- * Supports .exe and .zip files with optional SHA256 hash verification.
+ * Rust verifies the signature and executable before installation.
  */
 
 import { invoke } from '@tauri-apps/api/tauri';
@@ -29,7 +29,8 @@ export interface UpdateManifest {
   platforms: {
     [key: string]: {
       url: string;
-      hash?: string;  // Optional SHA256 hash for integrity check
+      hash?: string;
+      signature?: string;
     };
   };
 }
@@ -39,8 +40,8 @@ export interface UpdateInfo {
   newVersion: string;
   releaseNotes?: string;
   releaseDate?: string;
-  downloadUrl: string;
-  hash?: string;
+  hash: string;
+  signature: string;
 }
 
 export interface UpdateProgress {
@@ -91,7 +92,7 @@ class UpdateServiceClass {
       );
 
       this.isInitialized = true;
-      console.log('[UpdateService] Initialized (simple mode, no signing)');
+      console.log('[UpdateService] Initialized');
     } catch (error) {
       console.error('[UpdateService] Failed to initialize:', error);
     }
@@ -209,14 +210,18 @@ class UpdateServiceClass {
         return null;
       }
 
+      if (!platformData.hash || !platformData.signature) {
+        throw new Error('The update is missing its publisher signature or SHA-256');
+      }
+
       // Update available!
       const info: UpdateInfo = {
         currentVersion,
         newVersion: manifest.version,
         releaseNotes: manifest.notes,
         releaseDate: manifest.pub_date,
-        downloadUrl: platformData.url,
         hash: platformData.hash,
+        signature: platformData.signature,
       };
 
       this.updateState({
@@ -261,27 +266,14 @@ class UpdateServiceClass {
     });
 
     try {
-      const { downloadUrl, hash } = this.state.info;
-
-      // Call Rust command to download update
-      const result = await invoke<{ success: boolean; path: string; error?: string }>(
-        'download_update',
-        {
-          url: downloadUrl,
-          expectedHash: hash || null,
-        }
-      );
-
-      if (!result.success) {
-        throw new Error(result.error || 'Download failed');
-      }
+      const { newVersion, hash, signature } = this.state.info;
+      await invoke('download_update', { version: newVersion, hash, signature });
 
       this.updateState({
         status: 'ready-to-install',
         progress: { downloaded: 100, total: 100, percent: 100 },
       });
 
-      console.log('[UpdateService] Update downloaded to:', result.path);
       return true;
 
     } catch (error) {
@@ -302,26 +294,14 @@ class UpdateServiceClass {
    * Apply the downloaded update (replace exe and restart)
    */
   async applyUpdate(): Promise<boolean> {
-    if (this.state.status !== 'ready-to-install') {
+    if (this.state.status !== 'ready-to-install' || !this.state.info) {
       console.warn('[UpdateService] Update not ready to install');
       return false;
     }
 
     try {
-      // Call Rust command to apply update
-      const result = await invoke<{ success: boolean; error?: string }>(
-        'apply_update'
-      );
-
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to apply update');
-      }
-
-      console.log('[UpdateService] Update applied, restarting...');
-      
-      // Restart the application
-      await invoke('restart_app');
-      
+      const { newVersion, hash, signature } = this.state.info;
+      await invoke('apply_update', { version: newVersion, hash, signature });
       return true;
 
     } catch (error) {

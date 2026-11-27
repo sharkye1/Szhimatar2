@@ -28,8 +28,6 @@ target/
 src-tauri/target/
 src-tauri/test*
 src-tauri/.cargo/
-Cargo.lock
-src-tauri/Cargo.lock
 .tauri/
 
 # Compiled binaries and libraries
@@ -110,13 +108,14 @@ $RECYCLE.BIN/
 .nyc_output/
 *.lcov
 .mocha-timeout
-src/services/__tests__/
 *test*
 !tests/
 !tests/**
 !TEST_INFRA.md
 !TEST_READY.md
-!src/**/__tests__/**
+!src/**/__tests__/
+!src/**/__tests__/*.test.ts
+!src/**/__tests__/*.test.tsx
 
 # --- Production artifacts ---
 *.log

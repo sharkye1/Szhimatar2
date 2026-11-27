@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, createPrivateKey, createPublicKey, sign, verify } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
@@ -24,19 +24,23 @@ const files = {
   lock: 'package-lock.json',
   tauri: 'src-tauri/tauri.conf.json',
   cargo: 'src-tauri/Cargo.toml',
+  cargoLock: 'src-tauri/Cargo.lock',
   frontend: 'src/version.ts',
 };
 const read = (root, path) => readFileSync(join(root, path), 'utf8');
+const cargoLockVersion = /(^\[\[package\]\]\r?\nname = "szhimatar"\r?\nversion = ")([^"]+)(")/m;
 
 export function validateVersions(root = '.') {
   const pkg = JSON.parse(read(root, files.package));
   const lock = JSON.parse(read(root, files.lock));
   const tauri = JSON.parse(read(root, files.tauri));
   const cargo = read(root, files.cargo).match(/^\[package\][\s\S]*?^version\s*=\s*"([^"]+)"/m)?.[1];
+  const cargoLock = read(root, files.cargoLock).match(cargoLockVersion)?.[2];
   const frontend = read(root, files.frontend).match(/APP_VERSION\s*=\s*import\.meta\.env\.VITE_APP_VERSION\s*\|\|\s*'([^']+)'/)?.[1];
   const versions = { 'package.json': pkg.version, 'package-lock.json': lock.version,
     'package-lock.json packages[""]': lock.packages?.['']?.version,
-    'tauri.conf.json': tauri.package?.version, 'Cargo.toml': cargo, 'src/version.ts': frontend };
+    'tauri.conf.json': tauri.package?.version, 'Cargo.toml': cargo, 'Cargo.lock': cargoLock,
+    'src/version.ts': frontend };
   parseVersion(pkg.version);
   for (const [file, version] of Object.entries(versions)) {
     if (version !== pkg.version) throw new Error(`${file}: expected ${pkg.version}, found ${version ?? 'no version'}`);
@@ -65,21 +69,78 @@ export function setVersion(root, version) {
   results.set(files.lock, replaceOnce(rootField, /(""\s*:\s*\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"version"\s*:\s*")\d+\.\d+\.\d+(?=")/, (_, prefix) => `${prefix}${version}`, files.lock));
   replace(files.tauri, /("version"\s*:\s*")\d+\.\d+\.\d+(?=")/);
   replace(files.cargo, /(^\[package\][\s\S]*?^version\s*=\s*")\d+\.\d+\.\d+(?=")/m);
+  results.set(files.cargoLock, replaceOnce(
+    read(root, files.cargoLock), cargoLockVersion, (_, prefix, _oldVersion, suffix) => `${prefix}${version}${suffix}`, files.cargoLock
+  ));
   replace(files.frontend, /(APP_VERSION\s*=\s*import\.meta\.env\.VITE_APP_VERSION\s*\|\|\s*')\d+\.\d+\.\d+(?=')/);
   for (const [name, content] of results) writeFileSync(join(root, name), content);
   return validateVersions(root);
 }
 
-export function createManifest(version, repository, notes, executable, date = new Date()) {
-  parseVersion(version);
+const platform = 'windows-x86_64';
+const hashPattern = /^[0-9a-f]{64}$/;
+
+function updateMessage(version, hash) {
+  return Buffer.from(`Szhimatar update v1\n${platform}\n${version}\n${hash}\n`);
+}
+
+export function publicUpdateKey(root = '.') {
+  const rawKey = read(root, 'src-tauri/update-public-key.hex').trim();
+  if (!hashPattern.test(rawKey)) throw new Error('Invalid embedded Ed25519 public key');
+  const spki = Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), Buffer.from(rawKey, 'hex')]);
+  return createPublicKey({ key: spki, format: 'der', type: 'spki' });
+}
+
+function signingKey(encoded, expectedKey) {
+  if (!encoded) throw new Error('Missing SZHIMATAR_UPDATE_PRIVATE_KEY in the release environment');
+  const key = createPrivateKey({ key: Buffer.from(encoded, 'base64'), format: 'der', type: 'pkcs8' });
+  if (key.asymmetricKeyType !== 'ed25519' || !createPublicKey(key).equals(expectedKey)) {
+    throw new Error('Release signing key does not match the public key embedded in the application');
+  }
+  return key;
+}
+
+function portableUrl(version, repository) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw new Error('Invalid GitHub repository');
+  return `https://github.com/${repository}/releases/download/v${version}/Szhimatar.exe`;
+}
+
+export function verifyManifestSignature(manifest, version, repository, key) {
+  const update = manifest.platforms?.[platform];
+  return manifest.version === version && update?.url === portableUrl(version, repository)
+    && hashPattern.test(update.hash) && /^[0-9a-f]{128}$/.test(update.signature)
+    && verify(null, updateMessage(version, update.hash), key, Buffer.from(update.signature, 'hex'));
+}
+
+export function createManifest(version, repository, notes, executable, key, date = new Date()) {
+  parseVersion(version);
+  const hash = createHash('sha256').update(executable).digest('hex');
   return {
     version, notes, pub_date: date.toISOString(),
-    platforms: { 'windows-x86_64': {
-      url: `https://github.com/${repository}/releases/download/v${version}/Szhimatar.exe`,
-      hash: createHash('sha256').update(executable).digest('hex'),
+    platforms: { [platform]: {
+      url: portableUrl(version, repository),
+      hash,
+      signature: sign(null, updateMessage(version, hash), key).toString('hex'),
     } },
   };
+}
+
+export function windowsInstallers(version) {
+  return ['Szhimatar.exe', `Szhimatar_${version}_x64-setup.exe`, `Szhimatar_${version}_x64_en-US.msi`];
+}
+
+export function writeReleaseAssets(version, repository, directory, notes, privateKey) {
+  const key = signingKey(privateKey, publicUpdateKey());
+  const expected = windowsInstallers(version).sort();
+  const executables = readdirSync(directory).filter(name => /\.(exe|msi)$/i.test(name)).sort();
+  if (executables.join('\n') !== expected.join('\n')) {
+    throw new Error(`Unexpected Windows artifacts: ${executables.join(', ')}`);
+  }
+  const exe = readFileSync(join(directory, 'Szhimatar.exe'));
+  const manifest = createManifest(version, repository, notes, exe, key);
+  writeFileSync(join(directory, 'latest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  const checksums = expected.map(name => `${createHash('sha256').update(readFileSync(join(directory, name))).digest('hex')}  ${name}`).join('\n');
+  writeFileSync(join(directory, 'SHA256SUMS.txt'), `${checksums}\n`);
 }
 
 function main() {
@@ -95,25 +156,20 @@ function main() {
     let release = false;
     if (event === 'workflow_dispatch') {
       release = true;
-    } else if (event === 'push') {
+    } else if (event === 'push' || event === 'pull_request') {
       const before = process.env.BEFORE_SHA;
       if (!/^[a-f0-9]{40}$/i.test(before || '') || /^0+$/.test(before)) throw new Error('Cannot determine the previous main commit');
       const previous = JSON.parse(execFileSync('git', ['show', `${before}:package.json`], { encoding: 'utf8' })).version;
       const comparison = compareVersions(version, previous);
       if (comparison < 0) throw new Error(`Version decreased from ${previous} to ${version}`);
-      release = comparison > 0;
+      release = event === 'push' && comparison > 0;
       console.log(`Previous version: ${previous}; current version: ${version}`);
     }
-    appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\nrelease=${release}\n`);
+    const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\nrelease=${release}\ncommit=${commit}\n`);
   } else if (command === 'manifest') {
     const [version, repository, directory, notesFile] = args;
-    const exe = readFileSync(join(directory, 'Szhimatar.exe'));
-    const manifest = createManifest(version, repository, readFileSync(notesFile, 'utf8'), exe);
-    writeFileSync(join(directory, 'latest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-    const names = readdirSync(directory).filter(name => /\.(exe|msi)$/i.test(name)).sort();
-    if (names.length !== 3) throw new Error(`Expected portable exe, installer exe and MSI, got: ${names.join(', ')}`);
-    const checksums = names.map(name => `${createHash('sha256').update(readFileSync(join(directory, name))).digest('hex')}  ${name}`).join('\n');
-    writeFileSync(join(directory, 'SHA256SUMS.txt'), `${checksums}\n`);
+    writeReleaseAssets(version, repository, directory, readFileSync(notesFile, 'utf8'), process.env.SZHIMATAR_UPDATE_PRIVATE_KEY);
   } else if (command === 'assert-newer') {
     const [version, latestTag] = args;
     const latest = latestTag.replace(/^v/, '');
