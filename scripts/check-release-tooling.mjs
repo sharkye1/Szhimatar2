@@ -63,7 +63,7 @@ try {
   const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   git('init');
   git('add', ...names);
-  git('-c', 'user.name=Release check', '-c', 'user.email=release-check@localhost', 'commit', '-m', 'fixture');
+  git('-c', 'commit.gpgsign=false', '-c', 'user.name=Release check', '-c', 'user.email=release-check@localhost', 'commit', '-m', 'fixture');
   const before = git('rev-parse', 'HEAD');
   const output = join(root, 'github-output.txt');
   const detect = (event = 'push') => {
@@ -95,10 +95,15 @@ try {
   writeFileSync(join(assets, 'Szhimatar.exe'), 'abc');
   writeFileSync(join(assets, 'Szhimatar_1.5.1_x64-setup.exe'), 'installer');
   writeFileSync(join(assets, 'Szhimatar_1.5.1_x64_en-US.msi'), 'msi');
+  writeFileSync(join(assets, 'Szhimatar_1.5.1_aarch64.dmg'), 'dmg');
   const notes = join(root, 'notes.txt');
   writeFileSync(notes, 'Release notes');
   const manifestArgs = [resolve('scripts/release-version.mjs'), 'manifest', '1.5.1', 'example/repo', assets, notes];
   const encodedPrivateKey = privateKey.export({ format: 'der', type: 'pkcs8' }).toString('base64');
+  assert.throws(() => execFileSync(process.execPath, manifestArgs, {
+    cwd: root, env: { ...process.env, SZHIMATAR_UPDATE_PRIVATE_KEY: encodedPrivateKey }, stdio: 'pipe',
+  }), /Expected release bundles/);
+  writeFileSync(join(assets, 'Szhimatar_1.5.1_aarch64.app.tar.gz'), 'app archive');
   execFileSync(process.execPath, manifestArgs, {
     cwd: root, env: { ...process.env, SZHIMATAR_UPDATE_PRIVATE_KEY: encodedPrivateKey },
   });
@@ -108,7 +113,10 @@ try {
   assert.ok(verifyManifestSignature(generated, '1.5.1', 'example/repo', publicKey));
   generated.platforms['windows-x86_64'].hash = '00'.repeat(32);
   assert.equal(verifyManifestSignature(generated, '1.5.1', 'example/repo', publicKey), false);
-  assert.equal(readFileSync(join(assets, 'SHA256SUMS.txt'), 'utf8').trim().split('\n').length, 3);
+  const checksums = readFileSync(join(assets, 'SHA256SUMS.txt'), 'utf8').trim().split('\n');
+  assert.equal(checksums.length, 5);
+  assert.ok(checksums.some(line => line.endsWith('  Szhimatar_1.5.1_aarch64.dmg')));
+  assert.ok(checksums.some(line => line.endsWith('  Szhimatar_1.5.1_aarch64.app.tar.gz')));
 
   const github = mockGitHub();
   const release = { repository: 'example/repo', version: '1.5.1', commit: before, directory: assets, privateKey: encodedPrivateKey };

@@ -12,6 +12,7 @@ import {
   saveFFmpegPaths,
   loadFFmpegPaths,
 } from '../utils/ffmpeg';
+import { isWindows } from '../utils/platform';
 
 /**
  * Strip Windows \\?\ prefix from path for clean storage and display
@@ -85,7 +86,7 @@ class FFmpegFinderService {
   private async performSearch(): Promise<FFmpegFinderResult> {
     const ffmpeg = await this.searchForBinary('ffmpeg');
     const ffprobe = ffmpeg
-      ? await this.searchForBinary('ffprobe', this.getDirectory(ffmpeg.path) || ffmpeg.path)
+      ? await this.searchForBinary('ffprobe', ffmpeg.path)
       : null;
 
     return {
@@ -97,10 +98,10 @@ class FFmpegFinderService {
 
   /**
    * Search for a specific binary (ffmpeg or ffprobe)
-   * If searchDir is provided, checks there first (for ffprobe with ffmpeg path)
+   * For ffprobe, try the directory of the discovered ffmpeg executable first.
    */
-  private async searchForBinary(binaryName: 'ffmpeg' | 'ffprobe', ffmpegDir?: string): Promise<FFmpegInfo | null> {
-    const searchDir = ffmpegDir ? this.getDirectory(ffmpegDir) || ffmpegDir : undefined;
+  private async searchForBinary(binaryName: 'ffmpeg' | 'ffprobe', ffmpegPath?: string): Promise<FFmpegInfo | null> {
+    const searchDir = ffmpegPath ? this.getDirectory(ffmpegPath) : null;
 
     // Stage 1: If ffprobe and ffmpeg dir provided, check same directory
     if (binaryName === 'ffprobe' && searchDir) {
@@ -159,11 +160,11 @@ class FFmpegFinderService {
    * Format binary name for platform (adds .exe on Windows)
    */
   private formatBinaryPath(dirPath: string, binaryName: string): string {
-    const sep = dirPath.includes('\\') ? '\\' : '/';
-    const isWindows = dirPath.includes('\\') || binaryName.endsWith('.exe');
-    const fileName = isWindows && !binaryName.endsWith('.exe') ? `${binaryName}.exe` : binaryName;
+    const windows = isWindows();
+    const sep = windows && dirPath.includes('\\') ? '\\' : '/';
+    const fileName = windows && !binaryName.endsWith('.exe') ? `${binaryName}.exe` : binaryName;
     
-    return dirPath.endsWith(sep) 
+    return dirPath.endsWith('/') || (windows && dirPath.endsWith('\\'))
       ? `${dirPath}${fileName}` 
       : `${dirPath}${sep}${fileName}`;
   }
@@ -343,12 +344,9 @@ class FFmpegFinderService {
    * Extract directory portion from a binary path
    */
   private getDirectory(binaryPath: string): string | null {
-    const lastSlash = Math.max(binaryPath.lastIndexOf('/'), binaryPath.lastIndexOf('\\'));
-    if (lastSlash === -1) {
-      return null;
-    }
-
-    return binaryPath.substring(0, lastSlash);
+    const slash = binaryPath.lastIndexOf('/');
+    const lastSlash = isWindows() ? Math.max(slash, binaryPath.lastIndexOf('\\')) : slash;
+    return lastSlash < 0 ? null : binaryPath.slice(0, lastSlash + 1);
   }
 }
 

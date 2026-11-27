@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
-  compareVersions, parseVersion, publicUpdateKey, verifyManifestSignature, windowsInstallers, writeReleaseAssets,
+  compareVersions, parseVersion, publicUpdateKey, releaseBundles, verifyManifestSignature, writeReleaseAssets,
 } from './release-version.mjs';
 
 function githubClient(repository) {
@@ -62,8 +62,8 @@ export function publishRelease(github, { repository, version, commit, directory,
   parseVersion(version);
   if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error('Expected a full release commit SHA');
   const tag = `v${version}`;
-  const installers = windowsInstallers(version).sort();
-  const names = [...installers, 'latest.json', 'SHA256SUMS.txt'];
+  const bundles = releaseBundles(version).sort();
+  const names = [...bundles, 'latest.json', 'SHA256SUMS.txt'];
   const releases = github.api('/releases?per_page=100', { pages: true }).filter(release => release.tag_name === tag);
   if (releases.length > 1) throw new Error(`Ambiguous release for ${tag}`);
   let release = releases[0];
@@ -78,7 +78,7 @@ export function publishRelease(github, { repository, version, commit, directory,
         || manifest.platforms['windows-x86_64'].hash !== assets.get('Szhimatar.exe')) {
       throw new Error(`Published release ${tag} does not contain a valid signed update`);
     }
-    const expectedChecksums = installers.map(name => `${assets.get(name)}  ${name}`).join('\n');
+    const expectedChecksums = bundles.map(name => `${assets.get(name)}  ${name}`).join('\n');
     if (github.download(tag, 'SHA256SUMS.txt').trim() !== expectedChecksums) {
       throw new Error(`Published release ${tag} checksums differ from uploaded artifacts`);
     }
