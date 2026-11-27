@@ -3,47 +3,42 @@ name: Build macOS App
 on:
   workflow_dispatch:
 
-# Отключаем ворнинг Node 20 на глобальном уровне
+permissions:
+  contents: read
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
-    runs-on: macos-latest
-
+    runs-on: macos-15
+    timeout-minutes: 35
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          node-version: 22 # Явно ставим свежую Node.js
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          targets: aarch64-apple-darwin
-
-      - name: Install npm dependencies
-        run: npm install
-
-      - name: Build Tauri App via CLI
-        # Запускаем сборку напрямую через таури-клиент без создания релизов в гит
-        run: npx tauri build --target aarch64-apple-darwin
-
-      - name: Check where the files are
-        # Этот шаг выведет в логи список всех собранных файлов, чтобы мы их точно нашли
+          node-version: 22
+          cache: npm
+      - run: rustup target add aarch64-apple-darwin
+      - run: npm ci
+      - name: Build Tauri application
+        run: npm run tauri -- build --ci --target aarch64-apple-darwin -- --locked
+      - name: Collect macOS artifacts
+        shell: bash
         run: |
-          echo "=== Ищем собранные артефакты ==="
-          find src-tauri/target/aarch64-apple-darwin/release/bundle -maxdepth 3 2>/dev/null || echo "Папка не найдена"
-
-      - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v4
+          set -euo pipefail
+          shopt -s nullglob
+          bundle=src-tauri/target/aarch64-apple-darwin/release/bundle
+          apps=("$bundle"/macos/*.app)
+          disks=("$bundle"/dmg/*.dmg)
+          [[ "${#apps[@]}" == 1 && "${#disks[@]}" == 1 ]]
+          mkdir release-assets
+          cp "${disks[0]}" release-assets/
+          tar -czf release-assets/Szhimatar-macos-arm64.app.tar.gz -C "$bundle/macos" "$(basename "${apps[0]}")"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: szhimatar-mac-build
-          # Маска поиска, которая заберет всё: и .dmg, и .app из нужной папки архитектуры M1
-          path: |
-            src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
-            src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
+          path: release-assets/*
           if-no-files-found: error

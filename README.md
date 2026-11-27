@@ -86,24 +86,29 @@
 
 ### Автоматический выпуск Windows-версии
 
-GitHub Actions запускает проверки при отправке изменений в `main` и при открытии pull request в `main`. Если в `main` отправлен коммит, повышающий версию, после успешных тестов и сборки автоматически создаётся GitHub Release. В него входят переносимый `Szhimatar.exe`, установщики `.exe` и `.msi`, контрольные суммы и `latest.json` для встроенного обновления. Описание релиза формируется GitHub автоматически. Существующая ручная сборка macOS остаётся отдельной.
+GitHub Actions проверяет pull request и push в `main` на Windows и macOS. CI устанавливает зависимости по lock-файлам, собирает фронтенд и запускает тесты JavaScript и Rust. Версия Rust закреплена в `rust-toolchain.toml`. Отдельный workflow **Build macOS App** собирает DMG и архив приложения для Apple Silicon.
 
-Чтобы подготовить следующий выпуск:
+Повышение версии в `main` запускает выпуск Windows после успешного CI. Перед публикацией workflow проверяет контрольные суммы файлов в черновике релиза. В релиз входят переносимый `Szhimatar.exe`, установщики `.exe` и `.msi`, `SHA256SUMS.txt` и манифест `latest.json` с подписью Ed25519.
+
+Для следующего выпуска создайте ветку и обновите версию.
 
 ```bash
+git switch -c release/1.5.2
 npm run version:set -- 1.5.2
-git add -A
+git add package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json src/version.ts
 git commit -m "Release 1.5.2"
-git push origin main
+git push -u origin release/1.5.2
 ```
 
-Используйте нужный следующий номер вместо `1.5.2`. Команда обновляет все файлы версии; `npm run version:check` проверяет их согласованность. Изменения версии должны попасть в `main` вместе с workflow: локальный коммит без `git push` не запустит GitHub Actions. Обычный push без повышения версии запускает проверки, но не публикует новый релиз. Для повтора неудавшегося выпуска можно запустить workflow **Checks and Windows release** вручную на ветке `main` через вкладку Actions. Уже опубликованный релиз автоматически не перезаписывается.
+Подставьте следующий номер вместо `1.5.2`. Команда `npm run version:check` проверяет согласованность версий. Откройте pull request в `main` и влейте его после успешных проверок.
 
-Для публикации у GitHub Actions должен быть включён доступ `contents: write` для `GITHUB_TOKEN`; workflow запрашивает его только для задания публикации. Если публикация запрещена настройками репозитория, проверьте Settings → Actions → General → Workflow permissions. Никакие отдельные секреты для GitHub Release не нужны.
+Для повтора откройте исходный запуск и выберите **Re-run failed jobs**. Для нового ручного запуска **Checks and Windows release** на ветке `main` передайте полный SHA релизного коммита в поле `release_sha`. GitHub продолжит загрузку в черновик с тем же тегом и коммитом. Если релиз уже опубликован, задача проверит его файлы и завершится без повторной загрузки.
+
+Задание публикации использует секрет `SZHIMATAR_UPDATE_PRIVATE_KEY` окружения GitHub Actions `release`. Это закрытый ключ Ed25519 в формате Base64 PKCS#8 DER. Соответствующий открытый ключ из `src-tauri/update-public-key.hex` вшит в приложение. Для смены ключа нужен переходный релиз, которому доверяют уже установленные версии. Доступ к окружению требуется только ветке `main`. Для Windows-инсталляций в каталоге без прав записи используйте новый установщик из GitHub Releases.
 
 ### Системные требования
 - **Node.js** 18+ и **npm**
-- **Rust** 1.70+ (устанавливается через [rustup.rs](https://rustup.rs/))
+- **Rust** через [rustup.rs](https://rustup.rs/) с версией из `rust-toolchain.toml`
 - **Windows**: Visual Studio C++ Build Tools (компоненты «Разработка классических приложений на C++»)
 - **macOS**: Xcode Command Line Tools (`xcode-select --install`)
 - **FFmpeg & FFprobe**: должны быть установлены в системе (в `PATH`) или указаны в настройках программы
