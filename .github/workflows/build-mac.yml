@@ -51,7 +51,7 @@ jobs:
           [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" == "$version" ]]
           executable="$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")"
           [[ -x "$executable" ]]
-          lipo -verify_arch arm64 "$executable"
+          lipo "$executable" -verify_arch arm64
           hdiutil verify "$disk"
           output="$RUNNER_TEMP/szhimatar-launch.log"
           "$executable" > "$output" 2>&1 &
