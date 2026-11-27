@@ -9,7 +9,7 @@ import {
 } from '../utils/recentVideos';
 
 const AUTO_FOLDERS_KEY = 'szhimatar.recent-video-folders.v1';
-export const RECENT_VIDEO_CACHE_KEY = 'szhimatar.recent-video-cache.v1';
+export const RECENT_VIDEO_CACHE_KEY = 'szhimatar.recent-video-cache.v3';
 const NO_FOLDERS: VideoFolder[] = [];
 
 interface AutoFolders {
@@ -33,13 +33,14 @@ export function useRecentVideos(queuePaths: string[]) {
   const [autoFolders, setAutoFolders] = useState(() => readRecentVideoStorage<AutoFolders>(AUTO_FOLDERS_KEY));
   const autoFoldersRef = useRef(autoFolders);
   const [snapshot, setSnapshot] = useState(() => readRecentVideoStorage<VideoSnapshot>(RECENT_VIDEO_CACHE_KEY));
-  const [historyPaths, setHistoryPaths] = useState<string[]>([]);
+  const [historyPaths, setHistoryPaths] = useState<string[]>();
+  const historyLoaded = historyPaths !== undefined;
   const requestRefresh = useRef<() => void>(() => {});
 
   const sourceFolders = folders.length ? folders : autoFolders?.folders ?? NO_FOLDERS;
   const scope = JSON.stringify([includeDownloads, sourceFolders, settings.output_suffix]);
   // The scan always reads the latest exclusions, including items added while a scan is in flight.
-  const excluded = [...new Set([...queuePaths, ...historyPaths].filter(Boolean).map(videoPathKey))].sort();
+  const excluded = [...new Set([...queuePaths.filter(Boolean).map(videoPathKey), ...(historyPaths ?? [])])].sort();
   const exclusionKey = JSON.stringify(excluded);
   const exclusionsRef = useRef(excluded);
   exclusionsRef.current = excluded;
@@ -49,9 +50,12 @@ export function useRecentVideos(queuePaths: string[]) {
     let cancelled = false;
     function considerHistory(records: readonly RenderStatRecord[]) {
       if (cancelled) return;
-      const paths = records.map((entry) => entry.outputPath).filter(Boolean);
+      const paths = [...new Set([
+        ...StatisticsService.getProcessedVideoPaths(),
+        ...records.map((entry) => entry.outputPath).filter(Boolean).map(videoPathKey),
+      ])];
       setHistoryPaths((previous) => (
-        previous.length === paths.length && previous.every((path, index) => path === paths[index]) ? previous : paths
+        previous?.length === paths.length && previous.every((path, index) => path === paths[index]) ? previous : paths
       ));
       if (folders.length) return;
       const previous = autoFoldersRef.current;
@@ -69,6 +73,7 @@ export function useRecentVideos(queuePaths: string[]) {
       if (StatisticsService.isLoaded()) considerHistory(StatisticsService.getRenders());
     };
     const unsubscribe = StatisticsService.subscribe((stats) => considerHistory(stats.renders));
+    considerLoadedHistory();
     void StatisticsService.init().then((stats) => considerHistory(stats.renders), console.warn);
     window.addEventListener('focus', considerLoadedHistory);
     const interval = window.setInterval(considerLoadedHistory, 60 * 60 * 1000);
@@ -88,6 +93,7 @@ export function useRecentVideos(queuePaths: string[]) {
       writeRecentVideoStorage(RECENT_VIDEO_CACHE_KEY, null);
       return;
     }
+    if (!historyLoaded) return;
     let cancelled = false;
     let running = false;
     let needsAnotherScan = false;
@@ -124,7 +130,7 @@ export function useRecentVideos(queuePaths: string[]) {
           if (previous?.scope === scope && previous.videos.length === videos.length &&
               previous.videos.every((video, index) => (
                 video.path === videos[index].path && video.version === videos[index].version &&
-                video.activity === videos[index].activity && video.activityAt === videos[index].activityAt
+                video.addedAt === videos[index].addedAt && video.createdAt === videos[index].createdAt
               ))) return previous;
           return { scope, videos };
         });
@@ -172,16 +178,16 @@ export function useRecentVideos(queuePaths: string[]) {
       window.removeEventListener('focus', refresh);
       void unsubscribe.then((remove) => remove(), () => {});
     };
-  }, [enabled, includeDownloads, isLoaded, scope, sourceFolders, settings.output_suffix]);
+  }, [enabled, historyLoaded, includeDownloads, isLoaded, scope, sourceFolders, settings.output_suffix]);
 
   useEffect(() => {
     requestRefresh.current();
   }, [exclusionKey]);
 
   const excludeSet = new Set(excluded);
-  const current = snapshot?.scope === scope ? snapshot : undefined;
+  const current = historyLoaded && snapshot?.scope === scope ? snapshot : undefined;
   const videos = (current?.videos ?? []).filter((video) =>
-    !excludeSet.has(videoPathKey(video.path)) && Date.now() - video.activityAt <= RECENT_VIDEO_MAX_AGE
+    !excludeSet.has(videoPathKey(video.path)) && Date.now() - video.addedAt <= RECENT_VIDEO_MAX_AGE
   );
   const thumbnailSequence = JSON.stringify(videos.map(videoVersionKey));
   const videosRef = useRef(videos);

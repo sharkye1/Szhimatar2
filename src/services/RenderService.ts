@@ -1897,7 +1897,7 @@ function splitFfmpegArgs(args: string[]): { inputArgs: string[]; outputArgs: str
     }
 
     // Update statistics
-    StatisticsService.markRenderComplete(jobId);
+    StatisticsService.markRenderComplete(jobId, updatedJob);
 
     // Log completion with slot info
     if (typeof window !== 'undefined') {

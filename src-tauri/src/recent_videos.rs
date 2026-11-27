@@ -43,21 +43,15 @@ impl Default for RecentVideoSettings {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-enum Activity {
-    Appeared,
-    Modified,
-}
-
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RecentVideo {
     path: PathBuf,
     version: String,
     name: String,
-    activity: Activity,
-    activity_at: u64,
+    added_at: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    created_at: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -296,32 +290,19 @@ fn scan(
                 .created()
                 .map(timestamp)
                 .ok()
-                .filter(|time| *time <= now)
-                .unwrap_or_default();
-            let modified = metadata
-                .modified()
-                .map(timestamp)
-                .ok()
-                .filter(|time| *time <= now)
-                .unwrap_or_default();
+                .filter(|time| *time > 0 && *time <= now);
             let arrived = arrivals.get(&key).copied().unwrap_or_default();
-            let activity_at = created.max(modified).max(arrived).min(now);
-            if now.saturating_sub(activity_at) > FRESH_FOR_MS {
+            let added_at = created.unwrap_or_default().max(arrived).min(now);
+            if added_at == 0 || now - added_at > FRESH_FOR_MS {
                 continue;
             }
-            let was_modified = modified > created.max(arrived).saturating_add(5_000);
-            let activity = if was_modified || (created == 0 && arrived == 0) {
-                Activity::Modified
-            } else {
-                Activity::Appeared
-            };
             candidates.push((
                 RecentVideo {
                     path: path.to_owned(),
                     version: version(&metadata),
                     name: name.to_owned(),
-                    activity,
-                    activity_at,
+                    added_at,
+                    created_at: created,
                 },
                 metadata,
             ));
@@ -329,8 +310,8 @@ fn scan(
     }
     candidates.sort_unstable_by(|(left, _), (right, _)| {
         right
-            .activity_at
-            .cmp(&left.activity_at)
+            .added_at
+            .cmp(&left.added_at)
             .then_with(|| left.path.cmp(&right.path))
     });
     let mut videos = Vec::new();
@@ -341,7 +322,7 @@ fn scan(
             if videos.len() == VISIBLE_LIMIT {
                 break;
             }
-        } else if now.saturating_sub(video.activity_at) <= 60_000 {
+        } else if now.saturating_sub(video.added_at) <= 60_000 {
             settling = true;
         }
     }
@@ -390,13 +371,26 @@ mod tests {
             .iter()
             .any(|video| video.path == clip && video.name == "Clip"));
         assert!(result.videos.iter().any(|video| video.path == copied));
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&clip)
+            .unwrap()
+            .set_times(
+                fs::FileTimes::new()
+                    .set_modified(UNIX_EPOCH + Duration::from_millis(old_now - 3_000)),
+            )
+            .unwrap();
         assert!(scan(folders.clone(), vec![], "", HashMap::new(), old_now)
             .videos
             .is_empty());
         let moved_in = HashMap::from([(path_key(&copied), old_now - 3_000)]);
         let result = scan(folders, vec![], "", moved_in, old_now);
         assert_eq!(result.videos.len(), 1);
-        assert_eq!(result.videos[0].activity, Activity::Appeared);
+        assert_eq!(result.videos[0].added_at, old_now - 3_000);
+        assert_eq!(
+            result.videos[0].created_at,
+            Some(timestamp(fs::metadata(&copied).unwrap().created().unwrap()))
+        );
     }
 
     #[test]

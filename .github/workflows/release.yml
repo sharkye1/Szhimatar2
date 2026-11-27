@@ -1,0 +1,134 @@
+name: Checks and Windows release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  checks:
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.version.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Install dependencies
+        run: npm ci
+      - name: Check version and decide whether to release
+        id: version
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: node scripts/release-version.mjs detect
+      - name: Check release tooling
+        run: node scripts/check-release-tooling.mjs
+      - name: Run JavaScript tests
+        run: npm test
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Build frontend
+        run: npm run build
+
+  build:
+    needs: checks
+    if: needs.checks.outputs.release == 'true' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ilammy/msvc-dev-cmd@v1
+      - run: npm ci
+      - name: Build Windows application
+        run: npm run tauri build
+      - name: Collect portable application and installers
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Path release-assets | Out-Null
+          Copy-Item -LiteralPath 'src-tauri/target/release/szhimatar.exe' -Destination 'release-assets/Szhimatar.exe'
+          $version = '${{ needs.checks.outputs.version }}'
+          Copy-Item -LiteralPath "src-tauri/target/release/bundle/nsis/Szhimatar_${version}_x64-setup.exe" -Destination 'release-assets/'
+          Copy-Item -LiteralPath "src-tauri/target/release/bundle/msi/Szhimatar_${version}_x64_en-US.msi" -Destination 'release-assets/'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: [checks, build]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: publish-windows-release
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.checks.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: release-assets
+      - name: Create complete release
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v${VERSION}"
+          # Never replace an existing published release or move an existing tag.
+          if gh release view "$tag" --json isDraft --jq .isDraft > existing-release.txt 2>/dev/null; then
+            [[ "$(cat existing-release.txt)" == "true" ]] || { echo "Release $tag already exists"; exit 1; }
+            target="$(gh release view "$tag" --json targetCommitish --jq .targetCommitish)"
+            [[ "$target" == "$GITHUB_SHA" ]] || { echo "Draft targets a different commit"; exit 1; }
+            if [[ -n "$(git ls-remote --tags origin "refs/tags/$tag")" ]]; then
+              tag_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq .sha)"
+              [[ "$tag_commit" == "$GITHUB_SHA" ]] || { echo "Draft tag points to a different commit"; exit 1; }
+            fi
+          else
+            if [[ -n "$(git ls-remote --tags origin "refs/tags/$tag")" ]]; then
+              echo "Tag $tag already exists without a release"; exit 1
+            fi
+            latest="$(gh release view --json tagName --jq .tagName)"
+            node scripts/release-version.mjs assert-newer "$VERSION" "$latest"
+            gh release create "$tag" --target "$GITHUB_SHA" --title "Szhimatar $VERSION" --generate-notes --draft
+            # GitHub can take a moment to make a new draft visible through the API.
+            ready=false
+            for attempt in {1..10}; do
+              if gh release view "$tag" >/dev/null 2>&1; then ready=true; break; fi
+              sleep 2
+            done
+            [[ "$ready" == "true" ]] || { echo "Draft release did not become available"; exit 1; }
+          fi
+          # Check again when recovering a draft so an older release cannot become latest.
+          latest="$(gh release view --json tagName --jq .tagName)"
+          node scripts/release-version.mjs assert-newer "$VERSION" "$latest"
+          gh release view "$tag" --json body --jq .body > release-notes.txt
+          node scripts/release-version.mjs manifest "$VERSION" "$GITHUB_REPOSITORY" release-assets release-notes.txt
+          gh release upload "$tag" release-assets/* --clobber
+          gh release edit "$tag" --draft=false --latest

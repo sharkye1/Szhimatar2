@@ -15,8 +15,8 @@ export interface RecentVideo {
   path: string;
   version: string;
   name: string;
-  activity: 'appeared' | 'modified';
-  activityAt: number;
+  addedAt: number;
+  createdAt?: number;
   thumbnail?: string;
 }
 

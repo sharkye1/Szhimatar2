@@ -1,10 +1,11 @@
-import { useEffect, useId, useRef, useState, type FocusEvent, type PointerEvent } from 'react';
-import { ChevronDown, Film } from 'lucide-react';
+import { useEffect, useId, useMemo, useRef, useState, type ComponentProps, type FocusEvent, type PointerEvent } from 'react';
+import { Film } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
-import { RECENT_VIDEO_LIMIT, type RecentVideo, videoVersionKey } from '../utils/recentVideos';
+import { type RecentVideo, videoVersionKey } from '../utils/recentVideos';
 import '../styles/RecentVideos.css';
 
-interface RecentVideosPanelProps {
+interface RecentVideosPanelProps extends Pick<ComponentProps<'div'>, 'children' | 'onDragOver' | 'onDragLeave' | 'onDrop'> {
+  enabled: boolean;
   videos: RecentVideo[];
   loading: boolean;
   variant?: 'empty' | 'queue';
@@ -13,26 +14,63 @@ interface RecentVideosPanelProps {
 }
 
 const CLOSE_DELAY_MS = 1000;
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+const TIME_LOCALES: Record<string, string> = { ch: 'zh-CN', eo: 'eo', my: 'isv', ru: 'ru', vz: 'ru' };
 
-function relativeTime(timestamp: number, language: string): string {
-  const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
-  const format = new Intl.RelativeTimeFormat(language === 'ru' ? 'ru' : 'en', { numeric: 'auto', style: 'short' });
-  if (seconds < 45) return format.format(0, 'second');
-  if (seconds < 60 * 60) return format.format(-Math.max(1, Math.floor(seconds / 60)), 'minute');
-  return format.format(-Math.floor(seconds / 3600), 'hour');
+function ageUnit(elapsed: number): [Intl.RelativeTimeFormatUnit, number] {
+  if (elapsed < MINUTE_MS) return ['second', 1000];
+  if (elapsed < HOUR_MS) return ['minute', MINUTE_MS];
+  return ['hour', HOUR_MS];
 }
 
-export function RecentVideosPanel({ videos, loading, variant = 'empty', status, onAdd }: RecentVideosPanelProps) {
-  const { language, t } = useLanguage();
+function RecentVideoAge({ timestamp, active, formatter }: {
+  timestamp: number;
+  active: boolean;
+  formatter: Intl.RelativeTimeFormat;
+}) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (!active) return;
+    let timer: number;
+    function update() {
+      const currentTime = Date.now();
+      const elapsed = currentTime - timestamp;
+      const [, unitMs] = ageUnit(elapsed);
+      setNow(currentTime);
+      timer = window.setTimeout(update, unitMs - (elapsed % unitMs));
+    }
+    update();
+    return () => window.clearTimeout(timer);
+  }, [active, timestamp]);
+
+  const elapsed = Math.max(0, now - timestamp);
+  const [unit, unitMs] = ageUnit(elapsed);
+  return (
+    <time className="recent-video-age" dateTime={new Date(timestamp).toISOString()}>
+      {formatter.format(-Math.floor(elapsed / unitMs), unit)}
+    </time>
+  );
+}
+
+export function RecentVideosPanel({
+  enabled, videos, loading, variant = 'empty', status, onAdd, children, onDragOver, onDragLeave, onDrop,
+}: RecentVideosPanelProps) {
+  const { language, isEmp, t } = useLanguage();
+  const timeFormatter = useMemo(() => new Intl.RelativeTimeFormat([TIME_LOCALES[language] ?? 'en', 'en'], {
+    numeric: 'always',
+  }), [language]);
   const id = useId();
   const panelRef = useRef<HTMLElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [expanded, setExpanded] = useState(false);
-  const [, setClock] = useState(0);
   const closeTimer = useRef<number>();
   const hovered = useRef(false);
   const openedByTap = useRef(false);
   const focusCard = useRef(false);
+  const hasVideos = enabled && videos.length > 0;
+  const isOpen = hasVideos && expanded;
+  const title = t('recentVideos.title', 'Recent videos') || 'Recent videos';
 
   function cancelClose() {
     window.clearTimeout(closeTimer.current);
@@ -74,6 +112,10 @@ export function RecentVideosPanel({ videos, loading, variant = 'empty', status, 
     if (!hovered.current && !event.currentTarget.contains(event.relatedTarget)) delayClose();
   }
 
+  function focusFirstCard() {
+    panelRef.current?.querySelector<HTMLButtonElement>('.recent-video-card')?.focus({ preventScroll: true });
+  }
+
   useEffect(() => {
     function handlePointerDown(event: globalThis.PointerEvent) {
       if (openedByTap.current && event.target instanceof Node && !panelRef.current?.contains(event.target)) {
@@ -95,85 +137,98 @@ export function RecentVideosPanel({ videos, loading, variant = 'empty', status, 
   }, []);
 
   useEffect(() => {
-    if (!expanded) return;
-    if (focusCard.current) {
+    if (!hasVideos) {
       focusCard.current = false;
-      panelRef.current?.querySelector<HTMLButtonElement>('.recent-video-card')?.focus();
+      hovered.current = false;
+      close();
     }
-    const interval = window.setInterval(() => setClock((clock) => clock + 1), 15_000);
-    return () => window.clearInterval(interval);
-  }, [expanded]);
+  }, [hasVideos]);
 
-  const placeholders = loading && !videos.length;
+  useEffect(() => {
+    if (isOpen && focusCard.current) {
+      focusCard.current = false;
+      focusFirstCard();
+    }
+  }, [isOpen]);
+
   return (
-    <section
-      ref={panelRef}
-      className={`recent-videos recent-videos--${variant}${expanded ? ' is-open' : ''}${!videos.length && !placeholders ? ' has-no-videos' : ''}`}
-      aria-label={t('recentVideos.title')}
-      onClick={(event) => event.stopPropagation()}
-      onPointerEnter={handlePointerEnter}
-      onPointerLeave={(event) => { if (event.pointerType === 'mouse') leave(); }}
-      onBlur={handleBlur}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape' && expanded) {
-          event.stopPropagation();
-          close();
-          triggerRef.current?.focus();
-        }
-      }}
+    <div
+      className={`recent-videos-area recent-videos-area--${variant}${hasVideos ? ' has-recent-videos' : ''}${isOpen ? ' is-open' : ''}`}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
     >
-      <button
-        ref={triggerRef}
-        type="button"
-        className={`recent-videos-trigger${variant === 'queue' ? ' queue-add-btn' : ''}`}
-        aria-expanded={expanded}
-        aria-controls={id}
-        onClick={(event) => {
-          if (expanded) { close(); return; }
-          if (event.detail === 0) focusCard.current = true;
-          else openedByTap.current = true;
-          open();
-        }}
-      >
-        {t('recentVideos.title')} <ChevronDown size={14} aria-hidden="true" />
-      </button>
-
-      <div id={id} className="recent-videos-viewport" aria-hidden={!expanded} aria-busy={loading}>
-        {videos.length || placeholders ? (
-          <div className={`recent-videos-cards${videos.length === 1 ? ' has-one' : videos.length === 2 ? ' has-two' : ''}`}>
-            {placeholders && Array.from({ length: RECENT_VIDEO_LIMIT }, (_, index) => (
-              <div className="recent-video-card recent-video-placeholder" key={index} aria-hidden="true">
-                <span className="recent-video-image"><Film size={25} /></span>
-              </div>
-            ))}
-            {videos.map((video) => (
+      {enabled && (hasVideos || status) && (
+        <section
+          ref={panelRef}
+          className={`recent-videos recent-videos--${variant}${isOpen ? ' is-open' : ''}`}
+          aria-label={title}
+          onPointerEnter={handlePointerEnter}
+          onPointerLeave={(event) => { if (event.pointerType === 'mouse') leave(); }}
+          onBlur={handleBlur}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape' && isOpen) {
+              event.stopPropagation();
+              close();
+              triggerRef.current?.focus();
+            }
+          }}
+        >
+          {hasVideos && (
+            <>
               <button
-                key={videoVersionKey(video)}
-                className="recent-video-card"
+                ref={triggerRef}
                 type="button"
-                tabIndex={expanded ? undefined : -1}
-                title={video.name}
-                onClick={() => onAdd(video)}
-              >
-                <span className="recent-video-image" aria-hidden="true">
-                  {video.thumbnail
-                    ? <img src={`data:image/jpeg;base64,${video.thumbnail}`} alt="" draggable={false} />
-                    : <Film size={25} />}
-                </span>
-                <span className="recent-video-meta">
-                  <span className="recent-video-name">{video.name}</span>
-                  <span className="recent-video-age">
-                    {t(`recentVideos.${video.activity}`).replace('{time}', relativeTime(video.activityAt, language))}
-                  </span>
-                </span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <p className="recent-videos-empty">{t('recentVideos.empty')}</p>
-        )}
-      </div>
-      {status && <p className="recent-videos-status" role="status">{status}</p>}
-    </section>
+                className="recent-videos-fan"
+                aria-label={title}
+                aria-expanded={isOpen}
+                aria-controls={id}
+                onClick={(event) => {
+                  if (event.detail === 0) {
+                    if (isOpen) focusFirstCard();
+                    else focusCard.current = true;
+                  } else {
+                    if (openedByTap.current) {
+                      close();
+                      return;
+                    }
+                    openedByTap.current = true;
+                  }
+                  open();
+                }}
+              />
+
+              <div id={id} className="recent-videos-viewport" aria-hidden={!isOpen} aria-busy={loading}>
+                <div className={`recent-videos-cards${videos.length === 1 ? ' has-one' : videos.length === 2 ? ' has-two' : ''}`}>
+                  {videos.map((video) => (
+                    <button
+                      key={videoVersionKey(video)}
+                      className="recent-video-card"
+                      type="button"
+                      tabIndex={isOpen ? undefined : -1}
+                      aria-label={video.name}
+                      title={video.name}
+                      onClick={() => onAdd(video)}
+                    >
+                      <span className="recent-video-image">
+                        {video.thumbnail
+                          ? <img src={`data:image/jpeg;base64,${video.thumbnail}`} alt="" draggable={false} />
+                          : <Film size={25} aria-hidden="true" />}
+                        <span className="recent-video-name">{video.name}</span>
+                      </span>
+                      {!isEmp && (
+                        <RecentVideoAge timestamp={video.createdAt ?? video.addedAt} active={isOpen} formatter={timeFormatter} />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+          {status && <p className="recent-videos-status" role="status">{status}</p>}
+        </section>
+      )}
+      {children}
+    </div>
   );
 }

@@ -1440,102 +1440,105 @@ const MainWindow: React.FC<MainWindowProps> = ({
 
         {/* ── EMPTY STATE (shown when no jobs and no downloads) ── */}
         {jobs.length === 0 && downloadQueue.length === 0 ? (
-          <div
-            ref={emptyStateRef}
-            className={`empty-state${recentVideos.enabled && (recentVideos.loading || recentVideos.videos.length) ? ' has-recent-videos' : ''}${isDragging ? ' drag-over' : ''}${isDropError ? ' shake-error' : ''}${isDropSuccess ? ' drop-success' : ''}`}
+          <RecentVideosPanel
+            {...recentVideos}
+            status={recentVideoStatus}
+            onAdd={addRecentVideo}
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
-            onClick={(e) => {
-              lastPointerPosRef.current = { clientX: e.clientX, clientY: e.clientY };
-              handleSelectFiles();
-            }}
           >
-            {recentVideos.enabled && (
-              <RecentVideosPanel {...recentVideos} status={recentVideoStatus} onAdd={(video) => void addRecentVideo(video)} />
-            )}
-            {isDropSuccess && (
-              <div
-                className="water-ripple-container"
-                style={{
-                  '--ripple-x': ripplePos ? `${ripplePos.x}px` : '50%',
-                  '--ripple-y': ripplePos ? `${ripplePos.y}px` : '50%',
-                } as React.CSSProperties}
-              >
-                <span className="water-ripple-wave" />
-                <span className="water-ripple-wave delay" />
-              </div>
-            )}
-            <div className="empty-state-icon">
-              <Folder size={48} strokeWidth={1} />
-            </div>
-            <p className="empty-state-title">{t('main.selectFiles')}</p>
-            <p className="empty-state-subtitle" style={{ color: theme.colors.textSecondary }}>
-              {t('main.dropFilesHere')}
-            </p>
-
-            <div className="empty-state-divider" style={{ color: theme.colors.textSecondary }}>
-              <span className="empty-state-line" style={{ background: theme.colors.border }} />
-              <span>{t('common.or')}</span>
-              <span className="empty-state-line" style={{ background: theme.colors.border }} />
-            </div>
-
-            {/* URL download pill */}
             <div
-              className="empty-state-url-container"
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                width: '100%',
-                maxWidth: '560px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
+              ref={emptyStateRef}
+              className={`empty-state${isDragging ? ' drag-over' : ''}${isDropError ? ' shake-error' : ''}${isDropSuccess ? ' drop-success' : ''}`}
+              onClick={(e) => {
+                lastPointerPosRef.current = { clientX: e.clientX, clientY: e.clientY };
+                handleSelectFiles();
               }}
             >
-              <div className="empty-state-url-row">
-                <input
-                  className="action-bar-input"
-                  type="text"
-                  value={!isEditingDownloadUrl && urlCheckStage === 'success' && parsedVideoTitle ? parsedVideoTitle : downloadUrl}
-                  onFocus={(e) => { setIsEditingDownloadUrl(true); const input = e.currentTarget; requestAnimationFrame(() => input.select()); }}
-                  onBlur={() => setIsEditingDownloadUrl(false)}
-                  onChange={(e) => setDownloadUrl(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && downloadUrl.trim()) handleDownloadMedia(); }}
-                  placeholder={t('download.urlPlaceholder')}
-                  style={{ color: theme.colors.text }}
-                />
-                <span className="url-pill-sep" style={{ background: theme.colors.border }} />
-                <div className="action-bar-format-wrap" style={{ background: theme.colors.surface }}>
-                  <select
-                    className="action-bar-format-select"
-                    value={selectedDownloadFormat}
-                    onChange={(e) => setSelectedDownloadFormat(e.target.value)}
-                    style={{ color: theme.colors.text }}
-                  >
-                    {downloadFormats.map((item) => (
-                      <option key={item.label} value={item.label} style={{ backgroundColor: theme.colors.surface, color: theme.colors.text }}>
-                        {isEmp ? '' : formatDownloadOptionLabel(item)}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown size={13} strokeWidth={2} className="action-bar-format-caret" style={{ color: theme.colors.textSecondary }} />
-                </div>
-                <button
-                  className="action-bar-btn action-bar-btn--success"
-                  onClick={handleDownloadMedia}
-                  disabled={!downloadUrl.trim() || isStartingDownload || (downloadRangeEnabled && !downloadTimeRange)}
-                  style={{ background: theme.colors.success, color: '#fff', flexShrink: 0 }}
+              {isDropSuccess && (
+                <div
+                  className="water-ripple-container"
+                  style={{
+                    '--ripple-x': ripplePos ? `${ripplePos.x}px` : '50%',
+                    '--ripple-y': ripplePos ? `${ripplePos.y}px` : '50%',
+                  } as React.CSSProperties}
                 >
-                  {isLoadingDownloadFormats || isStartingDownload
-                    ? <Loader2 size={15} strokeWidth={2} className="download-spinner" />
-                    : <Download size={15} strokeWidth={2} />}
-                  <span>{isStartingDownload ? t('download.startingDownload') : t('download.downloadButton')}</span>
-                </button>
+                  <span className="water-ripple-wave" />
+                  <span className="water-ripple-wave delay" />
+                </div>
+              )}
+              <div className="empty-state-icon">
+                <Folder size={48} strokeWidth={1} />
               </div>
-              {renderDownloadRange()}
-              {renderUrlFeedbackHint(false)}
+              <p className="empty-state-title">{t('main.selectFiles')}</p>
+              <p className="empty-state-subtitle" style={{ color: theme.colors.textSecondary }}>
+                {t('main.dropFilesHere')}
+              </p>
+
+              <div className="empty-state-divider" style={{ color: theme.colors.textSecondary }}>
+                <span className="empty-state-line" style={{ background: theme.colors.border }} />
+                <span>{t('common.or')}</span>
+                <span className="empty-state-line" style={{ background: theme.colors.border }} />
+              </div>
+
+              {/* URL download pill */}
+              <div
+                className="empty-state-url-container"
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  width: '100%',
+                  maxWidth: '560px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                }}
+              >
+                <div className="empty-state-url-row">
+                  <input
+                    className="action-bar-input"
+                    type="text"
+                    value={!isEditingDownloadUrl && urlCheckStage === 'success' && parsedVideoTitle ? parsedVideoTitle : downloadUrl}
+                    onFocus={(e) => { setIsEditingDownloadUrl(true); const input = e.currentTarget; requestAnimationFrame(() => input.select()); }}
+                    onBlur={() => setIsEditingDownloadUrl(false)}
+                    onChange={(e) => setDownloadUrl(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && downloadUrl.trim()) handleDownloadMedia(); }}
+                    placeholder={t('download.urlPlaceholder')}
+                    style={{ color: theme.colors.text }}
+                  />
+                  <span className="url-pill-sep" style={{ background: theme.colors.border }} />
+                  <div className="action-bar-format-wrap" style={{ background: theme.colors.surface }}>
+                    <select
+                      className="action-bar-format-select"
+                      value={selectedDownloadFormat}
+                      onChange={(e) => setSelectedDownloadFormat(e.target.value)}
+                      style={{ color: theme.colors.text }}
+                    >
+                      {downloadFormats.map((item) => (
+                        <option key={item.label} value={item.label} style={{ backgroundColor: theme.colors.surface, color: theme.colors.text }}>
+                          {isEmp ? '' : formatDownloadOptionLabel(item)}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown size={13} strokeWidth={2} className="action-bar-format-caret" style={{ color: theme.colors.textSecondary }} />
+                  </div>
+                  <button
+                    className="action-bar-btn action-bar-btn--success"
+                    onClick={handleDownloadMedia}
+                    disabled={!downloadUrl.trim() || isStartingDownload || (downloadRangeEnabled && !downloadTimeRange)}
+                    style={{ background: theme.colors.success, color: '#fff', flexShrink: 0 }}
+                  >
+                    {isLoadingDownloadFormats || isStartingDownload
+                      ? <Loader2 size={15} strokeWidth={2} className="download-spinner" />
+                      : <Download size={15} strokeWidth={2} />}
+                    <span>{isStartingDownload ? t('download.startingDownload') : t('download.downloadButton')}</span>
+                  </button>
+                </div>
+                {renderDownloadRange()}
+                {renderUrlFeedbackHint(false)}
+              </div>
             </div>
-          </div>
+          </RecentVideosPanel>
         ) : (
           /* ── ACTIVE STATE ── */
           <div className="queue-section">
@@ -1561,9 +1564,6 @@ const MainWindow: React.FC<MainWindowProps> = ({
                   <Download size={14} strokeWidth={1.8} />
                   <span>{t('queue.addLink')}</span>
                 </button>
-                {recentVideos.enabled && recentVideos.videos.length > 0 && (
-                  <RecentVideosPanel {...recentVideos} variant="queue" status={recentVideoStatus} onAdd={(video) => void addRecentVideo(video)} />
-                )}
                 {/* Stats */}
                 <div className="queue-stats" style={{ fontSize: '0.85rem', color: theme.colors.textSecondary, display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 8 }}>
                   {(completedJobs + downloadQueue.filter(i => i.status === 'completed').length) > 0 && (
@@ -1647,64 +1647,66 @@ const MainWindow: React.FC<MainWindowProps> = ({
               )}
             </AnimatePresence>
 
-            <div
-              ref={queueListRef}
-              className={`queue-list ${isDropError ? ' shake-error' : ''}${isDropSuccess ? ' drop-success' : ''}`}
-              style={{ borderColor: theme.colors.border }}
-            >
-              {isDropSuccess && (
-                <div
-                  className="water-ripple-container"
-                  style={{
-                    '--ripple-x': ripplePos ? `${ripplePos.x}px` : '50%',
-                    '--ripple-y': ripplePos ? `${ripplePos.y}px` : '50%',
-                  } as React.CSSProperties}
-                >
-                  <span className="water-ripple-wave" />
-                  <span className="water-ripple-wave delay" />
-                </div>
-              )}
-              <>
-                <AnimatePresence initial={false}>
-                  {downloadQueue.map((item) => (
-                    <DownloadJobItem
+            <RecentVideosPanel {...recentVideos} variant="queue" status={recentVideoStatus} onAdd={addRecentVideo}>
+              <div
+                ref={queueListRef}
+                className={`queue-list ${isDropError ? ' shake-error' : ''}${isDropSuccess ? ' drop-success' : ''}`}
+                style={{ borderColor: theme.colors.border }}
+              >
+                {isDropSuccess && (
+                  <div
+                    className="water-ripple-container"
+                    style={{
+                      '--ripple-x': ripplePos ? `${ripplePos.x}px` : '50%',
+                      '--ripple-y': ripplePos ? `${ripplePos.y}px` : '50%',
+                    } as React.CSSProperties}
+                  >
+                    <span className="water-ripple-wave" />
+                    <span className="water-ripple-wave delay" />
+                  </div>
+                )}
+                <>
+                  <AnimatePresence initial={false}>
+                    {downloadQueue.map((item) => (
+                      <DownloadJobItem
+                        key={item.id}
+                        item={item}
+                        theme={theme}
+                        t={t}
+                        onShowInExplorer={handleShowInExplorer}
+                        onRemoveJob={removeDownloadJob}
+                        onStopJob={stopDownload}
+                        onRetryJob={handleRetryDownload}
+                      />
+                    ))}
+                  </AnimatePresence>
+
+                  {jobs.length > 0 && downloadQueue.length > 0 && (
+                    <div style={{ height: '1px', background: theme.colors.border, opacity: 0.5, margin: '6px 0' }} />
+                  )}
+
+                  {jobs.map((item) => (
+                    <RenderJobItem
                       key={item.id}
-                      item={item}
+                      job={item}
                       theme={theme}
                       t={t}
+                      onAddToQueue={addToQueue}
                       onShowInExplorer={handleShowInExplorer}
-                      onRemoveJob={removeDownloadJob}
-                      onStopJob={stopDownload}
-                      onRetryJob={handleRetryDownload}
+                      onRemoveJob={handleRemoveJob}
+                      onStopJob={stopJob}
+                      onUpdateJobTrim={updateJobTrim}
+                      onRequestTrimFramePreview={requestTrimFramePreview}
+                      onHideTrimFramePreview={hideTrimFramePreview}
+                      trimFramePreview={trimFramePreview}
+                      formatTrimTime={formatTrimTime}
+                      formatDurationCompact={formatDurationCompact}
+                      getStatusDisplay={getStatusDisplay}
                     />
                   ))}
-                </AnimatePresence>
-
-                {jobs.length > 0 && downloadQueue.length > 0 && (
-                  <div style={{ height: '1px', background: theme.colors.border, opacity: 0.5, margin: '6px 0' }} />
-                )}
-
-                {jobs.map((item) => (
-                  <RenderJobItem
-                    key={item.id}
-                    job={item}
-                    theme={theme}
-                    t={t}
-                    onAddToQueue={addToQueue}
-                    onShowInExplorer={handleShowInExplorer}
-                    onRemoveJob={handleRemoveJob}
-                    onStopJob={stopJob}
-                    onUpdateJobTrim={updateJobTrim}
-                    onRequestTrimFramePreview={requestTrimFramePreview}
-                    onHideTrimFramePreview={hideTrimFramePreview}
-                    trimFramePreview={trimFramePreview}
-                    formatTrimTime={formatTrimTime}
-                    formatDurationCompact={formatDurationCompact}
-                    getStatusDisplay={getStatusDisplay}
-                  />
-                ))}
-              </>
-            </div>
+                </>
+              </div>
+            </RecentVideosPanel>
           </div>
         )}
 

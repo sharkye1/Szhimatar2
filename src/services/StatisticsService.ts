@@ -11,6 +11,9 @@
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import type { RenderProgress } from './RenderService';
+import { readRecentVideoStorage, videoPathKey, writeRecentVideoStorage } from '../utils/recentVideos';
+
+const PROCESSED_VIDEO_PATHS_KEY = 'szhimatar.processed-video-paths.v1';
 
 // ============================================================================
 // Types
@@ -92,8 +95,13 @@ class StatisticsServiceImpl {
   private unlistenError: UnlistenFn | null = null;
   private unlistenStopped: UnlistenFn | null = null;
   private saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private processedVideoPaths = new Set<string>();
 
   constructor() {
+    const paths = readRecentVideoStorage<unknown>(PROCESSED_VIDEO_PATHS_KEY);
+    if (Array.isArray(paths)) {
+      this.processedVideoPaths = new Set(paths.filter((path) => typeof path === 'string'));
+    }
     if (typeof window !== 'undefined') {
       this.setupEventListeners();
       // AUTO-INITIALIZE: Load statistics from file immediately on service creation
@@ -141,6 +149,9 @@ class StatisticsServiceImpl {
       if (typeof (this.stats as any).totalStopped === 'undefined') {
         (this.stats as any).totalStopped = 0;
       }
+      this.rememberProcessedVideoPaths(this.stats.renders.flatMap((record) =>
+        record.status === 'completed' ? [record.inputPath, record.outputPath] : []
+      ));
       this.loaded = true;
       console.log('[StatisticsService] Loaded statistics on init:', this.stats.renders.length, 'renders');
       this.notifyListeners();
@@ -422,9 +433,14 @@ class StatisticsServiceImpl {
   /**
    * Mark render as completed
    */
-  public markRenderComplete(id: string): void {
+  public markRenderComplete(id: string, paths?: Pick<RenderStatRecord, 'inputPath' | 'outputPath'>): void {
     const record = this.stats.renders.find(r => r.id === id);
-    if (!record) return;
+    const completed = paths ?? record;
+    const addedPaths = completed && this.rememberProcessedVideoPaths([completed.inputPath, completed.outputPath]);
+    if (!record) {
+      if (addedPaths) this.notifyListeners();
+      return;
+    }
 
     record.status = 'completed';
     record.progress = 100;
@@ -555,6 +571,21 @@ class StatisticsServiceImpl {
    */
   public getRenders(): RenderStatRecord[] {
     return this.stats.renders;
+  }
+
+  public getProcessedVideoPaths(): ReadonlySet<string> {
+    return this.processedVideoPaths;
+  }
+
+  // Keep successful paths even when the corresponding statistics are pruned or cleared.
+  private rememberProcessedVideoPaths(paths: readonly string[]): boolean {
+    const previousSize = this.processedVideoPaths.size;
+    for (const path of paths) {
+      if (path) this.processedVideoPaths.add(videoPathKey(path));
+    }
+    if (previousSize === this.processedVideoPaths.size) return false;
+    writeRecentVideoStorage(PROCESSED_VIDEO_PATHS_KEY, [...this.processedVideoPaths]);
+    return true;
   }
 
   /**

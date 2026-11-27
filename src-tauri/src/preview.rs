@@ -87,7 +87,7 @@ async fn extract_frame(
         PreviewFrame::CompactJpeg => {
             command.kill_on_drop(true).args([
                 "-vf",
-                "scale=320:180:force_original_aspect_ratio=decrease:force_divisible_by=2",
+                "scale=480:270:force_original_aspect_ratio=decrease:force_divisible_by=2",
                 "-c:v",
                 "mjpeg",
                 "-q:v",
