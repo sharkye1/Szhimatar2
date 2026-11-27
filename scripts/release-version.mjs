@@ -125,16 +125,22 @@ export function createManifest(version, repository, notes, executable, key, date
   };
 }
 
-export function windowsInstallers(version) {
-  return ['Szhimatar.exe', `Szhimatar_${version}_x64-setup.exe`, `Szhimatar_${version}_x64_en-US.msi`];
+export function releaseBundles(version) {
+  return [
+    'Szhimatar.exe',
+    `Szhimatar_${version}_x64-setup.exe`,
+    `Szhimatar_${version}_x64_en-US.msi`,
+    `Szhimatar_${version}_aarch64.dmg`,
+    `Szhimatar_${version}_aarch64.app.tar.gz`,
+  ];
 }
 
 export function writeReleaseAssets(version, repository, directory, notes, privateKey) {
   const key = signingKey(privateKey, publicUpdateKey());
-  const expected = windowsInstallers(version).sort();
-  const executables = readdirSync(directory).filter(name => /\.(exe|msi)$/i.test(name)).sort();
-  if (executables.join('\n') !== expected.join('\n')) {
-    throw new Error(`Unexpected Windows artifacts: ${executables.join(', ')}`);
+  const expected = releaseBundles(version).sort();
+  const bundles = readdirSync(directory).filter(name => /\.(exe|msi|dmg|app\.tar\.gz)$/i.test(name)).sort();
+  if (bundles.join('\n') !== expected.join('\n')) {
+    throw new Error(`Expected release bundles: ${expected.join(', ')}; found: ${bundles.join(', ')}`);
   }
   const exe = readFileSync(join(directory, 'Szhimatar.exe'));
   const manifest = createManifest(version, repository, notes, exe, key);

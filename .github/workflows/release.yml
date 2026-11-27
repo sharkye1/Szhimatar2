@@ -1,4 +1,4 @@
-name: Checks and Windows release
+name: Checks and release
 
 on:
   push:
@@ -48,7 +48,7 @@ jobs:
             git merge-base --is-ancestor "$RELEASE_SHA" "$GITHUB_SHA" || { echo "The release commit must be in main"; exit 1; }
             git checkout --detach "$RELEASE_SHA"
             if [[ ! -f scripts/publish-release.mjs || ! -f src-tauri/update-public-key.hex ]]; then
-              echo "Select a commit that supports signed Windows releases"
+              echo "Select a commit that supports signed releases"
               exit 1
             fi
           fi
@@ -135,8 +135,15 @@ jobs:
           retention-days: 14
           overwrite: true
 
+  build-macos:
+    needs: [prepare, checks, macos-checks]
+    if: needs.prepare.outputs.release == 'true' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/build-mac.yml
+    with:
+      source_ref: ${{ needs.prepare.outputs.commit }}
+
   release:
-    needs: [prepare, build]
+    needs: [prepare, build, build-macos]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: release
@@ -157,7 +164,11 @@ jobs:
         with:
           name: windows-release
           path: release-assets
-      - name: Publish verified Windows release
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: szhimatar-mac-build
+          path: release-assets
+      - name: Publish verified release
         env:
           GH_TOKEN: ${{ github.token }}
           SZHIMATAR_UPDATE_PRIVATE_KEY: ${{ secrets.SZHIMATAR_UPDATE_PRIVATE_KEY }}

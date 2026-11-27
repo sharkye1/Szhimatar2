@@ -2,6 +2,15 @@ name: Build macOS App
 
 on:
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Commit or tag to package (defaults to the selected branch)
+        type: string
+  workflow_call:
+    inputs:
+      source_ref:
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -16,6 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
+          ref: ${{ inputs.source_ref || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
@@ -25,7 +35,7 @@ jobs:
       - run: npm ci
       - name: Build Tauri application
         run: npm run tauri -- build --ci --target aarch64-apple-darwin -- --locked
-      - name: Collect macOS artifacts
+      - name: Verify and launch the packaged application
         shell: bash
         run: |
           set -euo pipefail
@@ -34,11 +44,42 @@ jobs:
           apps=("$bundle"/macos/*.app)
           disks=("$bundle"/dmg/*.dmg)
           [[ "${#apps[@]}" == 1 && "${#disks[@]}" == 1 ]]
+          app="${apps[0]}"
+          disk="${disks[0]}"
+          plist="$app/Contents/Info.plist"
+          version=$(node -p 'require("./package.json").version')
+          [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" == "$version" ]]
+          executable="$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")"
+          [[ -x "$executable" ]]
+          lipo -verify_arch arm64 "$executable"
+          hdiutil verify "$disk"
+          output="$RUNNER_TEMP/szhimatar-launch.log"
+          "$executable" > "$output" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true' EXIT
+          for attempt in {1..8}; do
+            sleep 1
+            if ! kill -0 "$pid" 2>/dev/null; then
+              cat "$output"
+              echo "::error::Szhimatar exited during launch"
+              exit 1
+            fi
+          done
+          echo "Szhimatar $version launched successfully on $(uname -m)"
+      - name: Collect macOS artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle=src-tauri/target/aarch64-apple-darwin/release/bundle
+          version=$(node -p 'require("./package.json").version')
+          tar_name="Szhimatar_${version}_aarch64.app.tar.gz"
           mkdir release-assets
-          cp "${disks[0]}" release-assets/
-          tar -czf release-assets/Szhimatar-macos-arm64.app.tar.gz -C "$bundle/macos" "$(basename "${apps[0]}")"
+          cp "$bundle"/dmg/*.dmg "release-assets/Szhimatar_${version}_aarch64.dmg"
+          tar -czf "release-assets/$tar_name" -C "$bundle/macos" Szhimatar.app
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: szhimatar-mac-build
           path: release-assets/*
           if-no-files-found: error
+          retention-days: 14
+          overwrite: true
