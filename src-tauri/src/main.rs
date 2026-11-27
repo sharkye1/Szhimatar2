@@ -19,6 +19,8 @@ use process_manager::PROCESS_MANAGER;
 
 mod yt_dlp_manager;
 mod proxy_manager;
+mod preview;
+mod recent_videos;
 
 #[cfg(windows)]
 mod job_object {
@@ -105,6 +107,8 @@ pub(crate) struct Settings {
     pub theme: String,
     #[serde(default, rename = "modifiedTheme")]
     pub modified_theme: bool,
+    #[serde(default, rename = "randomTheme")]
+    pub random_theme: bool,
     pub language: String,
     pub ffmpeg_path: String,
     pub ffprobe_path: String,
@@ -131,6 +135,8 @@ pub(crate) struct Settings {
     pub proxy_mode: String,
     #[serde(rename = "proxyUrl", default)]
     pub proxy_url: String,
+    #[serde(default, rename = "recentVideos")]
+    pub recent_videos: recent_videos::RecentVideoSettings,
 }
 
 fn default_proxy_mode() -> String {
@@ -154,6 +160,7 @@ impl Default for Settings {
         Self {
             theme: "light".to_string(),
             modified_theme: false,
+            random_theme: false,
             language: "ru".to_string(),
             ffmpeg_path: "ffmpeg".to_string(),
             ffprobe_path: "ffprobe".to_string(),
@@ -170,6 +177,7 @@ impl Default for Settings {
             eco_mode: false,
             proxy_mode: "auto".to_string(),
             proxy_url: "".to_string(),
+            recent_videos: recent_videos::RecentVideoSettings::default(),
         }
     }
 }
@@ -2014,6 +2022,42 @@ async fn get_video_duration(input_path: String) -> Result<f64, String> {
     Ok(duration)
 }
 
+/// Read frame rates from the first video stream, excluding attached cover images.
+#[tauri::command]
+async fn get_video_frame_rates(input_path: String) -> Result<Vec<String>, String> {
+    let config = load_ffmpeg_config();
+    if config.ffprobe_path.trim().is_empty() {
+        return Err("FFprobe not configured".into());
+    }
+    let mut cmd = tokio::process::Command::new(&config.ffprobe_path);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000);
+    let output = cmd
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "V:0",
+            "-show_entries",
+            "stream=avg_frame_rate,r_frame_rate",
+            "-of",
+            "json",
+            &input_path,
+        ])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run FFprobe: {e}"))?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+    let data: serde_json::Value = serde_json::from_slice(&output.stdout).map_err(|e| e.to_string())?;
+    let stream = &data["streams"][0];
+    Ok(["avg_frame_rate", "r_frame_rate"]
+        .iter()
+        .filter_map(|key| stream[*key].as_str().map(str::to_string))
+        .collect())
+}
+
 /// Get file size in bytes
 #[tauri::command]
 fn get_file_size_bytes(input_path: String) -> Result<u64, String> {
@@ -2774,615 +2818,6 @@ fn get_cli_files() -> Vec<String> {
         .collect()
 }
 
-// ============================================================================
-// PREVIEW COMMANDS
-// ============================================================================
-
-#[derive(Debug, Serialize, Deserialize)]
-struct PreviewSettings {
-    codec: String,
-    crf: String,
-    fps: String,
-    resolution: String,
-    #[serde(rename = "aspectRatioAuto")]
-    aspect_ratio_auto: Option<bool>,
-    filters: Vec<String>,
-    resampling_enabled: bool,
-    resampling_intensity: u8,
-    // NEW: Sync with final render parameters
-    bitrate: Option<String>,  // e.g. "2.6" for 2.6M
-    preset: Option<String>,   // e.g. "slow", "medium", "p7"
-    prefer_gpu: Option<bool>, // Use NVENC if available
-    #[serde(rename = "rateControlMode")]
-    rate_control_mode: Option<String>,
-    tune: Option<String>,
-}
-
-/// Extract a single frame from video at given time with current settings applied
-/// Returns base64-encoded JPEG image directly from memory without writing to disk
-#[tauri::command]
-async fn get_preview_frame(
-    input_path: String,
-    time_seconds: f64,
-    settings: PreviewSettings,
-) -> Result<String, String> {
-    let config = load_ffmpeg_config();
-    if config.ffmpeg_path.trim().is_empty() {
-        return Err("FFmpeg not configured".to_string());
-    }
-
-    // Build filter chain
-    let mut filters: Vec<String> = Vec::new();
-
-    // Resolution scaling
-    if !settings.resolution.is_empty() && settings.resolution != "original" {
-        let parts: Vec<&str> = settings.resolution.split('x').collect();
-        if parts.len() == 2 {
-            filters.push(format!("scale={}:{}", parts[0], parts[1]));
-        }
-    }
-
-    // User-enabled filters
-    for filter in &settings.filters {
-        match filter.as_str() {
-            "deinterlace" => filters.push("yadif".to_string()),
-            "denoise" => filters.push("hqdn3d=4:3:6:4.5".to_string()),
-            "sharpen" => filters.push("unsharp=5:5:1.0:5:5:0.0".to_string()),
-            _ => {}
-        }
-    }
-
-    // Build FFmpeg command with fast seeking (-ss before -i)
-    let mut cmd_args: Vec<String> = vec![
-        "-ss".to_string(),
-        format!("{:.3}", time_seconds),
-        "-i".to_string(),
-        input_path,
-        "-vframes".to_string(),
-        "1".to_string(),
-    ];
-
-    if !filters.is_empty() {
-        cmd_args.push("-vf".to_string());
-        cmd_args.push(filters.join(","));
-    }
-
-    // Output directly to memory stdout pipe as MJPEG image (zero disk I/O)
-    cmd_args.extend([
-        "-f".to_string(),
-        "image2pipe".to_string(),
-        "-vcodec".to_string(),
-        "mjpeg".to_string(),
-        "-q:v".to_string(),
-        "2".to_string(),
-        "-".to_string(),
-    ]);
-
-    // Run FFmpeg asynchronously using tokio::process::Command
-    let mut cmd = tokio::process::Command::new(&config.ffmpeg_path);
-    cmd.args(&cmd_args);
-
-    #[cfg(target_os = "windows")]
-    {
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
-
-    let output = cmd
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run FFmpeg: {}", e))?;
-
-    if !output.status.success() || output.stdout.is_empty() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("FFmpeg error: {}", stderr));
-    }
-
-    // Return base64 encoded directly from memory
-    use base64::{engine::general_purpose::STANDARD, Engine as _};
-    Ok(STANDARD.encode(&output.stdout))
-}
-
-/// Maps CRF value (0..=51) to VideoToolbox -q:v scale (1..=100)
-/// Formula: clamp(round(((51 - crf) * 100) / 51), 1, 100)
-#[allow(dead_code)]
-pub fn calculate_videotoolbox_quality(crf: i32) -> i32 {
-    let crf_clamped = crf.clamp(0, 51);
-    (((51.0 - crf_clamped as f64) * 100.0 / 51.0).round() as i32).clamp(1, 100)
-}
-
-/// Extract a short video clip (3 seconds) from video at given time with settings applied
-/// Uses IDENTICAL encoding parameters as final render for honest preview
-/// Returns path to temporary video file
-#[tauri::command]
-async fn get_preview_video(
-    input_path: String,
-    time_seconds: f64,
-    duration: f64,
-    settings: PreviewSettings,
-) -> Result<String, String> {
-    let config = load_ffmpeg_config();
-    if config.ffmpeg_path.trim().is_empty() {
-        return Err("FFmpeg not configured".to_string());
-    }
-
-    // Create temp file for output with unique timestamp to bust cache
-    let temp_dir = std::env::temp_dir();
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
-    let temp_file = temp_dir.join(format!("szhimatar_preview_{}.mp4", timestamp));
-
-    // Cleanup old preview files (ignore errors - file may be in use)
-    if let Ok(entries) = std::fs::read_dir(&temp_dir) {
-        for entry in entries.flatten() {
-            if let Some(name) = entry.file_name().to_str() {
-                if name.starts_with("szhimatar_preview_") && name.ends_with(".mp4") {
-                    let _ = std::fs::remove_file(entry.path()); // Ignore errors
-                }
-            }
-        }
-    }
-
-    // Build filter chain - FPS FIRST to ensure it's applied
-    let mut filters: Vec<String> = Vec::new();
-
-    // FPS filter FIRST - more reliable than -r parameter
-    if !settings.fps.is_empty() {
-        let fps: u32 = settings.fps.parse().unwrap_or(30);
-        filters.push(format!("fps={}", fps));
-    }
-
-    // Resolution scaling
-    if !settings.resolution.is_empty() && settings.resolution != "original" {
-        let parts: Vec<&str> = settings.resolution.split('x').collect();
-        if parts.len() == 2 {
-            let w: i32 = parts[0].parse().unwrap_or(1920);
-            let h: i32 = parts[1].parse().unwrap_or(1080);
-            // Ensure even dimensions (required for NVENC)
-            let w_even = (w / 2) * 2;
-            let h_even = (h / 2) * 2;
-            filters.push(format!("scale={}:{}", w_even, h_even));
-        }
-    }
-
-    // User-enabled filters
-    for filter in &settings.filters {
-        match filter.as_str() {
-            "deinterlace" => filters.push("yadif".to_string()),
-            "denoise" => filters.push("hqdn3d=4:3:6:4.5".to_string()),
-            "sharpen" => filters.push("unsharp=5:5:1.0:5:5:0.0".to_string()),
-            _ => {}
-        }
-    }
-
-    // Resampling filter (simplified for preview - always use blend for speed)
-    if settings.resampling_enabled {
-        let target_fps: u32 = settings.fps.parse().unwrap_or(60).min(60);
-        filters.push(format!("minterpolate=fps={}:mi_mode=blend", target_fps));
-    }
-
-    // Ensure yuv420p for compatibility (MUST be last in filter chain)
-    filters.push("format=yuv420p".to_string());
-
-    // Determine encoder based on codec and GPU preference
-    #[cfg(target_os = "macos")]
-    let use_gpu = settings.prefer_gpu.unwrap_or(false)
-        && (settings.codec == "h264" || settings.codec == "h265" || settings.codec == "hevc");
-
-    #[cfg(target_os = "macos")]
-    let encoder = if use_gpu {
-        if settings.codec == "h265" || settings.codec == "hevc" {
-            "hevc_videotoolbox"
-        } else {
-            "h264_videotoolbox"
-        }
-    } else {
-        match settings.codec.as_str() {
-            "h265" | "hevc" => "libx265",
-            _ => "libx264",
-        }
-    };
-
-    #[cfg(not(target_os = "macos"))]
-    let use_nvenc = settings.prefer_gpu.unwrap_or(false)
-        && (settings.codec == "h264" || settings.codec == "h265" || settings.codec == "hevc");
-
-    #[cfg(not(target_os = "macos"))]
-    let encoder = if use_nvenc {
-        if settings.codec == "h265" || settings.codec == "hevc" {
-            "hevc_nvenc"
-        } else {
-            "h264_nvenc"
-        }
-    } else {
-        match settings.codec.as_str() {
-            "h265" | "hevc" => "libx265",
-            _ => "libx264",
-        }
-    };
-
-    // Build FFmpeg command with fast seeking (-ss before -i)
-    let mut cmd_args: Vec<String> = vec![
-        "-ss".to_string(),
-        format!("{:.3}", time_seconds),
-        "-i".to_string(),
-        input_path.clone(),
-        "-t".to_string(),
-        format!("{:.1}", duration.min(5.0)), // Max 5 seconds for preview
-        "-c:v".to_string(),
-        encoder.to_string(),
-    ];
-
-    // ========== IDENTICAL RATE CONTROL AS FINAL RENDER ==========
-    let rate_control = settings.rate_control_mode.as_deref().unwrap_or("crf");
-    let crf_val: i32 = settings.crf.parse().unwrap_or(23).max(0).min(51);
-    let bitrate_val: f64 = settings
-        .bitrate
-        .as_ref()
-        .and_then(|b| b.parse::<f64>().ok())
-        .unwrap_or(5.0)
-        .max(0.1)
-        .min(100.0);
-
-    #[cfg(target_os = "macos")]
-    if use_gpu {
-        // VideoToolbox rate control on macOS - omit all NVENC flags (-spatial-aq, -temporal-aq, -rc, -cq, -preset, -tune)
-        let vt_quality = calculate_videotoolbox_quality(crf_val);
-        if rate_control == "crf" {
-            cmd_args.extend([
-                "-q:v".to_string(),
-                vt_quality.to_string(),
-            ]);
-        } else if rate_control == "constrained_crf" {
-            cmd_args.extend([
-                "-q:v".to_string(),
-                vt_quality.to_string(),
-                "-b:v".to_string(),
-                format!("{}M", bitrate_val),
-                "-maxrate".to_string(),
-                format!("{}M", (bitrate_val * 1.5).max(1.0)),
-            ]);
-        } else {
-            // VBR / CBR mode with target bitrate
-            cmd_args.extend([
-                "-b:v".to_string(),
-                format!("{}M", bitrate_val),
-                "-maxrate".to_string(),
-                format!("{}M", (bitrate_val * 1.5).max(1.0)),
-            ]);
-        }
-    } else {
-        // CPU encoders (libx264/libx265)
-        if rate_control == "crf" {
-            cmd_args.extend([
-                "-crf".to_string(),
-                crf_val.to_string(),
-            ]);
-        } else if rate_control == "constrained_crf" {
-            cmd_args.extend([
-                "-crf".to_string(),
-                crf_val.to_string(),
-                "-maxrate".to_string(),
-                format!("{}M", bitrate_val),
-                "-bufsize".to_string(),
-                format!("{}M", (bitrate_val * 2.0).max(1.0)),
-            ]);
-        } else {
-            // VBR
-            cmd_args.extend([
-                "-b:v".to_string(),
-                format!("{}M", bitrate_val),
-                "-maxrate".to_string(),
-                format!("{}M", (bitrate_val * 1.5).max(1.0)),
-                "-bufsize".to_string(),
-                format!("{}M", (bitrate_val * 3.0).max(2.0)),
-            ]);
-        }
-
-        // Preset and Tune for CPU
-        let preset = settings
-            .preset
-            .as_ref()
-            .map(|p| p.as_str())
-            .unwrap_or("medium");
-        let valid_presets = [
-            "ultrafast",
-            "superfast",
-            "veryfast",
-            "faster",
-            "fast",
-            "medium",
-            "slow",
-            "slower",
-            "veryslow",
-        ];
-        let cpu_preset = if valid_presets.contains(&preset) {
-            preset
-        } else {
-            "medium"
-        };
-        cmd_args.extend(["-preset".to_string(), cpu_preset.to_string()]);
-
-        if let Some(tune) = &settings.tune {
-            if !tune.is_empty() && tune != "none" {
-                cmd_args.extend(["-tune".to_string(), tune.clone()]);
-            }
-        }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    if use_nvenc {
-        // NVENC rate control - MUST match RenderService.ts logic exactly
-        if rate_control == "crf" {
-            // CQ (Constant Quality) mode
-            cmd_args.extend([
-                "-rc".to_string(),
-                "constqp".to_string(),
-                "-cq".to_string(),
-                crf_val.to_string(),
-                "-qp".to_string(),
-                crf_val.to_string(),
-            ]);
-        } else if rate_control == "constrained_crf" {
-            cmd_args.extend([
-                "-rc".to_string(),
-                "vbr".to_string(),
-                "-cq".to_string(),
-                crf_val.to_string(),
-                "-qmin".to_string(),
-                crf_val.to_string(),
-                "-qmax".to_string(),
-                (crf_val + 6).min(51).to_string(),
-                "-b:v".to_string(),
-                "0".to_string(),
-                "-maxrate".to_string(),
-                format!("{}M", bitrate_val),
-                "-bufsize".to_string(),
-                format!("{}M", (bitrate_val * 2.0).max(1.0)),
-            ]);
-        } else {
-            // VBR / CBR mode with target bitrate
-            cmd_args.extend([
-                "-rc".to_string(),
-                "vbr".to_string(),
-                "-b:v".to_string(),
-                format!("{}M", bitrate_val),
-                "-maxrate".to_string(),
-                format!("{}M", (bitrate_val * 1.5).max(1.0)),
-                "-bufsize".to_string(),
-                format!("{}M", (bitrate_val * 3.0).max(2.0)),
-            ]);
-        }
-
-        // NVENC-specific optimizations
-        cmd_args.extend([
-            "-spatial-aq".to_string(),
-            "1".to_string(),
-            "-temporal-aq".to_string(),
-            "1".to_string(),
-        ]);
-
-        // Map preset for NVENC
-        let preset = settings
-            .preset
-            .as_ref()
-            .map(|p| p.as_str())
-            .unwrap_or("medium");
-        let nvenc_preset = match preset {
-            "ultrafast" => "p1",
-            "superfast" => "p2",
-            "veryfast" => "p3",
-            "faster" | "fast" => "p4",
-            "medium" => "p5",
-            "slow" => "p6",
-            "slower" | "veryslow" | "placebo" => "p7",
-            p if p.starts_with("p") => p,
-            _ => "p4",
-        };
-        cmd_args.extend([
-            "-preset".to_string(),
-            nvenc_preset.to_string(),
-            "-tune".to_string(),
-            "hq".to_string(),
-        ]);
-    } else {
-        // CPU encoders (libx264/libx265)
-        if rate_control == "crf" {
-            cmd_args.extend([
-                "-crf".to_string(),
-                crf_val.to_string(),
-            ]);
-        } else if rate_control == "constrained_crf" {
-            cmd_args.extend([
-                "-crf".to_string(),
-                crf_val.to_string(),
-                "-maxrate".to_string(),
-                format!("{}M", bitrate_val),
-                "-bufsize".to_string(),
-                format!("{}M", (bitrate_val * 2.0).max(1.0)),
-            ]);
-        } else {
-            // VBR
-            cmd_args.extend([
-                "-b:v".to_string(),
-                format!("{}M", bitrate_val),
-                "-maxrate".to_string(),
-                format!("{}M", (bitrate_val * 1.5).max(1.0)),
-                "-bufsize".to_string(),
-                format!("{}M", (bitrate_val * 3.0).max(2.0)),
-            ]);
-        }
-
-        // Preset and Tune for CPU
-        let preset = settings
-            .preset
-            .as_ref()
-            .map(|p| p.as_str())
-            .unwrap_or("medium");
-        let valid_presets = [
-            "ultrafast",
-            "superfast",
-            "veryfast",
-            "faster",
-            "fast",
-            "medium",
-            "slow",
-            "slower",
-            "veryslow",
-        ];
-        let cpu_preset = if valid_presets.contains(&preset) {
-            preset
-        } else {
-            "medium"
-        };
-        cmd_args.extend(["-preset".to_string(), cpu_preset.to_string()]);
-
-        if let Some(tune) = &settings.tune {
-            if !tune.is_empty() && tune != "none" {
-                cmd_args.extend(["-tune".to_string(), tune.clone()]);
-            }
-        }
-    }
-
-    // NOTE: FPS is now set via fps filter in -vf chain (more reliable than -r)
-    // Remove duplicate -r parameter that was here
-
-    // Apply filters
-    if !filters.is_empty() {
-        cmd_args.push("-vf".to_string());
-        cmd_args.push(filters.join(","));
-    }
-
-    // Audio - disable for preview (speed)
-    // Output settings
-    cmd_args.extend([
-        "-an".to_string(),
-        "-pix_fmt".to_string(),
-        "yuv420p".to_string(),
-        "-movflags".to_string(),
-        "+faststart".to_string(),
-        "-y".to_string(),
-        temp_file.to_string_lossy().to_string(),
-    ]);
-
-    // Log FULL command for debugging - visible in Tauri console
-    let full_cmd = format!(
-        "[PREVIEW CMD FULL]: {} {}",
-        config.ffmpeg_path,
-        cmd_args.join(" ")
-    );
-    println!("{}", full_cmd);
-    // Also log to stderr so it appears in DevTools
-    eprintln!("{}", full_cmd);
-
-    // Run FFmpeg asynchronously using tokio::process::Command
-    let mut cmd = tokio::process::Command::new(&config.ffmpeg_path);
-    cmd.args(&cmd_args);
-
-    #[cfg(target_os = "windows")]
-    {
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
-
-    let output = cmd
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run FFmpeg: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("FFmpeg error: {}", stderr));
-    }
-
-    // Validate output file exists and has content
-    let metadata =
-        tokio::fs::metadata(&temp_file).await.map_err(|e| format!("Preview file not created: {}", e))?;
-
-    if metadata.len() == 0 {
-        return Err("Preview generation failed: output file is empty".to_string());
-    }
-
-    // Small delay to ensure file is fully flushed to disk and OS releases handles
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-
-    // Verify file is still accessible after delay
-    let final_size = tokio::fs::metadata(&temp_file).await.map(|m| m.len()).unwrap_or(0);
-
-    println!(
-        "[Preview] Output file ready: {} bytes at {}",
-        final_size,
-        temp_file.display()
-    );
-
-    Ok(temp_file.to_string_lossy().to_string())
-}
-
-/// Get video duration using ffprobe asynchronously
-#[tauri::command]
-async fn get_video_info_for_preview(input_path: String) -> Result<VideoPreviewInfo, String> {
-    let config = load_ffmpeg_config();
-    if config.ffprobe_path.trim().is_empty() {
-        return Err("FFprobe not configured".to_string());
-    }
-
-    let mut cmd = tokio::process::Command::new(&config.ffprobe_path);
-    cmd.args([
-        "-v",
-        "quiet",
-        "-show_entries",
-        "format=duration:stream=width,height,r_frame_rate",
-        "-of",
-        "json",
-        &input_path,
-    ]);
-
-    #[cfg(target_os = "windows")]
-    {
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
-
-    let output = cmd
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run ffprobe: {}", e))?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let json: serde_json::Value = serde_json::from_str(&stdout)
-        .map_err(|e| format!("Failed to parse ffprobe output: {}", e))?;
-
-    let duration = json["format"]["duration"]
-        .as_str()
-        .and_then(|s| s.parse::<f64>().ok())
-        .unwrap_or(0.0);
-
-    let streams = json["streams"].as_array();
-    let (width, height) = streams
-        .and_then(|s| s.first())
-        .map(|stream| {
-            let w = stream["width"].as_i64().unwrap_or(0) as u32;
-            let h = stream["height"].as_i64().unwrap_or(0) as u32;
-            (w, h)
-        })
-        .unwrap_or((0, 0));
-
-    Ok(VideoPreviewInfo {
-        duration,
-        width,
-        height,
-    })
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct VideoPreviewInfo {
-    duration: f64,
-    width: u32,
-    height: u32,
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 struct NetworkProxyVpnStatus {
     proxy_enabled: bool,
@@ -3717,6 +3152,7 @@ fn main() {
                 }
             }
         })
+        .manage(recent_videos::VideoWatch::default())
         .invoke_handler(tauri::generate_handler![
             copy_file_to_clipboard,
             start_drag_file,
@@ -3769,9 +3205,14 @@ fn main() {
             apply_update,
             restart_app,
             // Preview commands
-            get_preview_frame,
-            get_preview_video,
-            get_video_info_for_preview,
+            preview::get_preview_frame,
+            preview::get_recent_video_thumbnail,
+            recent_videos::watch_recent_video_folders,
+            recent_videos::list_recent_videos,
+            recent_videos::recent_video_still_ready,
+            preview::render_preview,
+            preview::release_preview,
+            get_video_frame_rates,
             // Network safety checks & Proxy
             check_network_proxy_vpn_status,
             detect_system_proxy,
@@ -3982,16 +3423,4 @@ mod tests {
         assert!(gpu_name.contains("Apple Silicon VideoToolbox") || gpu_name.contains("VideoToolbox"));
     }
 
-    #[test]
-    fn test_calculate_videotoolbox_quality_mapping() {
-        assert_eq!(calculate_videotoolbox_quality(0), 100);
-        assert_eq!(calculate_videotoolbox_quality(18), 65);
-        assert_eq!(calculate_videotoolbox_quality(22), 57);
-        assert_eq!(calculate_videotoolbox_quality(23), 55);
-        assert_eq!(calculate_videotoolbox_quality(28), 45);
-        assert_eq!(calculate_videotoolbox_quality(51), 1);
-        // Clamping edge cases
-        assert_eq!(calculate_videotoolbox_quality(-10), 100);
-        assert_eq!(calculate_videotoolbox_quality(100), 1);
-    }
 }

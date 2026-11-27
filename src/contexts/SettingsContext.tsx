@@ -2,12 +2,15 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { invoke } from '@tauri-apps/api/tauri';
 import { isMacOS } from '../utils/platform';
 import { sanitizeRenderMode } from '../services/RenderScheduler';
+import { getRandomThemeName } from '../utils/themeUtils';
+import { DEFAULT_RECENT_VIDEOS, type RecentVideoSettings } from '../utils/recentVideos';
 
 export type ScreenAnimationType = 'default' | 'soft-blur' | 'physics' | 'scale-fade' | 'none';
 
 export interface AppSettings {
   theme: string;
   modifiedTheme: boolean;
+  randomTheme: boolean;
   language: string;
   ffmpeg_path: string;
   ffprobe_path: string;
@@ -24,11 +27,13 @@ export interface AppSettings {
   ecoMode: boolean;
   proxyMode: 'auto' | 'always' | 'disabled';
   proxyUrl: string;
+  recentVideos: RecentVideoSettings;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   theme: 'light',
   modifiedTheme: false,
+  randomTheme: false,
   language: 'ru',
   ffmpeg_path: 'ffmpeg',
   ffprobe_path: 'ffprobe',
@@ -45,6 +50,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   ecoMode: false,
   proxyMode: 'auto',
   proxyUrl: '',
+  recentVideos: DEFAULT_RECENT_VIDEOS,
 };
 
 interface SettingsContextType {
@@ -77,6 +83,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
         settings: {
           theme: data.theme,
           modifiedTheme: data.modifiedTheme,
+          randomTheme: data.randomTheme,
           language: data.language,
           ffmpeg_path: data.ffmpeg_path,
           ffprobe_path: data.ffprobe_path,
@@ -93,6 +100,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
           ecoMode: data.ecoMode,
           proxyMode: data.proxyMode || 'auto',
           proxyUrl: data.proxyUrl || '',
+          recentVideos: data.recentVideos,
         },
       });
     } catch (error) {
@@ -109,9 +117,17 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
         const rawRenderMode = raw.renderMode || DEFAULT_APP_SETTINGS.renderMode;
         const sanitizedRenderMode = sanitizeRenderMode(rawRenderMode, isMacOS(), rawGpuAvailable);
 
+        const isRandomTheme = !!(raw.randomTheme ?? raw.random_theme ?? DEFAULT_APP_SETTINGS.randomTheme);
+        let activeTheme = raw.theme || DEFAULT_APP_SETTINGS.theme;
+
+        if (isRandomTheme) {
+          activeTheme = getRandomThemeName(activeTheme);
+        }
+
         const normalized: AppSettings = {
-          theme: raw.theme || DEFAULT_APP_SETTINGS.theme,
+          theme: activeTheme,
           modifiedTheme: raw.modifiedTheme ?? raw.modified_theme ?? DEFAULT_APP_SETTINGS.modifiedTheme,
+          randomTheme: isRandomTheme,
           language: raw.language || DEFAULT_APP_SETTINGS.language,
           ffmpeg_path: raw.ffmpeg_path || DEFAULT_APP_SETTINGS.ffmpeg_path,
           ffprobe_path: raw.ffprobe_path || DEFAULT_APP_SETTINGS.ffprobe_path,
@@ -128,10 +144,19 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
           ecoMode: !!(raw.ecoMode ?? raw.eco_mode ?? DEFAULT_APP_SETTINGS.ecoMode),
           proxyMode: (raw.proxyMode || raw.proxy_mode || DEFAULT_APP_SETTINGS.proxyMode) as 'auto' | 'always' | 'disabled',
           proxyUrl: raw.proxyUrl ?? raw.proxy_url ?? DEFAULT_APP_SETTINGS.proxyUrl,
+          recentVideos: {
+            enabled: raw.recentVideos?.enabled ?? DEFAULT_RECENT_VIDEOS.enabled,
+            includeDownloads: raw.recentVideos?.includeDownloads ?? DEFAULT_RECENT_VIDEOS.includeDownloads,
+            folders: raw.recentVideos?.folders ?? DEFAULT_RECENT_VIDEOS.folders,
+          },
         };
         settingsRef.current = normalized;
         setSettings(normalized);
         setIsLoaded(true);
+
+        if (isRandomTheme && activeTheme !== raw.theme) {
+          void persistToDisk(normalized);
+        }
       } catch (error) {
         console.error('[SettingsContext] Failed to load settings:', error);
         setIsLoaded(true);

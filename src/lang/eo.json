@@ -21,7 +21,8 @@
     "preview": "Antaŭrigardo"
   },
   "common": {
-    "or": "AŬ"
+    "or": "AŬ",
+    "cancel": "Nuligi"
   },
   "video": {
     "title": "Video-agordoj",
@@ -327,7 +328,10 @@
     "ecoMode": "Ekologia reĝimo",
     "ecoModeDescription": "Malŝaltas malklarajn efikojn kaj kursoran brilon por ŝpari rimedojn",
     "ecoModeEnabled": "Ŝaltita",
-    "ecoModeDisabled": "Malŝaltita"
+    "ecoModeDisabled": "Malŝaltita",
+    "modifiedTheme": "Unutone",
+    "randomTheme": "Hazarde",
+    "randomThemeDescription": "Hazarda temo ĉe ĉiu lanĉo (post 17:00 nur malhelaj temoj)"
   },
   "watermark": {
     "title": "Agordoj de akvomarko",
@@ -510,6 +514,11 @@
     "restartLater": "Poste"
   },
   "preview": {
+    "fullscreen": "Malfermi plenekrane",
+    "exitFullscreen": "Eliri plenekranan reĝimon",
+    "encoderSlot": "Kodilo por antaŭrigardo",
+    "position": "Pozicio en la fonta video",
+    "compare": "Kompara dividilo",
     "title": "Rekta Antaŭrigardo",
     "show": "Montri Antaŭrigardon",
     "hide": "Kaŝi Antaŭrigardon",

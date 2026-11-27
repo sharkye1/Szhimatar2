@@ -1,0 +1,206 @@
+.recent-videos {
+  --recent-card: var(--color-surface, #29272a);
+  --recent-edge: var(--color-border, #575157);
+  --recent-muted: var(--color-textSecondary, #c3bac3);
+  z-index: 4;
+  cursor: default;
+  text-align: start;
+}
+
+.recent-videos--empty {
+  --recent-trigger-height: 39px;
+  position: absolute;
+  inset: 0 0 auto;
+  width: min(calc(100% - 28px), 522px);
+  margin-inline: auto;
+}
+
+.recent-videos--queue {
+  position: relative;
+  z-index: 7;
+}
+
+.recent-videos-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--recent-edge);
+  background: var(--recent-card);
+  color: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: opacity 160ms ease;
+}
+
+.recent-videos--empty .recent-videos-trigger {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 3;
+  min-height: var(--recent-trigger-height);
+  padding: 6px 16px;
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+  transform: translateX(-50%);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.recent-videos.is-open .recent-videos-trigger {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.recent-videos-viewport {
+  position: relative;
+  overflow: hidden;
+  height: 94px;
+  transition: height 320ms cubic-bezier(.2, .7, .3, 1);
+}
+
+.recent-videos--empty .recent-videos-viewport {
+  clip-path: inset(calc(var(--recent-trigger-height) - 1px) 0 0);
+  transition: height 320ms cubic-bezier(.2, .7, .3, 1), clip-path 320ms cubic-bezier(.2, .7, .3, 1);
+}
+
+.recent-videos--empty .recent-videos-viewport::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 20px;
+  background: linear-gradient(transparent, var(--recent-card));
+  pointer-events: none;
+  opacity: .8;
+  transition: opacity 220ms ease;
+}
+
+.recent-videos--empty.is-open .recent-videos-viewport::after { opacity: 0; }
+.recent-videos--empty.is-open .recent-videos-viewport { height: 159px; clip-path: inset(0); }
+.recent-videos--empty.has-no-videos .recent-videos-viewport { height: 40px; }
+.recent-videos--empty.has-no-videos .recent-videos-viewport::after { display: none; }
+
+.recent-videos--queue .recent-videos-viewport {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: 470px;
+  height: 0;
+  border-radius: 11px;
+  background: var(--recent-card);
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.recent-videos--queue.is-open .recent-videos-viewport {
+  height: 158px;
+  border: 1px solid var(--recent-edge);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, .2);
+  visibility: visible;
+  pointer-events: auto;
+}
+.recent-videos-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: 8px;
+  padding: 12px 5px 5px;
+}
+
+.recent-videos--queue .recent-videos-cards { padding-inline: 10px; }
+.recent-videos-cards.has-one { grid-template-columns: minmax(0, 165px); justify-content: center; }
+.recent-videos-cards.has-two { grid-template-columns: repeat(2, minmax(0, 165px)); justify-content: center; }
+
+.recent-video-card {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: var(--recent-card);
+  color: inherit;
+  text-align: start;
+  font: inherit;
+  transition: transform 320ms cubic-bezier(.2, .7, .3, 1);
+}
+
+.recent-videos-cards:not(.has-one) .recent-video-card:first-child {
+  --recent-fan: translate(69%, calc(55px - 100%)) rotate(14deg);
+}
+.recent-video-card:nth-child(2) {
+  --recent-fan: translateY(calc(71px - 100%));
+  z-index: 1;
+}
+.recent-video-card:nth-child(3) { --recent-fan: translate(-69%, calc(55px - 100%)) rotate(-14deg); }
+.recent-videos-cards.has-two .recent-video-card:first-child { --recent-fan: translate(29%, calc(57px - 100%)) rotate(12deg); }
+.recent-videos-cards.has-two .recent-video-card:last-child { --recent-fan: translate(-29%, calc(57px - 100%)) rotate(-12deg); }
+
+.recent-videos--empty .recent-video-card { transform-origin: center bottom; }
+.recent-videos--empty:not(.is-open) .recent-video-card {
+  transform: var(--recent-fan, translateY(calc(60px - 100%))) scale(.76);
+  pointer-events: none;
+}
+.recent-videos.is-open button.recent-video-card { cursor: pointer; }
+.recent-videos.is-open button.recent-video-card:hover { box-shadow: none; }
+.recent-video-card:focus-visible .recent-video-meta {
+  background: color-mix(in srgb, var(--recent-card), var(--color-primary) 35%);
+}
+.recent-videos-trigger:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.recent-video-image {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 87px;
+  place-items: center;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--recent-card), var(--color-primary) 19%);
+  color: var(--recent-muted);
+  transition: filter 290ms ease, transform 320ms cubic-bezier(.2, .7, .3, 1);
+}
+.recent-video-placeholder:nth-child(2) .recent-video-image { background: color-mix(in srgb, var(--recent-card), var(--color-primary) 30%); }
+.recent-video-image img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.recent-videos--empty:not(.is-open) .recent-video-image { filter: blur(5px) brightness(.82); }
+.recent-videos--empty:not(.is-open) button.recent-video-card .recent-video-image {
+  transform: translateY(44px);
+}
+
+.recent-video-meta {
+  display: grid;
+  min-width: 0;
+  padding: 6px 8px 7px;
+  gap: 3px;
+  transition: opacity 180ms ease;
+}
+.recent-videos--empty:not(.is-open) .recent-video-meta { opacity: 0; }
+.recent-video-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.recent-video-age { color: var(--recent-muted); font-size: 11px; }
+
+.recent-videos-empty, .recent-videos-status {
+  margin: 10px auto 0;
+  width: fit-content;
+  color: var(--recent-muted);
+  font-size: 13px;
+}
+.recent-videos--empty:not(.is-open) .recent-videos-empty { visibility: hidden; }
+.recent-videos-status {
+  position: absolute;
+  inset: 100% 0 auto;
+  z-index: 4;
+  min-width: max-content;
+  padding: 6px 9px;
+  border: 1px solid var(--recent-edge);
+  border-radius: 6px;
+  background: var(--recent-card);
+}
+.recent-videos--queue .recent-videos-status { left: auto; }
+.recent-videos--queue.is-open .recent-videos-status { top: calc(100% + 159px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .recent-videos *,
+  .recent-videos *::after { transition: none !important; }
+}

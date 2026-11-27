@@ -2,9 +2,9 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { open } from '@tauri-apps/api/dialog';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { VideoSettings as VideoSettingsType, WatermarkSettings as WatermarkSettingsType, DEFAULT_GIF_SETTINGS } from '../types/index';
+import { AudioSettings, VideoSettings as VideoSettingsType, WatermarkSettings as WatermarkSettingsType, DEFAULT_GIF_SETTINGS } from '../types/index';
 import PreviewPanel from '../components/PreviewPanel';
-import { useFirstJobInputPath } from '../hooks/useRenderQueue';
+import { useFirstPreviewJob } from '../hooks/useRenderQueue';
 import { validateVideoSettings } from '../utils/videoValidation';
 import { isMacOS } from '../utils/platform';
 import { 
@@ -28,6 +28,7 @@ import '../styles/SettingsWindow.css';
 interface VideoSettingsProps {
   onBack: () => void;
   settings: VideoSettingsType;
+  audioSettings: AudioSettings;
   setSettings: React.Dispatch<React.SetStateAction<VideoSettingsType>>;
   watermarkSettings: WatermarkSettingsType;
   setWatermarkSettings: React.Dispatch<React.SetStateAction<WatermarkSettingsType>>;
@@ -38,16 +39,17 @@ interface VideoSettingsProps {
 const VideoSettings: React.FC<VideoSettingsProps> = ({ 
   onBack, 
   settings, 
+  audioSettings,
   setSettings,
   watermarkSettings,
   setWatermarkSettings,
   renderMode = 'cpu',
   gpuAvailable = false,
 }) => {
-  const { t } = useLanguage();
+  const { t, isEmp } = useLanguage();
   const { theme } = useTheme();
   const [expandedSection, setExpandedSection] = useState<'crf' | null>(null);
-  const [showPreview, setShowPreview] = useState(true);
+  const [showPreview, setShowPreview] = useState(() => !window.matchMedia('(max-width: 900px)').matches);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showAdvancedHelp, setShowAdvancedHelp] = useState(false);
 
@@ -117,13 +119,12 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
   ];
 
   const gifDitherOptions = [
-    { label: t('videoSettings.gifDitherBayer') || 'Bayer (Crisp & light)', value: 'bayer' },
-    { label: t('videoSettings.gifDitherFloyd') || 'Floyd-Steinberg (Smooth)', value: 'floyd_steinberg' },
-    { label: t('videoSettings.gifDitherNone') || 'None', value: 'none' },
+    { label: t('videoSettings.gifDitherBayer'), value: 'bayer' },
+    { label: t('videoSettings.gifDitherFloyd'), value: 'floyd_steinberg' },
+    { label: t('videoSettings.gifDitherNone'), value: 'none' },
   ];
   
-  // Get first file from render queue for preview
-  const previewFilePath = useFirstJobInputPath();
+  const previewJob = useFirstPreviewJob();
 
   // Resolution presets
   const resolutions = [
@@ -189,6 +190,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
   };
 
   const getSpeedLabel = (speed: number): string => {
+    if (isEmp) return '';
     if (speed === 0.25) return '0.25x (Ultra Slow)';
     if (speed === 0.5) return '0.5x (Slow)';
     if (speed === 0.75) return '0.75x (Slower)';
@@ -341,10 +343,10 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                 <>
                   <div className="mode-info-badge duo">
                     <Zap size={14} />
-                    <span>DUO Mode</span>
+                    <span>{isEmp ? '' : 'DUO Mode'}</span>
                   </div>
                   <div className="mode-info-desc">
-                    {t('videoSettings.modeDuoDesc') || 'Параллельный рендеринг: задачи распределяются между слотами CPU (libx264) и GPU (NVENC).'}
+                    {t('videoSettings.modeDuoDesc')}
                   </div>
                 </>
               )}
@@ -352,12 +354,12 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                 <>
                   <div className={`mode-info-badge ${isMac ? 'hardware' : 'gpu'}`}>
                     <Zap size={14} />
-                    <span>{isMac ? (t('videoSettings.modeHardware') || 'Hardware Mode') : 'GPU Mode'}</span>
+                    <span>{isEmp ? '' : (isMac ? t('videoSettings.modeHardware') : 'GPU Mode')}</span>
                   </div>
                   <div className="mode-info-desc">
                     {isMac
-                      ? (t('videoSettings.modeGpuDescMac') || 'Аппаратное кодирование Apple Silicon (VideoToolbox). Высокая скорость и энергоэффективность.')
-                      : (t('videoSettings.modeGpuDesc') || 'Аппаратное кодирование через NVIDIA NVENC. Высокая скорость.')}
+                      ? t('videoSettings.modeGpuDescMac')
+                      : t('videoSettings.modeGpuDesc')}
                   </div>
                 </>
               )}
@@ -365,10 +367,10 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                 <>
                   <div className="mode-info-badge cpu">
                     <Cpu size={14} />
-                    <span>{isMac ? (t('videoSettings.modeSoftware') || 'Software Mode') : 'CPU Mode'}</span>
+                    <span>{isEmp ? '' : (isMac ? t('videoSettings.modeSoftware') : 'CPU Mode')}</span>
                   </div>
                   <div className="mode-info-desc">
-                    {t('videoSettings.modeCpuDesc') || 'Программное кодирование (libx264/libx265). Максимальная эффективность сжатия.'}
+                    {t('videoSettings.modeCpuDesc')}
                   </div>
                 </>
               )}
@@ -379,7 +381,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
               <div className="validation-warning-box">
                 <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
                 <div>
-                  <strong>{t('videoSettings.validationNotice') || 'Рекомендация по оптимизации:'}</strong>
+                  <strong>{t('videoSettings.validationNotice')}</strong>
                   <ul>
                     {validation.warnings.map((w, i) => (
                       <li key={i}>{w}</li>
@@ -538,9 +540,9 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                 <div className="setting-group">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                     <label style={{ fontWeight: 600, margin: 0 }}>
-                      {t('videoSettings.contentProfile') || 'Профиль оптимизации контента'}
+                      {t('videoSettings.contentProfile')}
                     </label>
-                    {settings.contentType === 'custom' && (
+                    {settings.contentType === 'custom' && !isEmp && (
                       <span style={{ fontSize: '11.5px', color: '#a3e635', fontWeight: 500 }}>
                         ✓ Настройки изменены вручную
                       </span>
@@ -552,40 +554,40 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                       className={`segmented-btn ${settings.contentType === 'standard' ? 'active' : ''}`}
                       style={{ background: settings.contentType === 'standard' ? theme.colors.primary : 'rgba(255,255,255,0.05)' }}
                       onClick={() => handleContentTypeSelect('standard')}
-                      title="Универсальные сбалансированные настройки"
+                      title={isEmp ? '' : 'Универсальные сбалансированные настройки'}
                     >
                       <Layers size={14} />
-                      <span>{t('videoSettings.contentStandard') || 'Универсальный'}</span>
+                      <span>{t('videoSettings.contentStandard')}</span>
                     </button>
                     <button
                       type="button"
                       className={`segmented-btn ${settings.contentType === 'gaming' ? 'active' : ''}`}
                       style={{ background: settings.contentType === 'gaming' ? theme.colors.primary : 'rgba(255,255,255,0.05)' }}
                       onClick={() => handleContentTypeSelect('gaming')}
-                      title="Оптимизировано для динамичных клипов (Fortnite, Valorant) с быстрыми фликами и травой"
+                      title={isEmp ? '' : 'Оптимизировано для динамичных клипов (Fortnite, Valorant) с быстрыми фликами и травой'}
                     >
                       <Gamepad2 size={14} />
-                      <span>{t('videoSettings.contentGaming') || 'Клипы / Игры'}</span>
+                      <span>{t('videoSettings.contentGaming')}</span>
                     </button>
                     <button
                       type="button"
                       className={`segmented-btn ${settings.contentType === 'presentation' ? 'active' : ''}`}
                       style={{ background: settings.contentType === 'presentation' ? theme.colors.primary : 'rgba(255,255,255,0.05)' }}
                       onClick={() => handleContentTypeSelect('presentation')}
-                      title="Оптимизировано для вебинаров и статичных презентаций (минимальный вес на статике)"
+                      title={isEmp ? '' : 'Оптимизировано для вебинаров и статичных презентаций (минимальный вес на статике)'}
                     >
                       <Presentation size={14} />
-                      <span>{t('videoSettings.contentPresentation') || 'Вебинар / Слайды'}</span>
+                      <span>{t('videoSettings.contentPresentation')}</span>
                     </button>
                     <button
                       type="button"
                       className={`segmented-btn ${settings.contentType === 'cinema' ? 'active' : ''}`}
                       style={{ background: settings.contentType === 'cinema' ? theme.colors.primary : 'rgba(255,255,255,0.05)' }}
                       onClick={() => handleContentTypeSelect('cinema')}
-                      title="Высокое кинематографичное качество для фильмов и сериалов"
+                      title={isEmp ? '' : 'Высокое кинематографичное качество для фильмов и сериалов'}
                     >
                       <Clapperboard size={14} />
-                      <span>{t('videoSettings.contentCinema') || 'Кино'}</span>
+                      <span>{t('videoSettings.contentCinema')}</span>
                     </button>
                   </div>
                 </div>
@@ -606,7 +608,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
 
                 {/* Rate Control Mode (CRF vs VBR vs Constrained CRF vs CBR) */}
                 <div className="setting-group">
-                  <label style={{ fontWeight: 600 }}>{t('videoSettings.rateControlMode') || 'Режим контроля сжатия'}</label>
+                  <label style={{ fontWeight: 600 }}>{t('videoSettings.rateControlMode')}</label>
                   <div className="segmented-control">
                     <button
                       type="button"
@@ -614,7 +616,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                       style={{ background: rateControlMode === 'crf' ? theme.colors.primary : 'transparent' }}
                       onClick={() => setSettings(prev => ({ ...prev, rateControlMode: 'crf', contentType: 'custom' }))}
                     >
-                      <span>{t('videoSettings.rcCrf') || 'CRF (Качество)'}</span>
+                      <span>{t('videoSettings.rcCrf')}</span>
                     </button>
                     <button
                       type="button"
@@ -622,7 +624,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                       style={{ background: rateControlMode === 'constrained_crf' ? theme.colors.primary : 'transparent' }}
                       onClick={() => setSettings(prev => ({ ...prev, rateControlMode: 'constrained_crf', contentType: 'custom' }))}
                     >
-                      <span>{t('videoSettings.rcConstrainedCrf') || 'CRF + Лимит'}</span>
+                      <span>{t('videoSettings.rcConstrainedCrf')}</span>
                     </button>
                     <button
                       type="button"
@@ -630,7 +632,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                       style={{ background: rateControlMode === 'vbr' ? theme.colors.primary : 'transparent' }}
                       onClick={() => setSettings(prev => ({ ...prev, rateControlMode: 'vbr', contentType: 'custom' }))}
                     >
-                      <span>{t('videoSettings.rcVbr') || 'VBR (Битрейт)'}</span>
+                      <span>{t('videoSettings.rcVbr')}</span>
                     </button>
                     <button
                       type="button"
@@ -638,7 +640,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                       style={{ background: rateControlMode === 'cbr' ? theme.colors.primary : 'transparent' }}
                       onClick={() => setSettings(prev => ({ ...prev, rateControlMode: 'cbr', contentType: 'custom' }))}
                     >
-                      <span>{t('videoSettings.rcCbr') || 'CBR'}</span>
+                      <span>{t('videoSettings.rcCbr')}</span>
                     </button>
                   </div>
                 </div>
@@ -662,7 +664,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                     <div className="setting-group flex-1">
                       <label>
                         {rateControlMode === 'constrained_crf' 
-                          ? (t('videoSettings.maxBitrate') || 'Макс. битрейт (Mbps)') 
+                          ? t('videoSettings.maxBitrate') 
                           : t('video.bitrate')}
                       </label>
                       <input
@@ -710,7 +712,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                           type="number"
                           value={settings.fpsAuto ? '' : settings.fps}
                           onChange={(e) => setSettings(prev => ({ ...prev, fps: e.target.value }))}
-                          placeholder={settings.fpsAuto ? (t('videoSettings.autoFps') || 'Авто') : '30'}
+                          placeholder={isEmp ? '' : (settings.fpsAuto ? t('videoSettings.autoFps') : '30')}
                           min="0.1"
                           max="1000"
                           step="any"
@@ -726,14 +728,14 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                           }}
                           disabled={settings.fpsAuto}
                           style={{ width: '100px', flexShrink: 0 }}
-                          title="Пресеты FPS"
+                          title={isEmp ? '' : 'Пресеты FPS'}
                         >
-                          <option value="custom" disabled hidden>Пресет...</option>
+                          <option value="custom" disabled hidden>{isEmp ? '' : 'Пресет...'}</option>
                           {!fps_options.some(opt => opt.value === settings.fps) && settings.fps && (
-                            <option value="custom">{settings.fps} fps</option>
+                            <option value="custom">{isEmp ? '' : `${settings.fps} fps`}</option>
                           )}
                           {fps_options.map(opt => (
-                            <option key={opt.value} value={opt.value}>{opt.label} {t('videoSettings.fpsShort') || 'fps'}</option>
+                            <option key={opt.value} value={opt.value}>{isEmp ? '' : `${opt.label} ${t('videoSettings.fpsShort')}`}</option>
                           ))}
                         </select>
                       </div>
@@ -791,9 +793,9 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                     <div className="preset-description">
                       {effectiveRenderMode === 'gpu'
                         ? (isMac
-                            ? (t('videoSettings.presetHintMac') || 'Аппаратный энкодер VideoToolbox управляется качеством и битрейтом; пресеты применяются в режиме CPU.')
-                            : (t('videoSettings.presetHintNvenc') || 'Пресеты обменивают скорость кодирования на эффективность сжатия (на GPU транслируются в профили NVENC p1–p7).'))
-                        : (t('videoSettings.presetHint') || 'Пресеты обменивают скорость кодирования на эффективность сжатия.')}
+                            ? t('videoSettings.presetHintMac')
+                            : t('videoSettings.presetHintNvenc'))
+                        : t('videoSettings.presetHint')}
                     </div>
                   </div>
                 </div>
@@ -816,7 +818,7 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                     >
                       <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <Sliders size={16} />
-                        <span>{t('videoSettings.advancedCompression') || 'Расширенные параметры сжатия (GOP, AQ, 10-bit)'}</span>
+                        <span>{t('videoSettings.advancedCompression')}</span>
                       </span>
                       {showAdvanced ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </button>
@@ -840,14 +842,14 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                         flexShrink: 0,
                         transition: 'all 0.2s ease',
                       }}
-                      title="Подсказки по расширенным параметрам: что и когда выставлять"
+                      title={isEmp ? '' : 'Подсказки по расширенным параметрам: что и когда выставлять'}
                     >
                       <Info size={18} strokeWidth={2} />
                     </button>
                   </div>
 
                   {/* Beginner-friendly Advanced Options Help Card */}
-                  {showAdvancedHelp && (
+                  {showAdvancedHelp && !isEmp && (
                     <div className="advanced-help-card">
                       <div className="advanced-help-header">
                         <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -958,28 +960,28 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                       {/* GOP Keyframe Interval */}
                       <div className="setting-row">
                         <div className="advanced-field flex-1">
-                          <label>{t('videoSettings.gopSize') || 'Интервал ключевых кадров (GOP)'}</label>
+                          <label>{t('videoSettings.gopSize')}</label>
                           <select
                             value={settings.gopSize || 'auto'}
                             onChange={(e) => setSettings(prev => ({ ...prev, gopSize: e.target.value, contentType: 'custom' }))}
                           >
-                            <option value="auto">Авто (по умолчанию)</option>
-                            <option value="1s">1 сек (Клипы Discord/TG)</option>
-                            <option value="2s">2 сек (Гейминг 60 fps)</option>
-                            <option value="5s">5 сек (Сбалансированно)</option>
-                            <option value="10s">10 сек (Вебинары / Слайды)</option>
+                            <option value="auto">{isEmp ? '' : 'Авто (по умолчанию)'}</option>
+                            <option value="1s">{isEmp ? '' : '1 сек (Клипы Discord/TG)'}</option>
+                            <option value="2s">{isEmp ? '' : '2 сек (Гейминг 60 fps)'}</option>
+                            <option value="5s">{isEmp ? '' : '5 сек (Сбалансированно)'}</option>
+                            <option value="10s">{isEmp ? '' : '10 сек (Вебинары / Слайды)'}</option>
                           </select>
                         </div>
 
                         {/* Pixel Format */}
                         <div className="advanced-field flex-1">
-                          <label>{t('videoSettings.pixelFormat') || 'Формат / Глубина цвета'}</label>
+                          <label>{t('videoSettings.pixelFormat')}</label>
                           <select
                             value={settings.pixelFormat || 'yuv420p'}
                             onChange={(e) => setSettings(prev => ({ ...prev, pixelFormat: e.target.value as any }))}
                           >
-                            <option value="yuv420p">yuv420p (8-bit совместимость)</option>
-                            <option value="yuv420p10le">yuv420p10le (10-bit без бандинга)</option>
+                            <option value="yuv420p">{isEmp ? '' : 'yuv420p (8-bit совместимость)'}</option>
+                            <option value="yuv420p10le">{isEmp ? '' : 'yuv420p10le (10-bit без бандинга)'}</option>
                           </select>
                         </div>
                       </div>
@@ -987,30 +989,30 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                       {/* Tuning & AQ */}
                       <div className="setting-row">
                         <div className="advanced-field flex-1">
-                          <label>{t('videoSettings.tune') || 'Тюнинг энкодера (-tune)'}</label>
+                          <label>{t('videoSettings.tune')}</label>
                           <select
                             value={settings.tune || 'none'}
                             onChange={(e) => setSettings(prev => ({ ...prev, tune: e.target.value as any, contentType: 'custom' }))}
                           >
-                            <option value="none">Без тюнинга</option>
-                            <option value="film">film (Четкость текстур)</option>
-                            <option value="stillimage">stillimage (Статика / Слайды)</option>
-                            <option value="animation">animation (Аниме / 2D)</option>
-                            <option value="grain">grain (Зерно)</option>
-                            <option value="fastdecode">fastdecode (Быстрый декод)</option>
+                            <option value="none">{isEmp ? '' : 'Без тюнинга'}</option>
+                            <option value="film">{isEmp ? '' : 'film (Четкость текстур)'}</option>
+                            <option value="stillimage">{isEmp ? '' : 'stillimage (Статика / Слайды)'}</option>
+                            <option value="animation">{isEmp ? '' : 'animation (Аниме / 2D)'}</option>
+                            <option value="grain">{isEmp ? '' : 'grain (Зерно)'}</option>
+                            <option value="fastdecode">{isEmp ? '' : 'fastdecode (Быстрый декод)'}</option>
                           </select>
                         </div>
 
                         <div className="advanced-field flex-1">
-                          <label>{t('videoSettings.aqMode') || 'Adaptive Quantization (AQ)'}</label>
+                          <label>{t('videoSettings.aqMode')}</label>
                           <select
                             value={settings.aqModeCpu || 'autovariance'}
                             onChange={(e) => setSettings(prev => ({ ...prev, aqModeCpu: e.target.value as any, contentType: 'custom' }))}
                           >
-                            <option value="autovariance">Auto-Variance AQ (Игры)</option>
-                            <option value="darkscenes">Auto-Variance (Темные сцены)</option>
-                            <option value="variance">Variance AQ (Стандарт)</option>
-                            <option value="disabled">Отключено</option>
+                            <option value="autovariance">{isEmp ? '' : 'Auto-Variance AQ (Игры)'}</option>
+                            <option value="darkscenes">{isEmp ? '' : 'Auto-Variance (Темные сцены)'}</option>
+                            <option value="variance">{isEmp ? '' : 'Variance AQ (Стандарт)'}</option>
+                            <option value="disabled">{isEmp ? '' : 'Отключено'}</option>
                           </select>
                         </div>
                       </div>
@@ -1018,41 +1020,41 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
                       {/* HW Decoding & B-Frames */}
                       <div className="setting-row">
                         <div className="advanced-field flex-1">
-                          <label>{t('videoSettings.hwaccel') || 'Аппаратное декодирование (HW Decoding)'}</label>
+                          <label>{t('videoSettings.hwaccel')}</label>
                           <select
                             value={effectiveHwaccel}
                             onChange={(e) => setSettings(prev => ({ ...prev, hwaccel: e.target.value as any }))}
                           >
                             {isMac ? (
                               <>
-                                <option value="auto">{t('videoSettings.hwaccelOptions.auto') || 'Авто (Рекомендуется)'}</option>
-                                <option value="videotoolbox">{t('videoSettings.hwaccelOptions.videotoolbox') || 'Apple VideoToolbox'}</option>
-                                <option value="disabled">{t('videoSettings.hwaccelOptions.disabled') || 'Отключено (Только CPU)'}</option>
+                                <option value="auto">{t('videoSettings.hwaccelOptions.auto')}</option>
+                                <option value="videotoolbox">{t('videoSettings.hwaccelOptions.videotoolbox')}</option>
+                                <option value="disabled">{t('videoSettings.hwaccelOptions.disabled')}</option>
                               </>
                             ) : (
                               <>
-                                <option value="auto">{t('videoSettings.hwaccelOptions.auto') || 'Авто (Рекомендуется)'}</option>
-                                <option value="cuda">{t('videoSettings.hwaccelOptions.cuda') || 'NVIDIA CUDA (NVDEC)'}</option>
-                                <option value="d3d11va">{t('videoSettings.hwaccelOptions.d3d11va') || 'Direct3D 11 (D3D11VA)'}</option>
-                                <option value="dxva2">{t('videoSettings.hwaccelOptions.dxva2') || 'DirectX VA 2.0 (DXVA2)'}</option>
-                                <option value="qsv">{t('videoSettings.hwaccelOptions.qsv') || 'Intel Quick Sync (QSV)'}</option>
-                                <option value="disabled">{t('videoSettings.hwaccelOptions.disabled') || 'Отключено (Только CPU)'}</option>
+                                <option value="auto">{t('videoSettings.hwaccelOptions.auto')}</option>
+                                <option value="cuda">{t('videoSettings.hwaccelOptions.cuda')}</option>
+                                <option value="d3d11va">{t('videoSettings.hwaccelOptions.d3d11va')}</option>
+                                <option value="dxva2">{t('videoSettings.hwaccelOptions.dxva2')}</option>
+                                <option value="qsv">{t('videoSettings.hwaccelOptions.qsv')}</option>
+                                <option value="disabled">{t('videoSettings.hwaccelOptions.disabled')}</option>
                               </>
                             )}
                           </select>
                         </div>
 
                         <div className="advanced-field flex-1">
-                          <label>{t('videoSettings.bFrames') || 'B-кадры (Двунаправленные)'}</label>
+                          <label>{t('videoSettings.bFrames')}</label>
                           <select
                             value={settings.bFrames !== undefined ? settings.bFrames.toString() : '3'}
                             onChange={(e) => setSettings(prev => ({ ...prev, bFrames: parseInt(e.target.value, 10), contentType: 'custom' }))}
                           >
-                            <option value="0">0 (Без B-кадров, минимальная задержка)</option>
-                            <option value="2">2 кадра</option>
-                            <option value="3">3 кадра (Рекомендуется)</option>
-                            <option value="4">4 кадра (Высокое сжатие / Макс. GPU)</option>
-                            <option value="8">8 кадров (Макс. сжатие CPU x264/x265)</option>
+                            <option value="0">{isEmp ? '' : '0 (Без B-кадров, минимальная задержка)'}</option>
+                            <option value="2">{isEmp ? '' : '2 кадра'}</option>
+                            <option value="3">{isEmp ? '' : '3 кадра (Рекомендуется)'}</option>
+                            <option value="4">{isEmp ? '' : '4 кадра (Высокое сжатие / Макс. GPU)'}</option>
+                            <option value="8">{isEmp ? '' : '8 кадров (Макс. сжатие CPU x264/x265)'}</option>
                           </select>
                         </div>
                       </div>
@@ -1187,29 +1189,19 @@ const VideoSettings: React.FC<VideoSettingsProps> = ({
         </div>
 
         {/* Preview Panel - Right Side */}
-        {showPreview && previewFilePath && (
+        {showPreview && (
           <div className="video-settings-preview">
             <PreviewPanel
-              videoPath={previewFilePath} 
-              videoSettings={{
-                codec: isGifMode ? 'h264' : settings.codec,
-                crf: settings.crf,
-                fps: isGifMode ? (settings.gifSettings?.fps || '15') : settings.fps,
-                resolution: isGifMode && settings.gifSettings?.width && settings.gifSettings.width !== 'original'
-                  ? `${settings.gifSettings.width}x-2`
-                  : settings.resolution,
-                bitrate: settings.bitrate,
-                preset: settings.preset,
-                filters: isGifMode ? [] : settings.filters,
-                resamplingEnabled: isGifMode ? false : settings.resamplingEnabled,
-                resamplingIntensity: settings.resamplingIntensity,
-                rateControlMode: settings.rateControlMode,
-                tune: settings.tune,
-              }}
-              preferGpu={preferGpu}
+              key={previewJob?.id}
+              job={previewJob}
+              videoSettings={settings}
+              audioSettings={audioSettings}
+              watermarkSettings={watermarkSettings}
+              renderMode={effectiveRenderMode}
+              gpuAvailable={gpuAvailable}
               isVisible={showPreview}
-              onToggle={() => setShowPreview(!showPreview)}
-              embedded={true}
+              onToggle={() => setShowPreview(false)}
+              embedded
             />
           </div>
         )}

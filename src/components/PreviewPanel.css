@@ -81,14 +81,28 @@
     font-size: 14px;
     font-weight: 600;
     color: var(--color-text);
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .preview-header-actions {
     display: flex;
+    align-items: center;
     gap: 4px;
+    flex-shrink: 0;
+}
+
+.preview-slot {
+    margin-inline: 4px;
+    padding: 3px;
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    background: var(--color-background);
+    color: var(--color-text);
+    font: inherit;
+    font-size: 11px;
 }
 
 .preview-mode-btn {
@@ -120,6 +134,7 @@
 .preview-warning {
     display: flex;
     align-items: center;
+    gap: 8px;
     padding: 8px 12px;
     background: rgba(255, 180, 0, 0.15);
     border-bottom: 1px solid rgba(255, 180, 0, 0.3);
@@ -135,10 +150,16 @@
     position: relative;
     overflow: hidden;
     background: rgba(0, 0, 0, 0.4);
-    aspect-ratio: 16 / 9;
-    min-height: 180px;
+    min-height: 0;
     border-radius: 8px;
     margin: 8px;
+    display: grid;
+    place-items: center;
+    container-type: size;
+}
+
+.preview-content:has(.preview-split-view) {
+    background: #000;
 }
 
 /* Placeholder / Loading / Error States */
@@ -176,6 +197,14 @@
 
 .preview-error {
     color: var(--color-error);
+    overflow: auto;
+}
+
+.preview-error p {
+    max-width: 90%;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    overflow-y: auto;
 }
 
 .preview-error button {
@@ -207,6 +236,11 @@
     background: #000;
 }
 
+.preview-split-view:not(.preview-side-by-side) {
+    width: min(100%, calc(100cqh * var(--preview-aspect)));
+    height: min(100%, calc(100cqw / var(--preview-aspect)));
+}
+
 /* Original Layer (Before) - Full Width Background */
 .preview-original {
     position: absolute;
@@ -231,6 +265,7 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
+    background: #000;
     /* clip-path is set dynamically via style prop */
 }
 
@@ -240,11 +275,31 @@
     object-fit: contain;
 }
 
+.preview-side-by-side {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.preview-side-by-side .preview-original,
+.preview-side-by-side .preview-processed {
+    position: relative;
+    min-height: 0;
+}
+
+.preview-side-by-side .preview-processed {
+    border-left: 1px solid var(--color-border);
+}
+
 /* Labels */
 .preview-label {
     position: absolute;
     bottom: 12px;
-    padding: 5px 12px;
+    padding: 5px 7px;
+    box-sizing: border-box;
+    max-width: calc(50% - 8px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     background: rgba(0, 0, 0, 0.75);
     backdrop-filter: blur(4px);
     border-radius: 6px;
@@ -253,15 +308,15 @@
     color: #fff;
     pointer-events: none;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.2px;
 }
 
-.preview-original .preview-label {
-    left: 12px;
+.preview-label-original {
+    left: 8px;
 }
 
-.preview-processed .preview-label {
-    right: 12px;
+.preview-label-processed {
+    right: 8px;
 }
 
 /* Draggable Divider */
@@ -271,17 +326,27 @@
     bottom: 0;
     width: 3px;
     background: var(--color-primary);
-    cursor: ew-resize;
+    pointer-events: none;
     z-index: 10;
     transform: translateX(-50%);
     transition: width 0.15s ease, box-shadow 0.15s ease;
     box-shadow: 0 0 8px rgba(0, 0, 0, 0.3);
 }
 
-.preview-divider:hover,
-.preview-divider.dragging {
+.preview-split-view:has(.preview-divider-input:focus-visible) .preview-divider {
     width: 5px;
     box-shadow: 0 0 16px rgba(0, 0, 0, 0.5);
+}
+
+.preview-divider-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    z-index: 11;
+    cursor: ew-resize;
 }
 
 .preview-divider-handle {
@@ -316,6 +381,8 @@
 }
 
 .preview-video-container video {
+    width: 100%;
+    height: 100%;
     max-width: 100%;
     max-height: 100%;
     border-radius: 4px;
@@ -393,73 +460,6 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-/* Keyframe Markers */
-.preview-keyframes {
-    position: absolute;
-    top: 8px;
-    left: 0;
-    right: 0;
-    height: 6px;
-    pointer-events: none;
-}
-
-.preview-keyframe-btn {
-    position: absolute;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    width: 20px;
-    height: 20px;
-    padding: 0;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    pointer-events: auto;
-    z-index: 5;
-}
-
-.preview-keyframe-marker {
-    width: 10px;
-    height: 10px;
-    background: var(--color-primary);
-    border: 2px solid #fff;
-    border-radius: 2px;
-    transform: rotate(45deg);
-    margin: auto;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
-    transition: transform 0.15s ease, background 0.15s ease;
-}
-
-.preview-keyframe-btn:hover .preview-keyframe-marker {
-    transform: rotate(45deg) scale(1.25);
-    filter: brightness(1.2);
-}
-
-/* Keyframe Quick Buttons */
-.preview-keyframe-buttons {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-}
-
-.preview-keyframe-quick-btn {
-    flex: 1;
-    padding: 8px 0;
-    background: var(--color-hover);
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    color: var(--color-textSecondary);
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.preview-keyframe-quick-btn:hover {
-    background: var(--color-primary);
-    border-color: var(--color-primary);
-    color: #fff;
-}
-
 /* Refresh Button */
 .preview-refresh-btn {
     display: flex;
@@ -526,12 +526,18 @@
     }
 }
 
-@media (max-width: 900px) {
-    .preview-panel {
-        display: none;
-    }
-
-    .preview-toggle-btn {
-        display: none;
-    }
+.preview-panel:fullscreen,
+.preview-panel.preview-panel-expanded {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    max-width: none;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    box-sizing: border-box;
+    background: var(--color-background);
+    z-index: 10000;
 }

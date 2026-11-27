@@ -22,12 +22,12 @@ export const DragDropOverlay: React.FC = () => {
         </div>
 
         <h3 className="drag-drop-title">
-          {t('queue.dragOverlayTitle') || 'Перетащите файл в другую программу'}
+          {t('queue.dragOverlayTitle')}
         </h3>
 
         <div className="drag-drop-badges-container">
           <span className="drag-drop-example-label">
-            {t('queue.dragForExample') || 'например:'}
+            {t('queue.dragForExample')}
           </span>
           <div className="drag-drop-badges">
             <span className="drag-drop-badge badge-tg">
@@ -37,10 +37,10 @@ export const DragDropOverlay: React.FC = () => {
               <MessageSquare size={12} strokeWidth={2.2} /> Discord
             </span>
             <span className="drag-drop-badge badge-browser">
-              <Globe size={12} strokeWidth={2} /> {t('queue.dragBadgeBrowser') || 'Браузер'}
+              <Globe size={12} strokeWidth={2} /> {t('queue.dragBadgeBrowser')}
             </span>
             <span className="drag-drop-badge badge-explorer">
-              <Folder size={12} strokeWidth={2} /> {t('queue.dragBadgeFolder') || 'Проводник'}
+              <Folder size={12} strokeWidth={2} /> {t('queue.dragBadgeFolder')}
             </span>
           </div>
         </div>

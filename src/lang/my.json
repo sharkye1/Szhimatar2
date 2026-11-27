@@ -21,7 +21,8 @@
     "preview": "Predogled"
   },
   "common": {
-    "or": "ILI"
+    "or": "ILI",
+    "cancel": "Otmena"
   },
   "video": {
     "title": "Nastavenja videa",
@@ -327,7 +328,10 @@
     "ecoMode": "Eko-režim",
     "ecoModeDescription": "Izključaje zamućenje i sjaj kurzora dža menšego izkoristyvanja resursy",
     "ecoModeEnabled": "Vključeno",
-    "ecoModeDisabled": "Izključeno"
+    "ecoModeDisabled": "Izključeno",
+    "modifiedTheme": "Jednotonno",
+    "randomTheme": "Randomno",
+    "randomThemeDescription": "Slučajna tema pri vsakom startu (poslě 17:00 samo tamne temy)"
   },
   "watermark": {
     "title": "Nastavenja vodoznaka",
@@ -514,6 +518,11 @@
     "restartLater": "Pozdneje"
   },
   "preview": {
+    "fullscreen": "Otvoriti na cěly ekran",
+    "exitFullscreen": "Vyjti iz cělogo ekrana",
+    "encoderSlot": "Kodirovnik za predogled",
+    "position": "Pozicija v izhodnom videu",
+    "compare": "Granica sravnjenja",
     "title": "Živo Predogled",
     "show": "Pokazati Predogled",
     "hide": "Skryti Predogled",

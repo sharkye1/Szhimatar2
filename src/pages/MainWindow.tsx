@@ -9,10 +9,14 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Suspense, lazy } from 'react';
 import RenderJobItem from '../components/RenderJobItem';
 import DownloadJobItem from '../components/DownloadJobItem';
+import { RecentVideosPanel } from '../components/RecentVideosPanel';
 import TimeRangeEditor from '../components/TimeRangeEditor';
 import useRenderQueue from '../hooks/useRenderQueue';
 import useDownloadQueue from '../hooks/useDownloadQueue';
+import { useRecentVideos } from '../hooks/useRecentVideos';
 import { isSelfDragActive } from '../hooks/useFileDragOut';
+import { type RecentVideo, videoPathKey } from '../utils/recentVideos';
+import SUPPORTED_VIDEO_EXTENSIONS from '../utils/videoExtensions.json';
 
 const PresetManager = lazy(() => import('../components/PresetManager'));
 const PreviewPanel = lazy(() => import('../components/PreviewPanel'));
@@ -43,7 +47,6 @@ import TechnicalDetailsViewer from '../components/TechnicalDetailsViewer';
 import '../styles/MainWindow.css';
 console.log("Imports completed");
 
-const SUPPORTED_VIDEO_EXTENSIONS = ['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v', '3gp', 'ts', 'mts', 'm2ts', 'vob', 'ogv', 'mpg', 'mpeg'];
 const VIDEO_EXT_REGEX = new RegExp(`\\.(${SUPPORTED_VIDEO_EXTENSIONS.join('|')})$`, 'i');
 
 type DownloadFormatOption = {
@@ -206,7 +209,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
 }) => {
   // console.log('MainWindow render');
   
-  const { t } = useLanguage();
+  const { t, isEmp } = useLanguage();
   const { theme } = useTheme();
   
   // Use RenderService hook for queue management
@@ -242,6 +245,33 @@ const MainWindow: React.FC<MainWindowProps> = ({
     clearCompletedDownloads,
   } = useDownloadQueue();
 
+  const recentVideos = useRecentVideos([
+    ...jobs.flatMap((job) => [job.inputPath, job.outputPath]),
+    ...downloadQueue.flatMap((job) => job.filePath && job.status !== 'completed' ? [job.filePath] : []),
+  ]);
+  const [recentVideoStatus, setRecentVideoStatus] = useState('');
+  const addingRecentVideos = useRef(new Set<string>());
+
+  const addRecentVideo = async (video: RecentVideo) => {
+    const key = videoPathKey(video.path);
+    if (addingRecentVideos.current.has(key)) return;
+    addingRecentVideos.current.add(key);
+    setRecentVideoStatus('');
+    try {
+      const ready = await invoke<boolean>('recent_video_still_ready', { path: video.path, version: video.version });
+      if (ready) {
+        await addFiles([video.path], true);
+      } else {
+        setRecentVideoStatus(t('recentVideos.fileUnavailable'));
+      }
+    } catch {
+      setRecentVideoStatus(t('recentVideos.addFailed'));
+    } finally {
+      addingRecentVideos.current.delete(key);
+      recentVideos.refresh();
+    }
+  };
+
   const trimStepSec = 0.5;
   const minTrimDurationSec = 1;
 
@@ -267,7 +297,6 @@ const MainWindow: React.FC<MainWindowProps> = ({
   }, []);
 
   const [showPreview, setShowPreview] = useState(false);
-  const [selectedPreviewPath, setSelectedPreviewPath] = useState<string>('');
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [networkWarning, setNetworkWarning] = useState<string | null>(null);
   const [trimFramePreview, setTrimFramePreview] = useState<TrimFramePreviewState | null>(null);
@@ -499,12 +528,6 @@ const MainWindow: React.FC<MainWindowProps> = ({
 
     checkNetworkRisk();
   }, [t]);
-  useEffect(() => {
-    if (jobs.length > 0 && !selectedPreviewPath) {
-      setSelectedPreviewPath(jobs[0].inputPath);
-    }
-  }, [jobs, selectedPreviewPath]);
-
   const handleToggleSaveInSourceDirectory = useCallback(() => {
     setMainScreenSettings((prev) => ({
       ...prev,
@@ -763,7 +786,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
     const trimmedUrl = normalizeInputUrl(rawUrl);
     if (!isValidMediaUrl(trimmedUrl)) {
       setUrlCheckStage('error');
-      setUrlCheckError(t('download.invalidUrlError') || 'Некорректная ссылка. Введите URL, начинающийся с https:// или домена сайта.');
+      setUrlCheckError(t('download.invalidUrlError'));
       return;
     }
 
@@ -876,7 +899,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
           >
             <Loader2 size={14} strokeWidth={2.4} className="download-spinner" style={{ flexShrink: 0 }} />
             <span style={{ flex: 1, lineHeight: 1.3 }}>
-              {t('download.startingDownloadHint') || 'Запускаем загрузку и добавляем в очередь...'}
+              {t('download.startingDownloadHint')}
             </span>
           </motion.div>
         )}
@@ -906,7 +929,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
           >
             <Loader2 size={14} strokeWidth={2.4} className="download-spinner" style={{ flexShrink: 0 }} />
             <span style={{ flex: 1, lineHeight: 1.3 }}>
-              {t('download.checkingUrl') || 'Проверяем ссылку и получаем доступные форматы...'}
+              {t('download.checkingUrl')}
             </span>
           </motion.div>
         )}
@@ -939,7 +962,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <AlertTriangle size={15} strokeWidth={2.2} color={theme.colors.warning} style={{ flexShrink: 0 }} />
               <span style={{ flex: 1, fontWeight: 600, color: theme.colors.warning, lineHeight: 1.3 }}>
-                {t('download.fetchFailed') || 'Не удалось получить данные о видео'}
+                {t('download.fetchFailed')}
               </span>
               <button
                 type="button"
@@ -962,11 +985,11 @@ const MainWindow: React.FC<MainWindowProps> = ({
                 }}
               >
                 <RefreshCw size={11} strokeWidth={2} />
-                <span>{t('download.retryCheck') || 'Повторить'}</span>
+                <span>{t('download.retryCheck')}</span>
               </button>
             </div>
             <p style={{ margin: 0, fontSize: isCompact ? '0.74rem' : '0.78rem', color: theme.colors.textSecondary, lineHeight: 1.35 }}>
-              {t('download.fetchFailedHint') || 'Проверьте интернет-соединение или включите VPN/прокси (возможно, ресурс заблокирован в вашем регионе). Доступны стандартные форматы (MP4 / MP3).'}
+              {t('download.fetchFailedHint')}
             </p>
             {(urlCheckDetails || urlCheckError) && (
               <TechnicalDetailsViewer
@@ -1084,6 +1107,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
       clearTimeout(trimPreviewHideRef.current);
     }
     trimPreviewHideRef.current = setTimeout(() => {
+      ++trimPreviewRequestRef.current;
       setTrimFramePreview(null);
     }, delayMs);
   }, []);
@@ -1101,8 +1125,13 @@ const MainWindow: React.FC<MainWindowProps> = ({
       clearTimeout(trimPreviewHideRef.current);
     }
 
-    const roundedTimeSec = Math.max(0, Math.round(timeSec * 2) / 2);
-    const cacheKey = `${inputPath}|${roundedTimeSec.toFixed(1)}`;
+    if (trimPreviewDebounceRef.current) {
+      clearTimeout(trimPreviewDebounceRef.current);
+    }
+    const requestId = ++trimPreviewRequestRef.current;
+    const roundedTimeSec = Math.max(0, Math.floor(timeSec * 2) / 2);
+    const seekTime = leftPercent >= 100 ? Math.max(0, roundedTimeSec - 0.25) : roundedTimeSec;
+    const cacheKey = `${inputPath}|${seekTime.toFixed(2)}`;
     const cachedFrame = trimPreviewCacheRef.current.get(cacheKey) || null;
 
     setTrimFramePreview({
@@ -1118,26 +1147,11 @@ const MainWindow: React.FC<MainWindowProps> = ({
       return;
     }
 
-    if (trimPreviewDebounceRef.current) {
-      clearTimeout(trimPreviewDebounceRef.current);
-    }
-
     trimPreviewDebounceRef.current = setTimeout(async () => {
-      const requestId = ++trimPreviewRequestRef.current;
-
       try {
         const frame = await invoke<string>('get_preview_frame', {
           inputPath,
-          timeSeconds: roundedTimeSec,
-          settings: {
-            codec: '',
-            crf: '23',
-            fps: '',
-            resolution: '',
-            filters: [],
-            resampling_enabled: false,
-            resampling_intensity: 0,
-          },
+          timeSeconds: seekTime,
         });
 
         if (requestId !== trimPreviewRequestRef.current) {
@@ -1145,7 +1159,12 @@ const MainWindow: React.FC<MainWindowProps> = ({
         }
 
         const dataUrl = `data:image/jpeg;base64,${frame}`;
-        trimPreviewCacheRef.current.set(cacheKey, dataUrl);
+        const cache = trimPreviewCacheRef.current;
+        if (cache.size >= 32) {
+          const oldestKey = cache.keys().next().value;
+          if (oldestKey !== undefined) cache.delete(oldestKey);
+        }
+        cache.set(cacheKey, dataUrl);
 
         setTrimFramePreview((prev) => {
           if (!prev) return prev;
@@ -1177,6 +1196,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
 
   useEffect(() => {
     return () => {
+      ++trimPreviewRequestRef.current;
       if (trimPreviewDebounceRef.current) {
         clearTimeout(trimPreviewDebounceRef.current);
       }
@@ -1227,8 +1247,8 @@ const MainWindow: React.FC<MainWindowProps> = ({
                 e.stopPropagation();
                 handleToggleHeaderCollapsed(!isHeaderCollapsed);
               }}
-              title={isHeaderCollapsed ? (t('header.expand') || 'Развернуть шапку') : (t('header.collapse') || 'Свернуть шапку')}
-              aria-label={isHeaderCollapsed ? (t('header.expand') || 'Развернуть шапку') : (t('header.collapse') || 'Свернуть шапку')}
+              title={isHeaderCollapsed ? t('header.expand') : t('header.collapse')}
+              aria-label={isHeaderCollapsed ? t('header.expand') : t('header.collapse')}
             >
               <AnimatePresence mode="wait" initial={false}>
                 {isHeaderCollapsed ? (
@@ -1240,7 +1260,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
                     exit={{ opacity: 0, scale: 0.94 }}
                     transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
                   >
-                    <span className="dynamic-island-title">Szhimatar</span>
+                    <span className="dynamic-island-title">{t('app.title')}</span>
                     <ChevronDown size={15} strokeWidth={2.4} className="dynamic-island-icon" />
                   </motion.div>
                 ) : (
@@ -1252,7 +1272,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
                     exit={{ opacity: 0, scale: 0.94 }}
                     transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
                   >
-                    <span className="dynamic-island-title">Szhimatar</span>
+                    <span className="dynamic-island-title">{t('app.title')}</span>
                     <ChevronUp size={15} strokeWidth={2.4} className="dynamic-island-icon" />
                   </motion.div>
                 )}
@@ -1270,7 +1290,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
               }}
               style={{ background: theme.colors.primary, color: '#fff' }}
             >
-              <BarChart3 size={18} strokeWidth={1.5} /> <span>{t('stats.title') || 'Statistics'}</span>
+              <BarChart3 size={18} strokeWidth={1.5} /> <span>{t('stats.title')}</span>
             </button>
             <button 
               className="header-nav-btn"
@@ -1422,7 +1442,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
         {jobs.length === 0 && downloadQueue.length === 0 ? (
           <div
             ref={emptyStateRef}
-            className={`empty-state${isDragging ? ' drag-over' : ''}${isDropError ? ' shake-error' : ''}${isDropSuccess ? ' drop-success' : ''}`}
+            className={`empty-state${recentVideos.enabled && (recentVideos.loading || recentVideos.videos.length) ? ' has-recent-videos' : ''}${isDragging ? ' drag-over' : ''}${isDropError ? ' shake-error' : ''}${isDropSuccess ? ' drop-success' : ''}`}
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -1431,6 +1451,9 @@ const MainWindow: React.FC<MainWindowProps> = ({
               handleSelectFiles();
             }}
           >
+            {recentVideos.enabled && (
+              <RecentVideosPanel {...recentVideos} status={recentVideoStatus} onAdd={(video) => void addRecentVideo(video)} />
+            )}
             {isDropSuccess && (
               <div
                 className="water-ripple-container"
@@ -1491,7 +1514,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
                   >
                     {downloadFormats.map((item) => (
                       <option key={item.label} value={item.label} style={{ backgroundColor: theme.colors.surface, color: theme.colors.text }}>
-                        {formatDownloadOptionLabel(item)}
+                        {isEmp ? '' : formatDownloadOptionLabel(item)}
                       </option>
                     ))}
                   </select>
@@ -1506,7 +1529,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
                   {isLoadingDownloadFormats || isStartingDownload
                     ? <Loader2 size={15} strokeWidth={2} className="download-spinner" />
                     : <Download size={15} strokeWidth={2} />}
-                  <span>{isStartingDownload ? (t('download.startingDownload') || 'Запуск...') : t('download.downloadButton')}</span>
+                  <span>{isStartingDownload ? t('download.startingDownload') : t('download.downloadButton')}</span>
                 </button>
               </div>
               {renderDownloadRange()}
@@ -1538,6 +1561,9 @@ const MainWindow: React.FC<MainWindowProps> = ({
                   <Download size={14} strokeWidth={1.8} />
                   <span>{t('queue.addLink')}</span>
                 </button>
+                {recentVideos.enabled && recentVideos.videos.length > 0 && (
+                  <RecentVideosPanel {...recentVideos} variant="queue" status={recentVideoStatus} onAdd={(video) => void addRecentVideo(video)} />
+                )}
                 {/* Stats */}
                 <div className="queue-stats" style={{ fontSize: '0.85rem', color: theme.colors.textSecondary, display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 8 }}>
                   {(completedJobs + downloadQueue.filter(i => i.status === 'completed').length) > 0 && (
@@ -1597,7 +1623,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
                       >
                         {downloadFormats.map((item) => (
                           <option key={item.label} value={item.label} style={{ backgroundColor: theme.colors.surface, color: theme.colors.text }}>
-                            {formatDownloadOptionLabel(item)}
+                            {isEmp ? '' : formatDownloadOptionLabel(item)}
                           </option>
                         ))}
                       </select>
@@ -1612,7 +1638,7 @@ const MainWindow: React.FC<MainWindowProps> = ({
                       {isLoadingDownloadFormats || isStartingDownload
                         ? <Loader2 size={15} strokeWidth={2} className="download-spinner" />
                         : <Download size={15} strokeWidth={2} />}
-                      <span>{isStartingDownload ? (t('download.startingDownload') || 'Запуск...') : t('download.downloadButton')}</span>
+                      <span>{isStartingDownload ? t('download.startingDownload') : t('download.downloadButton')}</span>
                     </button>
                   </div>
                   {renderDownloadRange()}
@@ -1786,17 +1812,15 @@ const MainWindow: React.FC<MainWindowProps> = ({
 
       {/* Live Preview Panel */}
       <PreviewPanel
-        inputPath={selectedPreviewPath}
-        settings={{
-          codec: videoSettings.codec,
-          crf: videoSettings.crf,
-          fps: videoSettings.fps,
-          resolution: videoSettings.resolution,            aspectRatioAuto: videoSettings.aspectRatioAuto,          filters: videoSettings.filters.filter(f => f.enabled).map(f => f.name),
-          resampling_enabled: !!videoSettings.resamplingEnabled,
-          resampling_intensity: videoSettings.resamplingIntensity || 5,
-        }}
+        key={jobs[0]?.id}
+        job={jobs[0]}
+        videoSettings={videoSettings}
+        audioSettings={audioSettings}
+        watermarkSettings={watermarkSettings}
+        renderMode={renderMode}
+        gpuAvailable={gpuAvailable}
         isVisible={showPreview}
-        onToggleVisibility={() => setShowPreview(!showPreview)}
+        onToggle={() => setShowPreview(value => !value)}
       />
     </div>
   );

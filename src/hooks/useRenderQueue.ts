@@ -19,7 +19,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import RenderService, { RenderJob, RenderQueueState } from '../services/RenderService';
+import RenderService, { PreviewJob, RenderJob, RenderQueueState } from '../services/RenderService';
 import type { VideoSettings, AudioSettings, WatermarkSettings, MainScreenSettings } from '../types';
 
 export interface UseRenderQueueReturn {
@@ -38,7 +38,7 @@ export interface UseRenderQueueReturn {
   pendingJobs: number;
   
   // Actions
-  addFiles: (filePaths: string[]) => Promise<RenderJob[]>;
+  addFiles: (filePaths: string[], skipDuplicates?: boolean) => Promise<RenderJob[]>;
   addToQueue: (inputPath: string, outputPath: string, trimStartSec?: number, trimEndSec?: number) => Promise<RenderJob>;
   updateJobTrim: (jobId: string, trimStartSec: number, trimEndSec: number) => boolean;
   removeJob: (jobId: string) => boolean;
@@ -89,8 +89,8 @@ export function useRenderQueue(): UseRenderQueueReturn {
   const pendingJobs = state.jobs.filter(j => j.status === 'pending').length;
 
   // Actions
-  const addFiles = useCallback(async (filePaths: string[]): Promise<RenderJob[]> => {
-    return RenderService.addToQueue(filePaths);
+  const addFiles = useCallback(async (filePaths: string[], skipDuplicates?: boolean): Promise<RenderJob[]> => {
+    return RenderService.addToQueue(filePaths, skipDuplicates);
   }, []);
 
   const addToQueue = useCallback(async (
@@ -228,22 +228,23 @@ export function useIsProcessing(): boolean {
 }
 
 /**
- * Granular hook for settings/preview panels that only care about the first file input path
+ * Watch the first queue item without re-rendering settings on progress ticks.
  */
-export function useFirstJobInputPath(): string {
-  const [firstPath, setFirstPath] = useState<string>(() => {
-    const jobs = RenderService.getState().jobs;
-    return jobs.length > 0 ? jobs[0].inputPath : '';
-  });
+export function useFirstPreviewJob(): PreviewJob | undefined {
+  const [job, setJob] = useState<PreviewJob | undefined>(() => RenderService.getJobs()[0]);
 
   useEffect(() => {
-    return RenderService.subscribe((jobs) => {
-      const nextPath = jobs.length > 0 ? jobs[0].inputPath : '';
-      setFirstPath((prev) => (prev !== nextPath ? nextPath : prev));
+    return RenderService.subscribe(([next]) => {
+      setJob(prev => (
+        prev?.id === next?.id && prev?.inputPath === next?.inputPath &&
+        prev?.outputPath === next?.outputPath && prev?.durationSeconds === next?.durationSeconds &&
+        prev?.trimStartSec === next?.trimStartSec && prev?.trimEndSec === next?.trimEndSec &&
+        prev?.assignedSlot === next?.assignedSlot
+      ) ? prev : next);
     });
   }, []);
 
-  return firstPath;
+  return job;
 }
 
 export default useRenderQueue;

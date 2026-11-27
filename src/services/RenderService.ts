@@ -31,6 +31,7 @@ import type {
 import StatisticsService from './StatisticsService';
 import RenderScheduler, { RenderMode, RenderSlot, sanitizeRenderMode } from './RenderScheduler';
 import { isMacOS } from '../utils/platform';
+import { videoPathKey } from '../utils/recentVideos';
 
 // ============================================================================
 // Types
@@ -69,6 +70,9 @@ export interface RenderJob {
   sourceExtension?: string;
   targetExtension?: string;
 }
+
+export type PreviewJob = Pick<RenderJob, 'id' | 'inputPath' | 'outputPath' |
+  'durationSeconds' | 'trimStartSec' | 'trimEndSec' | 'assignedSlot'>;
 
 export interface RenderProgress {
   job_id: string;
@@ -129,6 +133,15 @@ export function calculateVideoToolboxQuality(crf: number): number {
   if (isNaN(crf)) return 55; // Default corresponding to standard CRF 23
   const rawQuality = Math.round(((51 - crf) * 100) / 51);
   return Math.max(1, Math.min(100, rawQuality));
+}
+
+export async function resolveRenderVideoSettings(
+  settings: VideoSettings,
+  inputPath: string
+): Promise<VideoSettings> {
+  if (!settings.fpsAuto) return settings;
+  const fps = await detectFpsForRender(inputPath, 30);
+  return { ...settings, fps: fps.toString(), fpsAuto: false };
 }
 
 export class FFmpegCommandBuilder {
@@ -227,16 +240,28 @@ export class FFmpegCommandBuilder {
         args.push('-g', gopFrames.toString());
       }
 
-      // Resolution - NVENC requires dimensions divisible by 2
-      if (!this.videoSettings.aspectRatioAuto &&
-          this.videoSettings.resolution &&
+      // Fit the requested display aspect within the selected resolution.
+      let requestedFrame: { width: number; height: number; pad: boolean } | undefined;
+      if (this.videoSettings.resolution &&
           this.videoSettings.resolution !== 'original' &&
           this.videoSettings.resolution !== 'source') {
-        const [width, height] = this.videoSettings.resolution.split('x').map(Number);
-        // Ensure dimensions are even (required for most encoders, especially NVENC)
-        const evenWidth = Math.floor(width / 2) * 2;
-        const evenHeight = Math.floor(height / 2) * 2;
-        videoFilters.push(`scale=${evenWidth}:${evenHeight}`);
+        const [width, height] = this.videoSettings.resolution.split('x')
+          .map(value => Math.max(2, Math.floor(Number(value) / 2) * 2));
+        const [aspectWidth, aspectHeight] = (this.videoSettings.aspectRatio || '').split(':').map(Number);
+        const aspect = aspectWidth / aspectHeight;
+        if (this.videoSettings.aspectRatioAuto) {
+          requestedFrame = { width, height, pad: false };
+        } else if (Number.isFinite(aspect) && aspect > 0) {
+          const roundEven = (size: number) => Math.max(2, Math.round(size / 2) * 2);
+          requestedFrame = {
+            width: roundEven(Math.min(width, height * aspect)),
+            height: roundEven(Math.min(height, width / aspect)),
+            pad: true,
+          };
+        } else {
+          // Presets without an aspect setting use the stored dimensions.
+          videoFilters.push(`scale=${width}:${height}`);
+        }
       }
 
       // Speed/tempo adjustment
@@ -244,7 +269,8 @@ export class FFmpegCommandBuilder {
         const pts = 1 / this.videoSettings.speed;
         videoFilters.push(`setpts=${pts.toFixed(4)}*PTS`);
         // Also adjust audio tempo
-        audioFilters.push(`atempo=${this.videoSettings.speed}`);
+        const speed = this.videoSettings.speed;
+        audioFilters.push(speed < 0.5 ? `atempo=0.5,atempo=${speed * 2}` : `atempo=${speed}`);
       }
 
       // Resampling (frame interpolation) using minterpolate
@@ -278,6 +304,24 @@ export class FFmpegCommandBuilder {
         };
         if (rotationMap[this.videoSettings.rotation]) {
           videoFilters.push(rotationMap[this.videoSettings.rotation]);
+        }
+      }
+
+      if (this.videoSettings.flip === 'horizontal') {
+        videoFilters.push('hflip');
+      } else if (this.videoSettings.flip === 'vertical') {
+        videoFilters.push('vflip');
+      }
+
+      if (requestedFrame) {
+        const { width, height } = requestedFrame;
+        const isWide = `gte(dar,${width}/${height})`;
+        videoFilters.push(
+          `scale=w='if(${isWide},${width},max(2,trunc(${height}*dar/2)*2))':h='if(${isWide},max(2,trunc(${width}/dar/2)*2),${height})'`,
+          'setsar=1',
+        );
+        if (requestedFrame.pad) {
+          videoFilters.push(`pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`);
         }
       }
 
@@ -1215,10 +1259,15 @@ class RenderServiceImpl {
   /**
    * Add files to render queue
    */
-  public async addToQueue(filePaths: string[]): Promise<RenderJob[]> {
+  public async addToQueue(filePaths: string[], skipDuplicates = false): Promise<RenderJob[]> {
     const newJobs: RenderJob[] = [];
 
     for (const inputPath of filePaths) {
+      const key = skipDuplicates ? videoPathKey(inputPath) : '';
+      const alreadyQueued = () => this.getJobs().some((job) =>
+        videoPathKey(job.inputPath) === key || videoPathKey(job.outputPath) === key
+      );
+      if (skipDuplicates && alreadyQueued()) continue;
       const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const fileName = inputPath.split(/[\\/]/).pop() || inputPath;
       const outputPath = this.generateOutputPath(inputPath);
@@ -1273,6 +1322,7 @@ class RenderServiceImpl {
         targetExtension,
       };
 
+      if (skipDuplicates && alreadyQueued()) continue;
       this.jobs.set(jobId, job);
       this.scheduler.enqueue(jobId);
       newJobs.push(job);
@@ -1522,36 +1572,12 @@ class RenderServiceImpl {
       // Build FFmpeg arguments
       // AUTO FPS DETECTION: Detect FPS for each video if fpsAuto is enabled
       console.log(`[RenderService] Starting render for ${job.fileName} | fpsAuto: ${this.videoSettings?.fpsAuto}, fps: ${this.videoSettings?.fps}`);
-      let effectiveVideoSettings = this.videoSettings!;
+      const effectiveVideoSettings = await resolveRenderVideoSettings(this.videoSettings!, job.inputPath);
       if (this.videoSettings?.fpsAuto) {
-        try {
-          const detectedFps = await detectFpsForRender(job.inputPath, 30);
-          console.log(`[RenderService] FPS Auto: Detected ${detectedFps} fps for ${job.fileName}`);
-          
-          // Create a new settings object with detected FPS
-          effectiveVideoSettings = {
-            ...this.videoSettings!,
-            fps: detectedFps.toString(),
-            fpsAuto: false, // Use the detected FPS, don't try to detect again
-          };
-          
-          // Update statistics with detected FPS
-          await invoke('write_render_log', {
-            jobId,
-            message: `[Auto FPS] Detected ${detectedFps} fps from video metadata`
-          });
-        } catch (fpsError) {
-          console.warn('[RenderService] FPS detection failed, continuing with fallback FPS 30:', fpsError);
-          effectiveVideoSettings = {
-            ...this.videoSettings!,
-            fps: '30',
-            fpsAuto: false,
-          };
-          await invoke('write_render_log', {
-            jobId,
-            message: `[Auto FPS] Detection failed, using fallback FPS 30`
-          }).catch(() => {});
-        }
+        await invoke('write_render_log', {
+          jobId,
+          message: `[Auto FPS] Using ${effectiveVideoSettings.fps} fps`
+        }).catch(() => {});
       }
       
       const preferGpu = slot === 'gpu' && this.gpuAvailable;

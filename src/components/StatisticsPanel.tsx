@@ -18,7 +18,7 @@ interface StatisticsPanelProps {
 
 const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
   const { theme } = useTheme();
-  const { t } = useLanguage();
+  const { t, isEmp } = useLanguage();
   const {
     renders,
     activeRenders,
@@ -43,12 +43,12 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
   // Get status display
   const getStatusDisplay = (record: RenderStatRecord) => {
     const statusMap: Record<string, { text: string; color: string; icon: React.ReactNode }> = {
-      pending: { text: t('stats.pending') || 'Pending', color: theme.colors.textSecondary, icon: <Clock size={14} strokeWidth={2} /> },
-      rendering: { text: t('stats.rendering') || 'Rendering', color: theme.colors.primary, icon: <RotateCw size={14} strokeWidth={2} /> },
-      completed: { text: t('stats.completed') || 'Completed', color: theme.colors.success, icon: <Check size={14} strokeWidth={2} /> },
-      error: { text: t('stats.error') || 'Error', color: theme.colors.error, icon: <X size={14} strokeWidth={2} /> },
-      cancelled: { text: t('stats.cancelled') || 'Cancelled', color: theme.colors.textSecondary, icon: <AlertCircle size={14} strokeWidth={2} /> },
-      stopped: { text: t('stats.stopped') || 'Stopped', color: theme.colors.warning, icon: <Square size={14} strokeWidth={2} /> },
+      pending: { text: t('stats.pending'), color: theme.colors.textSecondary, icon: <Clock size={14} strokeWidth={2} /> },
+      rendering: { text: t('stats.rendering'), color: theme.colors.primary, icon: <RotateCw size={14} strokeWidth={2} /> },
+      completed: { text: t('stats.completed'), color: theme.colors.success, icon: <Check size={14} strokeWidth={2} /> },
+      error: { text: t('stats.error'), color: theme.colors.error, icon: <X size={14} strokeWidth={2} /> },
+      cancelled: { text: t('stats.cancelled'), color: theme.colors.textSecondary, icon: <AlertCircle size={14} strokeWidth={2} /> },
+      stopped: { text: t('stats.stopped'), color: theme.colors.warning, icon: <Square size={14} strokeWidth={2} /> },
     };
     return statusMap[record.status] || statusMap.pending;
   };
@@ -111,7 +111,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
     return (
       <div className="statistics-panel">
         <div className="stats-loading" style={{ color: theme.colors.textSecondary }}>
-          {t('stats.loading') || 'Loading statistics...'}
+          {t('stats.loading')}
         </div>
       </div>
     );
@@ -121,7 +121,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
     <div className="statistics-panel" style={{ color: theme.colors.text }}>
       {/* Header */}
       <div className="stats-header" style={{ borderColor: theme.colors.border }}>
-        <h2>{t('stats.title') || 'Render Statistics'}</h2>
+        <h2>{t('stats.title')}</h2>
         {onClose && (
           <button onClick={onClose} className="close-btn" style={{ color: theme.colors.text }}>
             ×
@@ -134,7 +134,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
         <div className="stat-card">
           <span className="stat-value">{aggregateStats.total}</span>
           <span className="stat-label" style={{ color: theme.colors.textSecondary }}>
-            {t('stats.totalRenders') || 'Total Renders'}
+            {t('stats.totalRenders')}
           </span>
         </div>
         <div className="stat-card">
@@ -142,7 +142,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
             {aggregateStats.successful}
           </span>
           <span className="stat-label" style={{ color: theme.colors.textSecondary }}>
-            {t('stats.successful') || 'Successful'}
+            {t('stats.successful')}
           </span>
         </div>
         <div className="stat-card">
@@ -150,7 +150,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
             {aggregateStats.failed}
           </span>
           <span className="stat-label" style={{ color: theme.colors.textSecondary }}>
-            {t('stats.failed') || 'Failed'}
+            {t('stats.failed')}
           </span>
         </div>
         <div className="stat-card">
@@ -158,7 +158,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
             {aggregateStats.stopped}
           </span>
           <span className="stat-label" style={{ color: theme.colors.textSecondary }}>
-            {t('stats.stopped') || 'Stopped'}
+            {t('stats.stopped')}
           </span>
         </div>
         <div className="stat-card">
@@ -166,7 +166,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
             {aggregateStats.successRate.toFixed(0)}%
           </span>
           <span className="stat-label" style={{ color: theme.colors.textSecondary }}>
-            {t('stats.successRate') || 'Success Rate'}
+            {t('stats.successRate')}
           </span>
         </div>
         <div className="stat-card">
@@ -174,7 +174,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
             {formatDuration(aggregateStats.avgRenderTime)}
           </span>
           <span className="stat-label" style={{ color: theme.colors.textSecondary }}>
-            {t('stats.avgTime') || 'Avg Time'}
+            {t('stats.avgTime')}
           </span>
         </div>
         <div className="stat-card">
@@ -182,7 +182,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
             {formatDuration(aggregateStats.totalTime)}
           </span>
           <span className="stat-label" style={{ color: theme.colors.textSecondary }}>
-            {t('stats.totalTime') || 'Total Time'}
+            {t('stats.totalTime')}
           </span>
         </div>
       </div>
@@ -190,7 +190,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
       {/* Active Renders */}
       {activeRenders.length > 0 && (
         <div className="active-renders" style={{ borderColor: theme.colors.border }}>
-          <h3>{t('stats.activeRenders') || 'Active Renders'} ({activeRenders.length})</h3>
+          <h3>{t('stats.activeRenders')}{isEmp ? '' : ` (${activeRenders.length})`}</h3>
           {activeRenders.map(render => (
             <div 
               key={render.id} 
@@ -240,7 +240,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
                 borderColor: theme.colors.border,
               }}
             >
-              {t(`stats.filter.${f}`) || f.charAt(0).toUpperCase() + f.slice(1)}
+              {isEmp ? '' : (t(`stats.filter.${f}`) || f.charAt(0).toUpperCase() + f.slice(1))}
             </button>
           ))}
         </div>
@@ -249,13 +249,13 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
             onClick={handleExport}
             style={{ background: theme.colors.primary, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            <Download size={16} strokeWidth={1.5} /> {t('stats.export') || 'Export'}
+            <Download size={16} strokeWidth={1.5} /> {t('stats.export')}
           </button>
           <button
             onClick={() => setShowConfirmClear(true)}
             style={{ background: theme.colors.error, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            <Trash2 size={16} strokeWidth={1.5} /> {t('stats.clear') || 'Clear'}
+            <Trash2 size={16} strokeWidth={1.5} /> {t('stats.clear')}
           </button>
         </div>
       </div>
@@ -264,7 +264,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
       <div className="render-history">
         {filteredRenders.length === 0 ? (
           <div className="empty-state" style={{ color: theme.colors.textSecondary }}>
-            {t('stats.noRenders') || 'No renders in history'}
+            {t('stats.noRenders')}
           </div>
         ) : (
           filteredRenders.map(render => {
@@ -324,7 +324,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
                       <button
                         onClick={() => handleReRenderOverwrite(render)}
                         className="re-render-btn overwrite"
-                        title={t('history.re_render_overwrite') || 'Re-render (overwrite)'}
+                        title={t('history.re_render_overwrite')}
                         style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                       >
                         <RotateCcw size={14} strokeWidth={2} />
@@ -332,7 +332,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
                       <button
                         onClick={() => handleReRenderNew(render)}
                         className="re-render-btn new"
-                        title={t('history.re_render_new') || 'Re-render (new version)'}
+                        title={t('history.re_render_new')}
                         style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                       >
                         <RotateCcw size={14} strokeWidth={2} />
@@ -343,7 +343,7 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
                     onClick={() => deleteRender(render.id)}
                     className="delete-btn"
                     style={{ color: theme.colors.error, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                    title={t('stats.delete') || 'Delete'}
+                    title={t('stats.delete')}
                   >
                     <Trash2 size={14} strokeWidth={2} />
                   </button>
@@ -361,22 +361,22 @@ const StatisticsPanel: React.FC<StatisticsPanelProps> = ({ onClose }) => {
             className="confirm-dialog" 
             onClick={e => e.stopPropagation()}
           >
-            <h3>{t('stats.confirmClear') || 'Clear History?'}</h3>
+            <h3>{t('stats.confirmClear')}</h3>
             <p style={{ color: theme.colors.textSecondary }}>
-              {t('stats.confirmClearText') || 'This will permanently delete all render history.'}
+              {t('stats.confirmClearText')}
             </p>
             <div className="confirm-buttons">
               <button
                 onClick={() => setShowConfirmClear(false)}
                 style={{ background: theme.colors.background, color: theme.colors.text }}
               >
-                {t('common.cancel') || 'Cancel'}
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleClear}
                 style={{ background: theme.colors.error, color: '#fff' }}
               >
-                {t('stats.clear') || 'Clear'}
+                {t('stats.clear')}
               </button>
             </div>
           </div>
